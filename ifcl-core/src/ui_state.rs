@@ -8,6 +8,7 @@ pub enum AppMode {
     Setup,
     Running,
     Marketplace,
+    SessionPicker,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

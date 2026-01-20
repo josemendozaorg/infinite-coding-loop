@@ -6,6 +6,7 @@ use chrono::{DateTime, Utc};
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct Event {
     pub id: Uuid,
+    pub session_id: Uuid,
     pub timestamp: DateTime<Utc>,
     pub worker_id: String,
     pub event_type: String,
@@ -13,9 +14,11 @@ pub struct Event {
 }
 pub mod ui_state;
 pub mod wizard;
+pub mod session;
 
 pub use ui_state::{AppMode, MenuAction, MenuState};
 pub use wizard::{SetupWizard, WizardStep};
+pub use session::Session;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct LoopConfig {
@@ -173,7 +176,8 @@ impl EventBus for InMemoryEventBus {
 #[async_trait::async_trait]
 pub trait EventStore: Send + Sync {
     async fn append(&self, event: Event) -> anyhow::Result<()>;
-    async fn list(&self) -> anyhow::Result<Vec<Event>>;
+    async fn list(&self, session_id: Uuid) -> anyhow::Result<Vec<Event>>;
+    async fn list_all_sessions(&self) -> anyhow::Result<Vec<Uuid>>;
 }
 
 pub struct InMemoryEventStore {
@@ -202,9 +206,17 @@ impl EventStore for InMemoryEventStore {
         Ok(())
     }
 
-    async fn list(&self) -> anyhow::Result<Vec<Event>> {
+    async fn list(&self, session_id: Uuid) -> anyhow::Result<Vec<Event>> {
         let events = self.events.read().await;
-        Ok(events.clone())
+        Ok(events.iter().filter(|e| e.session_id == session_id).cloned().collect())
+    }
+
+    async fn list_all_sessions(&self) -> anyhow::Result<Vec<Uuid>> {
+        let events = self.events.read().await;
+        let mut sessions: Vec<Uuid> = events.iter().map(|e| e.session_id).collect();
+        sessions.sort();
+        sessions.dedup();
+        Ok(sessions)
     }
 }
 
@@ -309,6 +321,7 @@ mod tests {
     fn test_event_serialization() {
         let event = Event {
             id: Uuid::new_v4(),
+            session_id: Uuid::new_v4(),
             timestamp: Utc::now(),
             worker_id: "test-worker".to_string(),
             event_type: "TestEvent".to_string(),
@@ -365,6 +378,7 @@ mod tests {
 
         let event = Event {
             id: Uuid::new_v4(),
+            session_id: Uuid::new_v4(),
             timestamp: Utc::now(),
             worker_id: "test-worker".to_string(),
             event_type: "TestEvent".to_string(),
@@ -382,6 +396,7 @@ mod tests {
         let store = InMemoryEventStore::new();
         let event = Event {
             id: Uuid::new_v4(),
+            session_id: Uuid::new_v4(),
             timestamp: Utc::now(),
             worker_id: "test-worker".to_string(),
             event_type: "TestEvent".to_string(),
@@ -389,7 +404,7 @@ mod tests {
         };
 
         store.append(event.clone()).await.unwrap();
-        let events = store.list().await.unwrap();
+        let events = store.list(event.session_id).await.unwrap();
 
         assert_eq!(events.len(), 1);
         assert_eq!(events[0], event);
@@ -450,6 +465,7 @@ mod tests {
     async fn test_loop_status_event_serialization() {
         let event = Event {
             id: Uuid::new_v4(),
+            session_id: Uuid::new_v4(),
             timestamp: Utc::now(),
             worker_id: "system".to_string(),
             event_type: "LoopStatusChanged".to_string(),
@@ -467,6 +483,7 @@ mod tests {
     async fn test_manual_command_serialization() {
         let event = Event {
             id: Uuid::new_v4(),
+            session_id: Uuid::new_v4(),
             timestamp: Utc::now(),
             worker_id: "user".to_string(),
             event_type: "ManualCommandInjected".to_string(),
@@ -491,6 +508,7 @@ impl SqliteEventStore {
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS events (
                 id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
                 timestamp TEXT NOT NULL,
                 worker_id TEXT NOT NULL,
                 event_type TEXT NOT NULL,
@@ -499,6 +517,9 @@ impl SqliteEventStore {
         )
         .execute(&pool)
         .await?;
+        
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id)").execute(&pool).await?;
+
         Ok(Self { pool })
     }
 }
@@ -507,10 +528,11 @@ impl SqliteEventStore {
 impl EventStore for SqliteEventStore {
     async fn append(&self, event: Event) -> anyhow::Result<()> {
         sqlx::query(
-            "INSERT INTO events (id, timestamp, worker_id, event_type, payload)
-             VALUES (?, ?, ?, ?, ?)"
+            "INSERT INTO events (id, session_id, timestamp, worker_id, event_type, payload)
+             VALUES (?, ?, ?, ?, ?, ?)"
         )
         .bind(event.id.to_string())
+        .bind(event.session_id.to_string())
         .bind(event.timestamp.to_rfc3339())
         .bind(event.worker_id)
         .bind(event.event_type)
@@ -520,10 +542,11 @@ impl EventStore for SqliteEventStore {
         Ok(())
     }
 
-    async fn list(&self) -> anyhow::Result<Vec<Event>> {
-        let rows = sqlx::query_as::<_, (String, String, String, String, String)>(
-            "SELECT id, timestamp, worker_id, event_type, payload FROM events ORDER BY timestamp ASC"
+    async fn list(&self, session_id: Uuid) -> anyhow::Result<Vec<Event>> {
+        let rows = sqlx::query_as::<_, (String, String, String, String, String, String)>(
+            "SELECT id, session_id, timestamp, worker_id, event_type, payload FROM events WHERE session_id = ? ORDER BY timestamp ASC"
         )
+        .bind(session_id.to_string())
         .fetch_all(&self.pool)
         .await?;
 
@@ -531,13 +554,28 @@ impl EventStore for SqliteEventStore {
         for row in rows {
             events.push(Event {
                 id: Uuid::parse_str(&row.0)?,
-                timestamp: chrono::DateTime::parse_from_rfc3339(&row.1)?.with_timezone(&Utc),
-                worker_id: row.2,
-                event_type: row.3,
-                payload: row.4,
+                session_id: Uuid::parse_str(&row.1)?,
+                timestamp: chrono::DateTime::parse_from_rfc3339(&row.2)?.with_timezone(&Utc),
+                worker_id: row.3,
+                event_type: row.4,
+                payload: row.5,
             });
         }
         Ok(events)
+    }
+
+    async fn list_all_sessions(&self) -> anyhow::Result<Vec<Uuid>> {
+        let rows = sqlx::query_as::<_, (String,)>(
+            "SELECT DISTINCT session_id FROM events"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut sessions = Vec::new();
+        for row in rows {
+            sessions.push(Uuid::parse_str(&row.0)?);
+        }
+        Ok(sessions)
     }
 }
 
@@ -548,8 +586,10 @@ mod sql_tests {
     #[tokio::test]
     async fn test_sqlite_event_store_persistence() {
         let store = SqliteEventStore::new("sqlite::memory:").await.unwrap();
+        let session_id = Uuid::new_v4();
         let event = Event {
             id: Uuid::new_v4(),
+            session_id,
             timestamp: Utc::now(),
             worker_id: "test".to_string(),
             event_type: "TestEvent".to_string(),
@@ -557,7 +597,7 @@ mod sql_tests {
         };
 
         store.append(event.clone()).await.unwrap();
-        let events = store.list().await.unwrap();
+        let events = store.list(session_id).await.unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].id, event.id);
         assert_eq!(events[0].payload, event.payload);

@@ -1,7 +1,8 @@
 mod relationship;
 
 use anyhow::Result;
-use chrono::Utc;
+use chrono::{Utc, DateTime};
+use serde::{Serialize, Deserialize};
 use clap::Parser;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event as CEvent, KeyCode},
@@ -18,7 +19,7 @@ use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect, Alignment},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Table, Row, Cell, Clear},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Table, Row, Cell, Clear, Wrap},
     Terminal,
 };
 use std::io;
@@ -35,6 +36,13 @@ struct Args {
     max_coins: Option<u64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AiOutput {
+    timestamp: DateTime<Utc>,
+    worker_id: String,
+    content: String,
+}
+
 struct AppState {
     events: Vec<Event>,
     workers: Vec<WorkerProfile>,
@@ -47,6 +55,10 @@ struct AppState {
     mode: AppMode,
     menu: MenuState,
     wizard: SetupWizard,
+    current_session_id: Option<Uuid>,
+    available_sessions: Vec<Uuid>,
+    selected_session_index: usize,
+    ai_outputs: Vec<AiOutput>,
 }
 
 #[tokio::main]
@@ -64,8 +76,8 @@ async fn main() -> Result<()> {
     let bus = Arc::new(InMemoryEventBus::new(200));
     let store = Arc::new(SqliteEventStore::new("sqlite://ifcl.db?mode=rwc").await?);
     
-    // Load existing history
-    let history = store.list().await.unwrap_or_default();
+    // We don't load history at the top level anymore. 
+    // It will be loaded when a session is selected.
     
     let state = Arc::new(Mutex::new(AppState {
         events: Vec::new(),
@@ -79,57 +91,13 @@ async fn main() -> Result<()> {
         mode: AppMode::MainMenu,
         menu: MenuState::new(),
         wizard: SetupWizard::new(),
+        current_session_id: None,
+        available_sessions: Vec::new(),
+        selected_session_index: 0,
+        ai_outputs: Vec::new(),
     }));
 
-    // Replay history to restore state
-    {
-        let mut s = state.lock().unwrap();
-        for event in &history {
-            match event.event_type.as_str() {
-                "WorkerJoined" => {
-                    if let Ok(profile) = serde_json::from_str::<WorkerProfile>(&event.payload) {
-                        s.workers.push(profile);
-                    }
-                }
-                "MissionCreated" => {
-                    if let Ok(mission) = serde_json::from_str::<Mission>(&event.payload) {
-                        s.mental_map.add_mission(mission.id, &mission.name);
-                        for task in &mission.tasks {
-                            s.mental_map.add_task(mission.id, task.id, &task.name);
-                            if let Some(assigned) = &task.assigned_worker {
-                                s.mental_map.assign_worker(task.id, assigned);
-                            }
-                        }
-                        s.missions.push(mission);
-                    }
-                }
-                "TaskUpdated" => {
-                     #[derive(serde::Deserialize)]
-                     struct TaskUpdate { mission_id: Uuid, task_id: Uuid, status: TaskStatus }
-                     if let Ok(update) = serde_json::from_str::<TaskUpdate>(&event.payload) {
-                         if let Some(m) = s.missions.iter_mut().find(|m| m.id == update.mission_id) {
-                             if let Some(t) = m.tasks.iter_mut().find(|t| t.id == update.task_id) {
-                                 t.status = update.status;
-                             }
-                         }
-                     }
-                }
-                "RewardEarned" => {
-                    if let Ok(reward) = serde_json::from_str::<serde_json::Value>(&event.payload) {
-                        let xp = reward["xp"].as_u64().unwrap_or(0);
-                        let coins = reward["coins"].as_u64().unwrap_or(0);
-                        s.bank.deposit(xp, coins);
-                    }
-                }
-                "LoopStatusChanged" => {
-                    if let Ok(status) = serde_json::from_str::<LoopStatus>(&event.payload) {
-                        s.status = status;
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
+    // Replay history will be handled later
 
     // 3. Subscription & Event Processing
     let bus_c = Arc::clone(&bus);
@@ -150,9 +118,14 @@ async fn main() -> Result<()> {
     for worker in marketplace_workers {
         let m_bus_w = Arc::clone(&m_bus);
         let worker_cloned: WorkerProfile = worker.clone();
+        let s_c = Arc::clone(&state_c);
         startup_tasks.push(tokio::spawn(async move {
+            let sid = {
+                s_c.lock().unwrap().current_session_id.unwrap_or_default()
+            };
             let _ = m_bus_w.publish(Event {
                 id: Uuid::new_v4(),
+                session_id: sid,
                 timestamp: Utc::now(),
                 worker_id: "system".to_string(),
                 event_type: "WorkerJoined".to_string(),
@@ -166,9 +139,14 @@ async fn main() -> Result<()> {
     for mission in marketplace_missions {
         let m_bus_m = Arc::clone(&m_bus);
         let mission_cloned: Mission = mission.clone();
+        let s_c = Arc::clone(&state_c);
         startup_tasks.push(tokio::spawn(async move {
+            let sid = {
+                s_c.lock().unwrap().current_session_id.unwrap_or_default()
+            };
             let _ = m_bus_m.publish(Event {
                 id: Uuid::new_v4(),
+                session_id: sid,
                 timestamp: Utc::now(),
                 worker_id: "system".to_string(),
                 event_type: "MissionCreated".to_string(),
@@ -183,6 +161,9 @@ async fn main() -> Result<()> {
             let _ = store_c.append(event.clone()).await;
             
             if let Ok(mut s) = state_c.lock() {
+                if Some(event.session_id) != s.current_session_id && event.session_id != Uuid::nil() {
+                    continue;
+                }
                 let event_cloned: Event = event.clone();
                 match event_cloned.event_type.as_str() {
                     "WorkerJoined" => {
@@ -211,9 +192,13 @@ async fn main() -> Result<()> {
                                      t.status = update.status;
                                      if update.status == TaskStatus::Success {
                                          let bus_r = Arc::clone(&bus_reward);
+                                         let sid = event.session_id;
                                          tokio::spawn(async move {
                                              let _ = bus_r.publish(Event {
-                                                 id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "system".to_string(),
+                                                 id: Uuid::new_v4(),
+                                                 session_id: sid,
+                                                 timestamp: Utc::now(), 
+                                                 worker_id: "system".to_string(),
                                                  event_type: "RewardEarned".to_string(),
                                                  payload: r#"{"xp":25,"coins":10}"#.to_string(),
                                              }).await;
@@ -230,6 +215,16 @@ async fn main() -> Result<()> {
                             s.bank.deposit(xp, coins);
                         }
                     }
+                    "AiResponse" => {
+                        s.ai_outputs.push(AiOutput {
+                            timestamp: event.timestamp,
+                            worker_id: event.worker_id.clone(),
+                            content: event.payload.clone(),
+                        });
+                        if s.ai_outputs.len() > 50 {
+                            s.ai_outputs.remove(0);
+                        }
+                    }
                     "LoopStatusChanged" => {
                         if let Ok(status) = serde_json::from_str::<LoopStatus>(&event.payload) {
                             s.status = status;
@@ -242,14 +237,18 @@ async fn main() -> Result<()> {
                                 for t in &mut m.tasks {
                                     if t.status == TaskStatus::Running || t.status == TaskStatus::Pending {
                                         t.status = TaskStatus::Success;
-                                        let b_rew = Arc::clone(&bus_reward);
-                                        tokio::spawn(async move {
-                                            let _ = b_rew.publish(Event {
-                                                id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "system".to_string(),
-                                                event_type: "RewardEarned".to_string(),
-                                                payload: r#"{"xp":50,"coins":20}"#.to_string(),
-                                            }).await;
-                                        });
+                                         let b_rew = Arc::clone(&bus_reward);
+                                         let sid = event.session_id;
+                                         tokio::spawn(async move {
+                                             let _ = b_rew.publish(Event {
+                                                 id: Uuid::new_v4(),
+                                                 session_id: sid,
+                                                 timestamp: Utc::now(), 
+                                                 worker_id: "system".to_string(),
+                                                 event_type: "RewardEarned".to_string(),
+                                                 payload: r#"{"xp":50,"coins":20}"#.to_string(),
+                                             }).await;
+                                         });
                                         break;
                                     }
                                 }
@@ -287,14 +286,17 @@ async fn main() -> Result<()> {
         // Wait for Wizard to complete
         check_pause_async(Arc::clone(&state_sim_monitor)).await;
 
-        let (final_goal, final_budget) = {
+        let (final_goal, final_budget, sid) = {
             let s = state_sim_monitor.lock().unwrap();
-            (s.wizard.goal.clone(), s.wizard.budget_coins)
+            (s.wizard.goal.clone(), s.wizard.budget_coins, s.current_session_id.unwrap_or_default())
         };
 
         // Step 1: Loop Started with Wizard Config
         let _ = bus_simulation.publish(Event {
-            id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "system".to_string(),
+            id: Uuid::new_v4(),
+            session_id: sid,
+            timestamp: Utc::now(),
+            worker_id: "system".to_string(),
             event_type: "LoopStarted".to_string(),
             payload: serde_json::to_string(&LoopConfig { goal: final_goal.clone(), max_coins: Some(final_budget) }).unwrap(),
         }).await;
@@ -308,7 +310,10 @@ async fn main() -> Result<()> {
             check_pause_async(Arc::clone(&state_sim_monitor)).await;
             tokio::time::sleep(tokio::time::Duration::from_millis(600)).await;
             let _ = bus_simulation.publish(Event {
-                id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "system".to_string(),
+                id: Uuid::new_v4(),
+                session_id: sid,
+                timestamp: Utc::now(),
+                worker_id: "system".to_string(),
                 event_type: "WorkerJoined".to_string(), payload: serde_json::to_string(&w).unwrap(),
             }).await;
         }
@@ -328,7 +333,10 @@ async fn main() -> Result<()> {
         };
         let mission_id = mission.id;
         let _ = bus_simulation.publish(Event {
-            id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Architect".to_string(),
+            id: Uuid::new_v4(),
+            session_id: sid,
+            timestamp: Utc::now(),
+            worker_id: "Architect".to_string(),
             event_type: "MissionCreated".to_string(), payload: serde_json::to_string(&mission).unwrap(),
         }).await;
 
@@ -336,13 +344,19 @@ async fn main() -> Result<()> {
         check_pause_async(Arc::clone(&state_sim_monitor)).await;
         tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
         let _ = bus_simulation.publish(Event {
-            id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Architect".to_string(),
+            id: Uuid::new_v4(),
+            session_id: sid,
+            timestamp: Utc::now(),
+            worker_id: "Architect".to_string(),
             event_type: "TaskUpdated".to_string(),
             payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Running"}}"#, mission_id, t1_id),
         }).await;
 
         let _ = bus_simulation.publish(Event {
-            id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Architect".to_string(),
+            id: Uuid::new_v4(),
+            session_id: sid,
+            timestamp: Utc::now(),
+            worker_id: "Architect".to_string(),
             event_type: "Log".to_string(), payload: "Invoking Gemini CLI...".to_string(),
         }).await;
 
@@ -352,18 +366,27 @@ async fn main() -> Result<()> {
         match executor.execute(&prompt).await {
             Ok(response) => {
                 let _ = bus_simulation.publish(Event {
-                    id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Architect".to_string(),
+                    id: Uuid::new_v4(),
+                    session_id: sid,
+                    timestamp: Utc::now(),
+                    worker_id: "Architect".to_string(),
                     event_type: "AiResponse".to_string(), payload: response,
                 }).await;
                 let _ = bus_simulation.publish(Event {
-                    id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Architect".to_string(),
+                    id: Uuid::new_v4(),
+                    session_id: sid,
+                    timestamp: Utc::now(),
+                    worker_id: "Architect".to_string(),
                     event_type: "TaskUpdated".to_string(),
                     payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Success"}}"#, mission_id, t1_id),
                 }).await;
             }
             Err(e) => {
                 let _ = bus_simulation.publish(Event {
-                    id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Architect".to_string(),
+                    id: Uuid::new_v4(),
+                    session_id: sid,
+                    timestamp: Utc::now(),
+                    worker_id: "Architect".to_string(),
                     event_type: "WorkerError".to_string(), payload: e.to_string(),
                 }).await;
             }
@@ -373,17 +396,26 @@ async fn main() -> Result<()> {
         check_pause_async(Arc::clone(&state_sim_monitor)).await;
         tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
         let _ = bus_simulation.publish(Event {
-            id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Git-Bot".to_string(),
+            id: Uuid::new_v4(),
+            session_id: sid,
+            timestamp: Utc::now(),
+            worker_id: "Git-Bot".to_string(),
             event_type: "TaskUpdated".to_string(),
             payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Running"}}"#, mission_id, t2_id),
         }).await;
         tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
         let _ = bus_simulation.publish(Event {
-            id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Git-Bot".to_string(),
+            id: Uuid::new_v4(),
+            session_id: sid,
+            timestamp: Utc::now(),
+            worker_id: "Git-Bot".to_string(),
             event_type: "Log".to_string(), payload: "git init && git add . && git commit -m 'Initial commit'".to_string(),
         }).await;
         let _ = bus_simulation.publish(Event {
-            id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Git-Bot".to_string(),
+            id: Uuid::new_v4(),
+            session_id: sid,
+            timestamp: Utc::now(),
+            worker_id: "Git-Bot".to_string(),
             event_type: "TaskUpdated".to_string(),
             payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Success"}}"#, mission_id, t2_id),
         }).await;
@@ -451,6 +483,30 @@ async fn main() -> Result<()> {
                     // Center the menu
                     let menu_area = centered_rect(40, 50, chunks[1]);
                     f.render_widget(menu_list, menu_area);
+                }
+                AppMode::SessionPicker => {
+                    let mut session_items = Vec::new();
+                    if let Ok(s) = state.lock() {
+                        for (i, sid) in s.available_sessions.iter().enumerate() {
+                            let style = if i == s.selected_session_index {
+                                Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD)
+                            } else {
+                                Style::default().fg(Color::White)
+                            };
+                            session_items.push(ListItem::new(format!("  Loop Session: {}  ", sid)).style(style));
+                        }
+                    }
+                    if session_items.is_empty() {
+                        session_items.push(ListItem::new("  No sessions found. Press ESC to Go Back.  ").style(Style::default().fg(Color::DarkGray)));
+                    }
+
+                    let session_list = List::new(session_items)
+                        .block(Block::default().borders(Borders::ALL).title(" LOAD PREVIOUS LOOP "))
+                        .style(Style::default().fg(Color::White))
+                        .highlight_style(Style::default().add_modifier(Modifier::BOLD));
+                    
+                    let area = centered_rect(60, 50, f.size());
+                    f.render_widget(session_list, area);
                 }
                 AppMode::Setup => {
                     let chunks = Layout::default()
@@ -536,9 +592,10 @@ async fn main() -> Result<()> {
                     let middle_chunks = Layout::default()
                         .direction(Direction::Horizontal)
                         .constraints([
-                            Constraint::Percentage(15), 
-                            Constraint::Percentage(35), 
-                            Constraint::Percentage(25), 
+                            Constraint::Percentage(12), 
+                            Constraint::Percentage(23), 
+                            Constraint::Percentage(20), 
+                            Constraint::Percentage(20),
                             Constraint::Percentage(25)
                         ].as_ref())
                         .split(main_layout[1]);
@@ -586,23 +643,23 @@ async fn main() -> Result<()> {
                         use relationship::NodeType;
                         for node_idx in s.mental_map.graph.node_indices() {
                             let node = &s.mental_map.graph[node_idx];
-                        if let NodeType::Mission(name) = node {
-                            map_items.push(ListItem::new(format!("󰚒 {}", name)).style(Style::default().fg(Color::Cyan)));
-                            // Find tasks
-                            for edge in s.mental_map.graph.edges(node_idx) {
-                                let target_idx = edge.target();
-                                if let NodeType::Task(t_name) = &s.mental_map.graph[target_idx] {
-                                    map_items.push(ListItem::new(format!("  └─󰓅 {}", t_name)).style(Style::default().fg(Color::DarkGray)));
-                                    // Find workers
-                                    for w_edge in s.mental_map.graph.edges(target_idx) {
-                                        let w_idx = w_edge.target();
-                                        if let NodeType::Worker(w_name) = &s.mental_map.graph[w_idx] {
-                                            map_items.push(ListItem::new(format!("      └─󰚩 {}", w_name)).style(Style::default().fg(Color::Yellow)));
+                            if let NodeType::Mission(name) = node {
+                                map_items.push(ListItem::new(format!("󰚒 {}", name)).style(Style::default().fg(Color::Cyan)));
+                                // Find tasks
+                                for edge in s.mental_map.graph.edges(node_idx) {
+                                    let target_idx = edge.target();
+                                    if let NodeType::Task(t_name) = &s.mental_map.graph[target_idx] {
+                                        map_items.push(ListItem::new(format!("  └─󰓅 {}", t_name)).style(Style::default().fg(Color::DarkGray)));
+                                        // Find workers
+                                        for w_edge in s.mental_map.graph.edges(target_idx) {
+                                            let w_idx = w_edge.target();
+                                            if let NodeType::Worker(w_name) = &s.mental_map.graph[w_idx] {
+                                                map_items.push(ListItem::new(format!("      └─󰚩 {}", w_name)).style(Style::default().fg(Color::Yellow)));
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
                         }
                     }
                     f.render_widget(List::new(map_items).block(Block::default().title(" MENTAL MAP ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray))), middle_chunks[2]);
@@ -622,7 +679,7 @@ async fn main() -> Result<()> {
                                 _ => Color::White 
                             };
                             let content = if e.event_type == "AiResponse" {
-                                format!(" > AI: {}", e.payload)
+                                format!(" > AI: ...") 
                             } else if e.event_type == "RewardEarned" {
                                  format!(" + REWARD: {}", e.payload)
                             } else if e.event_type == "LoopStatusChanged" {
@@ -639,7 +696,29 @@ async fn main() -> Result<()> {
                             ListItem::new(content).style(Style::default().fg(color))
                         }).collect();
                     }
-                    f.render_widget(List::new(feed_items).block(Block::default().title(" ACTIVITY FEED ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray))), middle_chunks[3]);
+                    f.render_widget(List::new(feed_items).block(Block::default().title(" FEED ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray))), middle_chunks[3]);
+
+                    // 5. AI TERMINAL
+                    let mut ai_content = String::new();
+                    if let Ok(s) = state.lock() {
+                        if let Some(latest) = s.ai_outputs.last() {
+                            ai_content = format!(" [{}] {}\n\n{}", 
+                                latest.timestamp.format("%H:%M:%S"),
+                                latest.worker_id,
+                                latest.content
+                            );
+                        }
+                    }
+                    if ai_content.is_empty() {
+                        ai_content = "Waiting for AI response...".to_string();
+                    }
+
+                    f.render_widget(
+                        Paragraph::new(ai_content)
+                            .wrap(Wrap { trim: true })
+                            .block(Block::default().title(" AI TERMINAL ").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow))),
+                        middle_chunks[4]
+                    );
 
                     let footer_text = if is_int {
                         " [ESC] Cancel | [ENTER] Send | MODE: INTERVENTION"
@@ -685,6 +764,18 @@ async fn main() -> Result<()> {
                                         s.wizard = SetupWizard::new(); // Reset
                                         s.mode = AppMode::Setup;
                                     }
+                                    MenuAction::LoadGame => {
+                                        let store_lp = Arc::clone(&store);
+                                        let s_lp = Arc::clone(&state);
+                                        tokio::spawn(async move {
+                                            if let Ok(sessions) = store_lp.list_all_sessions().await {
+                                                let mut state = s_lp.lock().unwrap();
+                                                state.available_sessions = sessions;
+                                                state.selected_session_index = 0;
+                                                state.mode = AppMode::SessionPicker;
+                                            }
+                                        });
+                                    }
                                     MenuAction::Quit => break,
                                     _ => {} 
                                 }
@@ -697,9 +788,11 @@ async fn main() -> Result<()> {
                             KeyCode::Esc => s.mode = AppMode::MainMenu,
                             KeyCode::Enter => {
                                 if s.wizard.current_step == WizardStep::Summary {
+                                    s.current_session_id = Some(Uuid::new_v4());
                                     s.mode = AppMode::Running;
                                     s.status = LoopStatus::Running;
-                                } else {
+                                }
+ else {
                                     let _ = s.wizard.next();
                                 }
                             }
@@ -721,9 +814,13 @@ async fn main() -> Result<()> {
                                     s.is_intervening = false;
                                     s.input_buffer.clear();
                                     let bus_g = Arc::clone(&bus);
+                                    let sid = s.current_session_id.unwrap_or_default();
                                     tokio::spawn(async move {
                                         let _ = bus_g.publish(Event {
-                                            id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "god".to_string(),
+                                            id: Uuid::new_v4(),
+                                            session_id: sid,
+                                            timestamp: Utc::now(),
+                                            worker_id: "god".to_string(),
                                             event_type: "ManualCommandInjected".to_string(),
                                             payload: cmd,
                                         }).await;
@@ -746,9 +843,13 @@ async fn main() -> Result<()> {
                                         LoopStatus::Paused => LoopStatus::Running,
                                     };
                                     let bus_p = Arc::clone(&bus);
+                                    let sid = s.current_session_id.unwrap_or_default();
                                     tokio::spawn(async move {
                                         let _ = bus_p.publish(Event {
-                                            id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "user".to_string(),
+                                            id: Uuid::new_v4(),
+                                            session_id: sid,
+                                            timestamp: Utc::now(),
+                                            worker_id: "user".to_string(),
                                             event_type: "LoopStatusChanged".to_string(),
                                             payload: serde_json::to_string(&new_status).unwrap(),
                                         }).await;
@@ -756,6 +857,112 @@ async fn main() -> Result<()> {
                                 }
                                 _ => {}
                             }
+                        }
+                    }
+                    AppMode::SessionPicker => {
+                        match key.code {
+                            KeyCode::Esc => s.mode = AppMode::MainMenu,
+                            KeyCode::Down | KeyCode::Char('j') => {
+                                if s.selected_session_index < s.available_sessions.len().saturating_sub(1) {
+                                    s.selected_session_index += 1;
+                                }
+                            }
+                            KeyCode::Up | KeyCode::Char('k') => {
+                                if s.selected_session_index > 0 {
+                                    s.selected_session_index -= 1;
+                                }
+                            }
+                            KeyCode::Enter => {
+                                if let Some(sid) = s.available_sessions.get(s.selected_session_index).cloned() {
+                                    s.current_session_id = Some(sid);
+                                    s.mode = AppMode::Running;
+                                    s.status = LoopStatus::Running;
+                                    
+                                    // Trigger history replay
+                                    let store_rp = Arc::clone(&store);
+                                    let s_rp = Arc::clone(&state);
+                                    tokio::spawn(async move {
+                                        if let Ok(history) = store_rp.list(sid).await {
+                                            let mut state = s_rp.lock().unwrap();
+                                            // Clear current state before replay
+                                            state.events.clear();
+                                            state.workers.clear();
+                                            state.missions.clear();
+                                            state.bank = Bank::default();
+                                            state.mental_map = relationship::MentalMap::new();
+
+                                            for event in history {
+                                                match event.event_type.as_str() {
+                                                    "WorkerJoined" => {
+                                                        if let Ok(profile) = serde_json::from_str::<WorkerProfile>(&event.payload) {
+                                                            state.workers.push(profile);
+                                                        }
+                                                    }
+                                                    "MissionCreated" => {
+                                                        if let Ok(mission) = serde_json::from_str::<Mission>(&event.payload) {
+                                                            state.mental_map.add_mission(mission.id, &mission.name);
+                                                            for task in &mission.tasks {
+                                                                state.mental_map.add_task(mission.id, task.id, &task.name);
+                                                                if let Some(assigned) = &task.assigned_worker {
+                                                                    state.mental_map.assign_worker(task.id, assigned);
+                                                                }
+                                                            }
+                                                            state.missions.push(mission);
+                                                        }
+                                                    }
+                                                    "TaskUpdated" => {
+                                                         #[derive(serde::Deserialize)]
+                                                         struct TaskUpdate { mission_id: Uuid, task_id: Uuid, status: TaskStatus }
+                                                         if let Ok(update) = serde_json::from_str::<TaskUpdate>(&event.payload) {
+                                                             if let Some(m) = state.missions.iter_mut().find(|m| m.id == update.mission_id) {
+                                                                 if let Some(t) = m.tasks.iter_mut().find(|t| t.id == update.task_id) {
+                                                                     t.status = update.status;
+                                                                 }
+                                                             }
+                                                         }
+                                                    }
+                                                    "AiResponse" => {
+                                                        state.ai_outputs.push(AiOutput {
+                                                            timestamp: event.timestamp,
+                                                            worker_id: event.worker_id.clone(),
+                                                            content: event.payload.clone(),
+                                                        });
+                                                        if state.ai_outputs.len() > 50 {
+                                                            state.ai_outputs.remove(0);
+                                                        }
+                                                    }
+                                                    "RewardEarned" => {
+                                                        if let Ok(reward) = serde_json::from_str::<serde_json::Value>(&event.payload) {
+                                                            let xp = reward["xp"].as_u64().unwrap_or(0);
+                                                            let coins = reward["coins"].as_u64().unwrap_or(0);
+                                                            state.bank.deposit(xp, coins);
+                                                        }
+                                                    }
+                                                    "LoopStatusChanged" => {
+                                                        if let Ok(status) = serde_json::from_str::<LoopStatus>(&event.payload) {
+                                                            state.status = status;
+                                                        }
+                                                    }
+                                                    "LoopStarted" => {
+                                                        if let Ok(config) = serde_json::from_str::<LoopConfig>(&event.payload) {
+                                                            state.wizard.goal = config.goal;
+                                                            if let Some(max) = config.max_coins {
+                                                                state.wizard.budget_coins = max;
+                                                            }
+                                                        }
+                                                    }
+                                                    _ => {}
+                                                }
+                                                if state.events.len() > 100 {
+                                                    state.events.remove(0);
+                                                }
+                                                state.events.push(event);
+                                            }
+                                        }
+                                    });
+                                }
+                            }
+                            _ => {}
                         }
                     }
                     _ => {}
