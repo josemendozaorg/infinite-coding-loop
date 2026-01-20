@@ -12,8 +12,10 @@ pub struct Event {
     pub payload: String,
 }
 pub mod ui_state;
+pub mod wizard;
 
 pub use ui_state::{AppMode, MenuAction, MenuState};
+pub use wizard::{SetupWizard, WizardStep};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct LoopConfig {

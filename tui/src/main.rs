@@ -11,7 +11,7 @@ use crossterm::{
 use ifcl_core::{
     Event, EventBus, EventStore, InMemoryEventBus, Mission, TaskStatus, Task, 
     CliExecutor, Bank, LoopStatus, SqliteEventStore, WorkerProfile, WorkerRole, LoopConfig,
-    MarketplaceLoader, AppMode, MenuAction, MenuState
+    MarketplaceLoader, AppMode, MenuAction, MenuState, SetupWizard, WizardStep
 };
 use petgraph::visit::EdgeRef;
 use ratatui::{
@@ -46,6 +46,7 @@ struct AppState {
     mental_map: relationship::MentalMap,
     mode: AppMode,
     menu: MenuState,
+    wizard: SetupWizard,
 }
 
 #[tokio::main]
@@ -78,6 +79,7 @@ async fn main() -> Result<()> {
         mental_map: relationship::MentalMap::new(),
         mode: AppMode::MainMenu,
         menu: MenuState::new(),
+        wizard: SetupWizard::new(),
     }));
 
     // Replay history to restore state
@@ -438,6 +440,62 @@ async fn main() -> Result<()> {
                     let menu_area = centered_rect(40, 50, chunks[1]);
                     f.render_widget(menu_list, menu_area);
                 }
+                AppMode::Setup => {
+                    let chunks = Layout::default()
+                        .direction(Direction::Vertical)
+                        .margin(2)
+                        .constraints(
+                            [
+                                Constraint::Length(3),
+                                Constraint::Min(0),
+                                Constraint::Length(3),
+                            ]
+                            .as_ref(),
+                        )
+                        .split(f.size());
+
+                    let (step, goal, stack, team, budget) = if let Ok(s) = state.lock() {
+                        (s.wizard.current_step.clone(), s.wizard.goal.clone(), s.wizard.stack.clone(), s.wizard.team_size, s.wizard.budget_coins)
+                    } else { (WizardStep::Goal, String::new(), String::new(), 0, 0) };
+
+                    let step_text = match step {
+                        WizardStep::Goal => "Step 1/5: Define Objective",
+                        WizardStep::Stack => "Step 2/5: Technology Stack",
+                        WizardStep::Team => "Step 3/5: Squad Size",
+                        WizardStep::Budget => "Step 4/5: Resource Credits",
+                        WizardStep::Summary => "Step 5/5: Final Review",
+                    };
+
+                    f.render_widget(
+                        Paragraph::new(step_text)
+                            .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+                            .block(Block::default().borders(Borders::ALL).title(" NEW LOOP SETUP ")),
+                        chunks[0]
+                    );
+
+                    let content = match step {
+                        WizardStep::Goal => format!("Define your mission goal:\n\n> {}", goal),
+                        WizardStep::Stack => format!("Selected Technology:\n\n [ {} ]", stack),
+                        WizardStep::Team => format!("Desired Team Size:\n\n [ {} ] Workers", team),
+                        WizardStep::Budget => format!("Initial Credit Allotment:\n\n [ {} ] Coins", budget),
+                        WizardStep::Summary => format!(
+                            "Mission: {}\nStack: {}\nTeam: {} Workers\nBudget: {} Coins\n\n[ PRESS ENTER TO START ]",
+                            goal, stack, team, budget
+                        ),
+                    };
+
+                    f.render_widget(
+                        Paragraph::new(content)
+                            .block(Block::default().borders(Borders::ALL).title(" CONFIGURATION ")),
+                        chunks[1]
+                    );
+
+                    f.render_widget(
+                        Paragraph::new(" [ENTER] Next | [BACKSPACE] Prev | [ESC] Cancel ")
+                            .style(Style::default().fg(Color::DarkGray)),
+                        chunks[2]
+                    );
+                }
                 AppMode::Running => {
                     let main_layout = Layout::default()
                         .direction(Direction::Vertical)
@@ -614,9 +672,31 @@ async fn main() -> Result<()> {
                             KeyCode::Up | KeyCode::Char('k') => s.menu.previous(),
                             KeyCode::Enter => {
                                 match s.menu.current_action() {
-                                    MenuAction::NewGame => s.mode = AppMode::Running,
+                                    MenuAction::NewGame => {
+                                        s.wizard = SetupWizard::new(); // Reset
+                                        s.mode = AppMode::Setup;
+                                    }
                                     MenuAction::Quit => break,
                                     _ => {} 
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    AppMode::Setup => {
+                        match key.code {
+                            KeyCode::Esc => s.mode = AppMode::MainMenu,
+                            KeyCode::Enter => {
+                                if s.wizard.current_step == WizardStep::Summary {
+                                    s.mode = AppMode::Running;
+                                } else {
+                                    let _ = s.wizard.next();
+                                }
+                            }
+                            KeyCode::Backspace => s.wizard.prev(),
+                            KeyCode::Char(c) => {
+                                if s.wizard.current_step == WizardStep::Goal {
+                                    s.wizard.goal.push(c);
                                 }
                             }
                             _ => {}
