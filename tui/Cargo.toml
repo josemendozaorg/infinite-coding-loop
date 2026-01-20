@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-core = { path = "../core" }
+ifcl-core = { path = "../ifcl-core" }
 tokio = { workspace = true }
 ratatui = { workspace = true }
 crossterm = { workspace = true }
