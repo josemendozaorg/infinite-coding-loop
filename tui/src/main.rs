@@ -51,7 +51,7 @@ struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let args = Args::parse();
+    let _args = Args::parse();
 
     // 1. Setup Terminal
     enable_raw_mode()?;
@@ -351,7 +351,6 @@ async fn main() -> Result<()> {
         
         match executor.execute(&prompt).await {
             Ok(response) => {
-                check_pause_async(Arc::clone(&state_sim_monitor)).await;
                 let _ = bus_simulation.publish(Event {
                     id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Architect".to_string(),
                     event_type: "AiResponse".to_string(), payload: response,
@@ -587,26 +586,23 @@ async fn main() -> Result<()> {
                         use relationship::NodeType;
                         for node_idx in s.mental_map.graph.node_indices() {
                             let node = &s.mental_map.graph[node_idx];
-                            match node {
-                                NodeType::Mission(name) => {
-                                    map_items.push(ListItem::new(format!("󰚒 {}", name)).style(Style::default().fg(Color::Cyan)));
-                                    // Find tasks
-                                    for edge in s.mental_map.graph.edges(node_idx) {
-                                        let target_idx = edge.target();
-                                        if let NodeType::Task(t_name) = &s.mental_map.graph[target_idx] {
-                                            map_items.push(ListItem::new(format!("  └─󰓅 {}", t_name)).style(Style::default().fg(Color::DarkGray)));
-                                            // Find workers
-                                            for w_edge in s.mental_map.graph.edges(target_idx) {
-                                                let w_idx = w_edge.target();
-                                                if let NodeType::Worker(w_name) = &s.mental_map.graph[w_idx] {
-                                                    map_items.push(ListItem::new(format!("      └─󰚩 {}", w_name)).style(Style::default().fg(Color::Yellow)));
-                                                }
-                                            }
+                        if let NodeType::Mission(name) = node {
+                            map_items.push(ListItem::new(format!("󰚒 {}", name)).style(Style::default().fg(Color::Cyan)));
+                            // Find tasks
+                            for edge in s.mental_map.graph.edges(node_idx) {
+                                let target_idx = edge.target();
+                                if let NodeType::Task(t_name) = &s.mental_map.graph[target_idx] {
+                                    map_items.push(ListItem::new(format!("  └─󰓅 {}", t_name)).style(Style::default().fg(Color::DarkGray)));
+                                    // Find workers
+                                    for w_edge in s.mental_map.graph.edges(target_idx) {
+                                        let w_idx = w_edge.target();
+                                        if let NodeType::Worker(w_name) = &s.mental_map.graph[w_idx] {
+                                            map_items.push(ListItem::new(format!("      └─󰚩 {}", w_name)).style(Style::default().fg(Color::Yellow)));
                                         }
                                     }
                                 }
-                                _ => {}
                             }
+                        }
                         }
                     }
                     f.render_widget(List::new(map_items).block(Block::default().title(" MENTAL MAP ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray))), middle_chunks[2]);

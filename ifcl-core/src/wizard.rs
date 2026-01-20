@@ -29,7 +29,16 @@ impl SetupWizard {
             budget_coins: 100,
         }
     }
+}
 
+impl Default for SetupWizard {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SetupWizard {
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Result<(), String> {
         match self.current_step {
             WizardStep::Goal => {

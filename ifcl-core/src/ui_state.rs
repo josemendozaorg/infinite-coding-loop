@@ -1,8 +1,9 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum AppMode {
+    #[default]
     MainMenu,
     Setup,
     Running,
@@ -17,11 +18,7 @@ pub enum MenuAction {
     Quit,
 }
 
-impl Default for AppMode {
-    fn default() -> Self {
-        AppMode::MainMenu
-    }
-}
+// impl Default removed (handled by derive)
 
 pub struct MenuState {
     pub selected_index: usize,
@@ -40,7 +37,15 @@ impl MenuState {
             ],
         }
     }
+}
 
+impl Default for MenuState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MenuState {
     pub fn next(&mut self) {
         if self.selected_index < self.items.len() - 1 {
             self.selected_index += 1;

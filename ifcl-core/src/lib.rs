@@ -86,7 +86,7 @@ impl MarketplaceLoader {
         let mut workers = Vec::new();
         if let Ok(entries) = std::fs::read_dir(path) {
             for entry in entries.flatten() {
-                if entry.path().extension().map_or(false, |ext| ext == "json") {
+                if entry.path().extension().is_some_and(|ext| ext == "json") {
                     if let Ok(content) = std::fs::read_to_string(entry.path()) {
                         if let Ok(worker) = serde_json::from_str::<WorkerProfile>(&content) {
                             workers.push(worker);
@@ -102,7 +102,7 @@ impl MarketplaceLoader {
         let mut missions = Vec::new();
         if let Ok(entries) = std::fs::read_dir(path) {
             for entry in entries.flatten() {
-                if entry.path().extension().map_or(false, |ext| ext == "json") {
+                if entry.path().extension().is_some_and(|ext| ext == "json") {
                     if let Ok(content) = std::fs::read_to_string(entry.path()) {
                         if let Ok(mission) = serde_json::from_str::<Mission>(&content) {
                             missions.push(mission);
@@ -188,6 +188,12 @@ impl InMemoryEventStore {
     }
 }
 
+impl Default for InMemoryEventStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait::async_trait]
 impl EventStore for InMemoryEventStore {
     async fn append(&self, event: Event) -> anyhow::Result<()> {
@@ -211,6 +217,12 @@ impl BasicOrchestrator {
         Self {
             missions: tokio::sync::RwLock::new(Vec::new()),
         }
+    }
+}
+
+impl Default for BasicOrchestrator {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
