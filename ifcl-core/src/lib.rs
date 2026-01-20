@@ -24,6 +24,12 @@ pub trait EventBus: Send + Sync {
     fn subscribe(&self) -> tokio::sync::broadcast::Receiver<Event>;
 }
 
+#[async_trait::async_trait]
+pub trait EventStore: Send + Sync {
+    async fn append(&self, event: Event) -> anyhow::Result<()>;
+    async fn list(&self) -> anyhow::Result<Vec<Event>>;
+}
+
 pub struct InMemoryEventBus {
     tx: tokio::sync::broadcast::Sender<Event>,
 }
@@ -44,6 +50,32 @@ impl EventBus for InMemoryEventBus {
 
     fn subscribe(&self) -> tokio::sync::broadcast::Receiver<Event> {
         self.tx.subscribe()
+    }
+}
+
+pub struct InMemoryEventStore {
+    events: tokio::sync::RwLock<Vec<Event>>,
+}
+
+impl InMemoryEventStore {
+    pub fn new() -> Self {
+        Self {
+            events: tokio::sync::RwLock::new(Vec::new()),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl EventStore for InMemoryEventStore {
+    async fn append(&self, event: Event) -> anyhow::Result<()> {
+        let mut events = self.events.write().await;
+        events.push(event);
+        Ok(())
+    }
+
+    async fn list(&self) -> anyhow::Result<Vec<Event>> {
+        let events = self.events.read().await;
+        Ok(events.clone())
     }
 }
 
@@ -97,5 +129,23 @@ mod tests {
         let received = rx.recv().await.unwrap();
 
         assert_eq!(event, received);
+    }
+
+    #[tokio::test]
+    async fn test_event_store_append_list() {
+        let store = InMemoryEventStore::new();
+        let event = Event {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            worker_id: "test-worker".to_string(),
+            event_type: "TestEvent".to_string(),
+            payload: "{}".to_string(),
+        };
+
+        store.append(event.clone()).await.unwrap();
+        let events = store.list().await.unwrap();
+
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0], event);
     }
 }
