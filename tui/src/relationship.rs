@@ -51,6 +51,29 @@ impl MentalMap {
             self.graph.add_edge(t_node, w_node, ());
         }
     }
+
+    pub fn add_worker_relationship(&mut self, requester_name: &str, provider_name: &str) {
+        let req_id = format!("worker:{}", requester_name);
+        let pro_id = format!("worker:{}", provider_name);
+
+        let req_node = if let Some(&node) = self.nodes.get(&req_id) {
+            node
+        } else {
+            let node = self.graph.add_node(NodeType::Worker(requester_name.to_string()));
+            self.nodes.insert(req_id, node);
+            node
+        };
+
+        let pro_node = if let Some(&node) = self.nodes.get(&pro_id) {
+            node
+        } else {
+            let node = self.graph.add_node(NodeType::Worker(provider_name.to_string()));
+            self.nodes.insert(pro_id, node);
+            node
+        };
+
+        self.graph.add_edge(req_node, pro_node, ());
+    }
 }
 
 #[cfg(test)]

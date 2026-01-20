@@ -1,0 +1,16 @@
+{
+    "name": "The Dynamic Duo",
+    "description": "Minimal viable team for simple tasks. Includes an Architect for planning and a Git-Bot for version control.",
+    "workers": [
+        {
+            "name": "Architect",
+            "role": "Architect",
+            "model": "gemini-1.5-pro"
+        },
+        {
+            "name": "Git-Bot",
+            "role": "Git",
+            "model": null
+        }
+    ]
+}

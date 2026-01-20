@@ -17,6 +17,7 @@ pub struct SetupWizard {
     pub stack: String,
     pub team_size: usize,
     pub budget_coins: u64,
+    pub selected_group_index: usize,
 }
 
 impl SetupWizard {
@@ -27,6 +28,7 @@ impl SetupWizard {
             stack: "Rust".to_string(), // Default
             team_size: 2,
             budget_coins: 100,
+            selected_group_index: 0,
         }
     }
 }

@@ -16,10 +16,20 @@ pub struct Event {
 pub mod ui_state;
 pub mod wizard;
 pub mod session;
+pub mod groups;
+pub mod marketplace;
+pub mod orchestrator;
+pub mod context;
+pub mod planner;
 
 pub use ui_state::{AppMode, MenuAction, MenuState};
 pub use wizard::{SetupWizard, WizardStep};
 pub use session::Session;
+pub use groups::WorkerGroup;
+pub use marketplace::MarketplaceLoader;
+pub use orchestrator::{Orchestrator, BasicOrchestrator, WorkerRequest};
+pub use context::*;
+pub use planner::*;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct LoopConfig {
@@ -43,12 +53,6 @@ pub struct WorkerProfile {
     pub name: String,
     pub role: WorkerRole,
     pub model: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
-pub struct WorkerGroup {
-    pub name: String,
-    pub workers: Vec<WorkerProfile>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
@@ -83,43 +87,6 @@ pub struct Mission {
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
-pub struct MarketplaceLoader;
-
-impl MarketplaceLoader {
-    pub fn load_workers<P: AsRef<std::path::Path>>(path: P) -> Vec<WorkerProfile> {
-        let mut workers = Vec::new();
-        if let Ok(entries) = std::fs::read_dir(path) {
-            for entry in entries.flatten() {
-                if entry.path().extension().is_some_and(|ext| ext == "json") {
-                    if let Ok(content) = std::fs::read_to_string(entry.path()) {
-                        if let Ok(worker) = serde_json::from_str::<WorkerProfile>(&content) {
-                            workers.push(worker);
-                        }
-                    }
-                }
-            }
-        }
-        workers
-    }
-
-    pub fn load_missions<P: AsRef<std::path::Path>>(path: P) -> Vec<Mission> {
-        let mut missions = Vec::new();
-        if let Ok(entries) = std::fs::read_dir(path) {
-            for entry in entries.flatten() {
-                if entry.path().extension().is_some_and(|ext| ext == "json") {
-                    if let Ok(content) = std::fs::read_to_string(entry.path()) {
-                        if let Ok(mission) = serde_json::from_str::<Mission>(&content) {
-                            missions.push(mission);
-                        }
-                    }
-                }
-            }
-        }
-        missions
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
 pub struct Bank {
     pub xp: u64,
     pub coins: u64,
@@ -136,13 +103,6 @@ pub trait Worker: Send + Sync {
     fn id(&self) -> &str;
     fn role(&self) -> WorkerRole;
     fn metadata(&self) -> &WorkerProfile;
-}
-
-#[async_trait::async_trait]
-pub trait Orchestrator: Send + Sync {
-    async fn create_mission(&self, name: &str, tasks: Vec<(String, String)>) -> anyhow::Result<Mission>;
-    async fn update_task_status(&self, mission_id: Uuid, task_id: Uuid, status: TaskStatus) -> anyhow::Result<()>;
-    async fn get_missions(&self) -> anyhow::Result<Vec<Mission>>;
 }
 
 #[async_trait::async_trait]
@@ -221,23 +181,7 @@ impl EventStore for InMemoryEventStore {
     }
 }
 
-pub struct BasicOrchestrator {
-    missions: tokio::sync::RwLock<Vec<Mission>>,
-}
-
-impl BasicOrchestrator {
-    pub fn new() -> Self {
-        Self {
-            missions: tokio::sync::RwLock::new(Vec::new()),
-        }
-    }
-}
-
-impl Default for BasicOrchestrator {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// BasicOrchestrator moved to orchestrator module
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ThoughtPayload {
@@ -291,44 +235,7 @@ impl CliExecutor {
     }
 }
 
-#[async_trait::async_trait]
-impl Orchestrator for BasicOrchestrator {
-    async fn create_mission(&self, name: &str, tasks: Vec<(String, String)>) -> anyhow::Result<Mission> {
-        let task_list = tasks.into_iter().map(|(n, d)| Task {
-            id: Uuid::new_v4(),
-            name: n,
-            description: d,
-            status: TaskStatus::Pending,
-            assigned_worker: None,
-        }).collect();
-
-        let mission = Mission {
-            id: Uuid::new_v4(),
-            name: name.to_string(),
-            tasks: task_list,
-        };
-
-        let mut missions = self.missions.write().await;
-        missions.push(mission.clone());
-        Ok(mission)
-    }
-
-    async fn update_task_status(&self, mission_id: Uuid, task_id: Uuid, status: TaskStatus) -> anyhow::Result<()> {
-        let mut missions = self.missions.write().await;
-        if let Some(mission) = missions.iter_mut().find(|m| m.id == mission_id) {
-            if let Some(task) = mission.tasks.iter_mut().find(|t| t.id == task_id) {
-                task.status = status;
-                return Ok(());
-            }
-        }
-        anyhow::bail!("Mission or Task not found")
-    }
-
-    async fn get_missions(&self) -> anyhow::Result<Vec<Mission>> {
-        let missions = self.missions.read().await;
-        Ok(missions.clone())
-    }
-}
+// BasicOrchestrator implementation moved to orchestrator module
 
 #[cfg(test)]
 mod tests {
@@ -369,6 +276,7 @@ mod tests {
     fn test_worker_profile_yaml_serialization() {
         let group = WorkerGroup {
             name: "Full Stack Swarm".to_string(),
+            description: "A solid team".to_string(),
             workers: vec![
                 WorkerProfile {
                     name: "Git Master".to_string(),
@@ -642,26 +550,5 @@ mod sql_tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].id, event.id);
         assert_eq!(events[0].payload, event.payload);
-    }
-
-    #[test]
-    fn test_marketplace_loader_parsing() {
-        let temp_dir = std::env::temp_dir().join(Uuid::new_v4().to_string());
-        std::fs::create_dir_all(&temp_dir).unwrap();
-        
-        let worker_json = r#"{
-            "name": "MarketBot",
-            "role": "Coder",
-            "capabilities": ["Code"],
-            "xp": 100
-        }"#;
-        
-        std::fs::write(temp_dir.join("bot.json"), worker_json).unwrap();
-        
-        let workers = MarketplaceLoader::load_workers(&temp_dir);
-        assert_eq!(workers.len(), 1);
-        assert_eq!(workers[0].name, "MarketBot");
-        
-        std::fs::remove_dir_all(temp_dir).unwrap();
     }
 }

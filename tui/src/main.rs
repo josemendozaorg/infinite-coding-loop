@@ -10,11 +10,11 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ifcl_core::{
-    Event, EventBus, EventStore, InMemoryEventBus, Mission, TaskStatus, Task, 
+    Event, EventBus, EventStore, InMemoryEventBus, Mission, TaskStatus, 
     CliExecutor, Bank, LoopStatus, SqliteEventStore, WorkerProfile, WorkerRole, LoopConfig,
-    MarketplaceLoader, AppMode, MenuAction, MenuState, SetupWizard, WizardStep, LogPayload, ThoughtPayload
+    MarketplaceLoader, AppMode, MenuAction, MenuState, SetupWizard, WizardStep, LogPayload, ThoughtPayload,
+    groups::WorkerGroup, orchestrator::WorkerRequest
 };
-use petgraph::visit::EdgeRef;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect, Alignment},
@@ -59,6 +59,7 @@ struct AppState {
     available_sessions: Vec<Uuid>,
     selected_session_index: usize,
     ai_outputs: Vec<AiOutput>,
+    available_groups: Vec<WorkerGroup>,
 }
 
 #[tokio::main]
@@ -104,6 +105,7 @@ async fn main() -> Result<()> {
         available_sessions: Vec::new(),
         selected_session_index: 0,
         ai_outputs: Vec::new(),
+        available_groups: MarketplaceLoader::load_groups("marketplace/groups"),
     }));
 
     // Replay history will be handled later
@@ -302,14 +304,21 @@ async fn main() -> Result<()> {
             // Wait for App to be in Running mode and Unpaused
             check_pause_async(Arc::clone(&state_sim_monitor)).await;
 
-            let (sid, missions, workers, goal, budget) = {
+            let (sid, missions, workers, goal, budget, selected_workers, all_events): (Uuid, Vec<Mission>, Vec<WorkerProfile>, String, u64, Vec<WorkerProfile>, Vec<Event>) = {
                 let s = state_sim_monitor.lock().unwrap();
+                let grp_workers = if let Some(grp) = s.available_groups.get(s.wizard.selected_group_index) {
+                     grp.workers.clone()
+                } else {
+                     Vec::new()
+                };
                 (
                     s.current_session_id.unwrap_or_default(),
                     s.missions.clone(),
                     s.workers.clone(),
                     s.wizard.goal.clone(),
-                    s.wizard.budget_coins
+                    s.wizard.budget_coins,
+                    grp_workers,
+                    s.events.clone()
                 )
             };
 
@@ -334,10 +343,14 @@ async fn main() -> Result<()> {
 
                 // Step 2: Ensure Workers exist
                 if workers.is_empty() {
-                    let startup_workers = vec![
-                        WorkerProfile { name: "Architect".to_string(), role: WorkerRole::Architect, model: Some("gemini".to_string()) },
-                        WorkerProfile { name: "Git-Bot".to_string(), role: WorkerRole::Git, model: None },
-                    ];
+                    let startup_workers = if !selected_workers.is_empty() {
+                        selected_workers
+                    } else {
+                        vec![
+                            WorkerProfile { name: "Architect".to_string(), role: WorkerRole::Architect, model: Some("gemini".to_string()) },
+                            WorkerProfile { name: "Git-Bot".to_string(), role: WorkerRole::Git, model: None },
+                        ]
+                    };
                     for w in startup_workers {
                         let _ = bus_simulation.publish(Event {
                             id: Uuid::new_v4(),
@@ -350,23 +363,91 @@ async fn main() -> Result<()> {
                     }
                 }
 
-                // Step 3: Create Phase 1 Mission
+                // Step 3: Create Initial Missions via Planner
                 tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                let mission = Mission {
-                    id: Uuid::new_v4(),
-                    name: "Phase 1: Analysis".to_string(),
-                    tasks: vec![
-                        Task { id: Uuid::new_v4(), name: "Consult Gemini".to_string(), description: "Ask for greeting".to_string(), status: TaskStatus::Pending, assigned_worker: Some("Architect".to_string()) },
-                        Task { id: Uuid::new_v4(), name: "Init Repo".to_string(), description: "Setup git".to_string(), status: TaskStatus::Pending, assigned_worker: Some("Git-Bot".to_string()) },
-                    ],
+                use ifcl_core::planner::{BasicPlanner, Planner};
+                let planner = BasicPlanner;
+                let generated_missions = planner.generate_initial_missions(&goal);
+
+                if let Some(mission) = generated_missions.first() {
+                    let _ = bus_simulation.publish(Event {
+                        id: Uuid::new_v4(),
+                        session_id: sid,
+                        trace_id: Uuid::new_v4(),
+                        timestamp: Utc::now(),
+                        worker_id: "system".to_string(),
+                        event_type: "MissionCreated".to_string(), 
+                        payload: serde_json::to_string(mission).unwrap(),
+                    }).await;
+                    
+                    // Log the planning action
+                    let _ = bus_simulation.publish(Event {
+                        id: Uuid::new_v4(),
+                        session_id: sid,
+                        trace_id: Uuid::new_v4(),
+                        timestamp: Utc::now(),
+                        worker_id: "system".to_string(),
+                        event_type: "Log".to_string(),
+                        payload: serde_json::to_string(&LogPayload {
+                            level: "INFO".to_string(),
+                            message: format!("Planner generated {} initial missions", generated_missions.len()),
+                        }).unwrap(),
+                    }).await;
+                }
+
+                // --- CONTEXT MANAGEMENT INTEGRATION ---
+                // Before "Architect" responds, we prune context
+                {
+                    use ifcl_core::context::{SlidingWindowPruner, SimpleTokenCounter, ContextPruner};
+                    let pruner = SlidingWindowPruner;
+                    let counter = SimpleTokenCounter;
+                    
+                    // Prune to a very small limit (e.g. 100 tokens) to demonstrate pruning
+                    let managed = pruner.prune(&all_events, 100, &counter);
+                    
+                    let _ = bus_simulation.publish(Event {
+                        id: Uuid::new_v4(),
+                        session_id: sid,
+                        trace_id: Uuid::new_v4(),
+                        timestamp: Utc::now(),
+                        worker_id: "system".to_string(),
+                        event_type: "Log".to_string(),
+                        payload: serde_json::to_string(&LogPayload {
+                            level: "DEBUG".to_string(),
+                            message: format!("Managed Context: {} tokens, {} pruned", managed.estimated_tokens, managed.pruned_count),
+                        }).unwrap(),
+                    }).await;
+                }
+                // --------------------------------------
+                
+                tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
+
+                // Simulate collaboration: Architect calls for Git assistance
+                let req = WorkerRequest {
+                    requester_id: "Architect".to_string(),
+                    target_role: "Git-Bot".to_string(),
+                    context: "Need to initialize the repository structure.".to_string(),
                 };
                 let _ = bus_simulation.publish(Event {
                     id: Uuid::new_v4(),
                     session_id: sid,
                     trace_id: Uuid::new_v4(),
                     timestamp: Utc::now(),
-                    worker_id: "Architect".to_string(),
-                    event_type: "MissionCreated".to_string(), payload: serde_json::to_string(&mission).unwrap(),
+                    worker_id: "system".to_string(),
+                    event_type: "WorkerRequestAssistance".to_string(),
+                    payload: serde_json::to_string(&req).unwrap(),
+                }).await;
+
+                // Log the request for visibility in the FEED
+                let log = LogPayload { level: "INFO".to_string(), message: "Architect requested assistance from Git-Bot".to_string() };
+                let _ = bus_simulation.publish(Event {
+                    id: Uuid::new_v4(),
+                    session_id: sid,
+                    trace_id: Uuid::new_v4(),
+                    timestamp: Utc::now(),
+                    worker_id: "system".to_string(),
+                    event_type: "Log".to_string(),
+                    payload: serde_json::to_string(&log).unwrap(),
                 }).await;
                 
                 tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -641,9 +722,9 @@ async fn main() -> Result<()> {
                         )
                         .split(f.size());
 
-                    let (step, goal, stack, team, budget) = if let Ok(s) = state.lock() {
-                        (s.wizard.current_step.clone(), s.wizard.goal.clone(), s.wizard.stack.clone(), s.wizard.team_size, s.wizard.budget_coins)
-                    } else { (WizardStep::Goal, String::new(), String::new(), 0, 0) };
+                    let (step, goal, stack, team, budget, avail_groups, sel_grp_idx) = if let Ok(s) = state.lock() {
+                        (s.wizard.current_step.clone(), s.wizard.goal.clone(), s.wizard.stack.clone(), s.wizard.team_size, s.wizard.budget_coins, s.available_groups.clone(), s.wizard.selected_group_index)
+                    } else { (WizardStep::Goal, String::new(), String::new(), 0, 0, Vec::new(), 0) };
 
                     let step_text = match step {
                         WizardStep::Goal => "Step 1/5: Define Objective",
@@ -663,7 +744,24 @@ async fn main() -> Result<()> {
                     let content = match step {
                         WizardStep::Goal => format!("Define your mission goal:\n\n> {}", goal),
                         WizardStep::Stack => format!("Selected Technology:\n\n [ {} ]", stack),
-                        WizardStep::Team => format!("Desired Team Size:\n\n [ {} ] Workers", team),
+                        WizardStep::Team => {
+                            let mut s = String::from("Select a Worker Team:\n\n");
+                            for (i, grp) in avail_groups.iter().enumerate() {
+                                let cursor = if i == sel_grp_idx { ">" } else { " " };
+                                let checkbox = if i == sel_grp_idx { "[x]" } else { "[ ]" };
+                                s.push_str(&format!("{} {} {}\n", cursor, checkbox, grp.name));
+                            }
+                            if avail_groups.is_empty() {
+                                s.push_str("  (No teams found in marketplace/groups)\n");
+                            } else if let Some(grp) = avail_groups.get(sel_grp_idx) {
+                                s.push_str(&format!("\nDescription: {}\n", grp.description));
+                                s.push_str("Members:\n");
+                                for w in &grp.workers {
+                                    s.push_str(&format!(" - {} ({:?})\n", w.name, w.role));
+                                }
+                            }
+                            s
+                        },
                         WizardStep::Budget => format!("Initial Credit Allotment:\n\n [ {} ] Coins", budget),
                         WizardStep::Summary => format!(
                             "Mission: {}\nStack: {}\nTeam: {} Workers\nBudget: {} Coins\n\n[ PRESS ENTER TO START ]",
@@ -759,25 +857,13 @@ async fn main() -> Result<()> {
                     // 3. MENTAL MAP
                     let mut map_items = Vec::new();
                     if let Ok(s) = state.lock() {
-                        use relationship::NodeType;
+                        use petgraph::Direction;
+                        
+                        // Show all root nodes initially
                         for node_idx in s.mental_map.graph.node_indices() {
-                            let node = &s.mental_map.graph[node_idx];
-                            if let NodeType::Mission(name) = node {
-                                map_items.push(ListItem::new(format!("󰚒 {}", name)).style(Style::default().fg(Color::Cyan)));
-                                // Find tasks
-                                for edge in s.mental_map.graph.edges(node_idx) {
-                                    let target_idx = edge.target();
-                                    if let NodeType::Task(t_name) = &s.mental_map.graph[target_idx] {
-                                        map_items.push(ListItem::new(format!("  └─󰓅 {}", t_name)).style(Style::default().fg(Color::DarkGray)));
-                                        // Find workers
-                                        for w_edge in s.mental_map.graph.edges(target_idx) {
-                                            let w_idx = w_edge.target();
-                                            if let NodeType::Worker(w_name) = &s.mental_map.graph[w_idx] {
-                                                map_items.push(ListItem::new(format!("      └─󰚩 {}", w_name)).style(Style::default().fg(Color::Yellow)));
-                                            }
-                                        }
-                                    }
-                                }
+                            let in_degree = s.mental_map.graph.neighbors_directed(node_idx, Direction::Incoming).count();
+                            if in_degree == 0 {
+                                render_node_recursive(&s.mental_map.graph, node_idx, 0, &mut map_items);
                             }
                         }
                     }
@@ -799,7 +885,7 @@ async fn main() -> Result<()> {
                                 _ => Color::White 
                             };
                             let content = if e.event_type == "AiResponse" {
-                                format!(" > AI: ...") 
+                                " > AI: ...".to_string()
                             } else if e.event_type == "RewardEarned" {
                                  format!(" + REWARD: {}", e.payload)
                             } else if e.event_type == "LoopStatusChanged" {
@@ -921,12 +1007,30 @@ async fn main() -> Result<()> {
                                     s.current_session_id = Some(Uuid::new_v4());
                                     s.mode = AppMode::Running;
                                     s.status = LoopStatus::Running;
-                                }
- else {
+                                } else {
                                     let _ = s.wizard.next();
                                 }
                             }
-                            KeyCode::Backspace => s.wizard.prev(),
+                            KeyCode::Backspace => {
+                                if s.wizard.current_step == WizardStep::Goal {
+                                    s.wizard.goal.pop();
+                                } else {
+                                    s.wizard.prev();
+                                }
+                            }
+                            KeyCode::Up => {
+                                if s.wizard.current_step == WizardStep::Team && s.wizard.selected_group_index > 0 {
+                                    s.wizard.selected_group_index -= 1;
+                                }
+                            }
+                            KeyCode::Down => {
+                                if s.wizard.current_step == WizardStep::Team && s.wizard.selected_group_index < s.available_groups.len().saturating_sub(1) {
+                                    s.wizard.selected_group_index += 1;
+                                }
+                            }
+                            KeyCode::Left => {
+                                s.wizard.prev();
+                            }
                             KeyCode::Char(c) => {
                                 if s.wizard.current_step == WizardStep::Goal {
                                     s.wizard.goal.push(c);
@@ -1083,6 +1187,11 @@ async fn main() -> Result<()> {
                                                             }
                                                         }
                                                     }
+                                                    "WorkerRequestAssistance" => {
+                                                        if let Ok(req) = serde_json::from_str::<WorkerRequest>(&event.payload) {
+                                                            state.mental_map.add_worker_relationship(&req.requester_id, &req.target_role);
+                                                        }
+                                                    }
                                                     _ => {}
                                                 }
                                                 if state.events.len() > 100 {
@@ -1132,4 +1241,39 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             .as_ref(),
         )
         .split(popup_layout[1])[1]
+}
+fn render_node_recursive(graph: &petgraph::graph::DiGraph<relationship::NodeType, ()>, node_idx: petgraph::graph::NodeIndex, depth: usize, items: &mut Vec<ratatui::widgets::ListItem>) {
+    use relationship::NodeType;
+    use ratatui::style::{Color, Style, Modifier};
+    use petgraph::visit::EdgeRef;
+
+    let node = &graph[node_idx];
+    let indent = "  ".repeat(depth);
+    
+    match node {
+        NodeType::Mission(name) => {
+            items.push(ratatui::widgets::ListItem::new(format!("{}󰚒 {}", indent, name)).style(Style::default().fg(Color::Cyan)));
+        }
+        NodeType::Task(name) => {
+            items.push(ratatui::widgets::ListItem::new(format!("{}└─󰓅 {}", indent, name)).style(Style::default().fg(Color::DarkGray)));
+        }
+        NodeType::Worker(name) => {
+            items.push(ratatui::widgets::ListItem::new(format!("{}└─󰚩 {}", indent, name)).style(Style::default().fg(Color::Yellow)));
+        }
+    }
+
+    // Children
+    for edge in graph.edges(node_idx) {
+        let child_idx = edge.target();
+        // Special case for worker-to-worker relationships to keep them indented but distinct in label
+        let child_node = &graph[child_idx];
+        if matches!(node, NodeType::Worker(_)) && matches!(child_node, NodeType::Worker(_)) {
+            if let NodeType::Worker(partner_name) = child_node {
+                let rel_indent = "  ".repeat(depth + 1);
+                items.push(ratatui::widgets::ListItem::new(format!("{} (calls) -> {}", rel_indent, partner_name)).style(Style::default().fg(Color::Magenta).add_modifier(Modifier::ITALIC)));
+            }
+        } else {
+            render_node_recursive(graph, child_idx, depth + 1, items);
+        }
+    }
 }
