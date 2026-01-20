@@ -903,6 +903,7 @@ dependencies = [
  "ifcl-core",
  "ratatui",
  "serde",
+ "serde_json",
  "tokio",
  "uuid",
 ]

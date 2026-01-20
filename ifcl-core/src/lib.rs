@@ -12,6 +12,12 @@ pub struct Event {
     pub payload: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct LoopConfig {
+    pub goal: String,
+    pub max_coins: Option<u64>,
+}
+
 #[async_trait::async_trait]
 pub trait EventBus: Send + Sync {
     async fn publish(&self, event: Event) -> anyhow::Result<()>;
@@ -59,6 +65,19 @@ mod tests {
         let deserialized: Event = serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(event, deserialized);
+    }
+
+    #[test]
+    fn test_loop_config_serialization() {
+        let config = LoopConfig {
+            goal: "Build a game".to_string(),
+            max_coins: Some(100),
+        };
+
+        let serialized = serde_json::to_string(&config).unwrap();
+        let deserialized: LoopConfig = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(config, deserialized);
     }
 
     #[tokio::test]
