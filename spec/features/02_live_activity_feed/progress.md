@@ -1,9 +1,10 @@
 # Progress: 02_live_activity_feed
 
-- [ ] Specification Review
-- [ ] Foundational Implementation (Tech Stack)
-- [ ] User Feature Implementation
-- [ ] Integration Tests
+- [x] Specification Review
+- [x] Foundational Implementation (Event Store)
+- [x] User Feature Implementation (Ratatui TUI)
+- [x] Integration Tests (Passed)
 
 ## Log
-- **Status:** Ready
+- **Status:** Complete
+- **Note:** TDD cycle finished. Visual TUI verified.

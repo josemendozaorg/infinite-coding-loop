@@ -18,16 +18,40 @@ pub struct LoopConfig {
     pub max_coins: Option<u64>,
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
+pub enum WorkerRole {
+    Git,
+    Researcher,
+    Coder,
+    Planner,
+    Critic,
+    Architect,
+    Ops,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct WorkerProfile {
+    pub name: String,
+    pub role: WorkerRole,
+    pub model: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct WorkerGroup {
+    pub name: String,
+    pub workers: Vec<WorkerProfile>,
+}
+
+pub trait Worker: Send + Sync {
+    fn id(&self) -> &str;
+    fn role(&self) -> WorkerRole;
+    fn metadata(&self) -> &WorkerProfile;
+}
+
 #[async_trait::async_trait]
 pub trait EventBus: Send + Sync {
     async fn publish(&self, event: Event) -> anyhow::Result<()>;
     fn subscribe(&self) -> tokio::sync::broadcast::Receiver<Event>;
-}
-
-#[async_trait::async_trait]
-pub trait EventStore: Send + Sync {
-    async fn append(&self, event: Event) -> anyhow::Result<()>;
-    async fn list(&self) -> anyhow::Result<Vec<Event>>;
 }
 
 pub struct InMemoryEventBus {
@@ -51,6 +75,12 @@ impl EventBus for InMemoryEventBus {
     fn subscribe(&self) -> tokio::sync::broadcast::Receiver<Event> {
         self.tx.subscribe()
     }
+}
+
+#[async_trait::async_trait]
+pub trait EventStore: Send + Sync {
+    async fn append(&self, event: Event) -> anyhow::Result<()>;
+    async fn list(&self) -> anyhow::Result<Vec<Event>>;
 }
 
 pub struct InMemoryEventStore {
@@ -110,6 +140,30 @@ mod tests {
         let deserialized: LoopConfig = serde_json::from_str(&serialized).unwrap();
 
         assert_eq!(config, deserialized);
+    }
+
+    #[test]
+    fn test_worker_profile_yaml_serialization() {
+        let group = WorkerGroup {
+            name: "Full Stack Swarm".to_string(),
+            workers: vec![
+                WorkerProfile {
+                    name: "Git Master".to_string(),
+                    role: WorkerRole::Git,
+                    model: None,
+                },
+                WorkerProfile {
+                    name: "Lead Coder".to_string(),
+                    role: WorkerRole::Coder,
+                    model: Some("claude-3-5".to_string()),
+                },
+            ],
+        };
+
+        let yaml = serde_yaml::to_string(&group).unwrap();
+        let deserialized: WorkerGroup = serde_yaml::from_str(&yaml).unwrap();
+
+        assert_eq!(group, deserialized);
     }
 
     #[tokio::test]
