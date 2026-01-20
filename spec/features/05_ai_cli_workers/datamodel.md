@@ -1,13 +1,36 @@
 # Data Model: 05_ai_cli_workers
 
-## Entities
-### `CliExecutor`
-- `binary_path: String`
-- `args_template: String`
-- `timeout_ms: u64`
+## Enums
 
-### `AiResponse` event
-- `worker_id: String`
-- `stdout: String`
-- `stderr: String`
-- `exit_code: i32`
+### WorkerState
+```rust
+enum WorkerState {
+    Booting,
+    Idle,
+    Processing(TaskID),
+    BackingOff(Duration),
+    Error(String),
+}
+```
+
+### LLMProvider
+```rust
+enum LLMProvider {
+    Anthropic,
+    Google,
+    OpenAI,
+    Ollama,
+}
+```
+
+## Structs
+
+### LLMRequest
+```rust
+struct LLMRequest {
+    system_prompt: String,
+    user_message: String,
+    temperature: f32,
+    max_tokens: u32,
+}
+```

@@ -1,8 +1,11 @@
-# UI: 19_grpc_remote_workers
+# UI: 20_web_api_server
 
-## Components
-- **Network Status:** Indicator in the header (e.g., "Remote Nodes: 2").
-- **Worker Card:** Distinct icon for Remote Workers (e.g., Cloud symbol).
+## Visual Components
 
-## Interaction
-- Auto-discovery or manual IP entry in Settings.
+### 1. Server Status Widget
+- **Indicator**: "API: 🟢 Running (0.0.0.0:3000)"
+- **Active Connections**: "Clients: 3"
+
+## External UI
+- **Swagger/Redoc**: Auto-generated API docs at `/swagger-ui`.
+- **Health Endpoint**: JSON response at `/health`.

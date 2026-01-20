@@ -1,16 +1,16 @@
 # Logic: 20_web_api_server
 
-## User Logic
-- Monitor the loop status from a web browser.
-- View live activity feed and metrics remotely.
-- Access historical session data via a REST API.
+## Core Logic
 
-## Technical Logic
-- `axum` or `actix-web` server.
-- JSON endpoints for `Events` and `State`.
-- WebSocket support for real-time feed streaming.
+### 1. Web Server
+- **Framework**: `axum` (Rust).
+- **State**: Shared reference to `AppState` (EventBus, WorkerManager).
+- **Middleware**: CORS, Trace/Logging, Auth (optional).
 
-## Implementation Strategy
-1. Add `axum` and `tower-http` dependencies.
-2. Implement REST endpoints for `list_events` and `get_state`.
-3. Add a WebSocket handler to broadcast bus events.
+### 2. Endpoints
+- `GET /api/v1/mission`: Get current mission status.
+- `GET /api/v1/events`: SSE (Server-Sent Events) stream of the EventBus.
+- `POST /api/v1/instruction`: Send user feedback/command.
+
+## Data Flow
+External Client -> HTTP Req -> Axum Route -> AppState -> Internal Channel -> Actor System

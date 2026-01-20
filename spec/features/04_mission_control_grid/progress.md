@@ -1,10 +1,14 @@
 # Progress: 04_mission_control_grid
 
-- [x] Specification Review
-- [x] Foundational Implementation (Orchestrator logic)
-- [x] User Feature Implementation (Mission Grid TUI)
-- [x] Integration Tests (Passed)
+## Checklist
 
-## Log
-- **Status:** Complete
-- **Note:** TDD cycle finished. Three-pane TUI dashboard verified.
+### UI Layout
+- [x] Design high-level layout using `ratatui` Constraints. (Implemented in `main.rs`)
+- [x] Implement `HeaderWidget` (Title, Time, Budget). (Implemented)
+- [x] Implement `WorkerStatusWidget` (Avatars/List). (Implemented in `AppMode::Running` logs/status)
+- [x] Integrate 02_live_activity_feed as a sub-component. (Implemented as Log Stream)
+- [x] Handle keyboard Layout Switching logic. (Menu/Session/Setup/Running modes exist)
+
+### Advanced
+- [ ] Implement Resizable Panes.
+- [ ] Add File Tree View.

@@ -1,19 +1,18 @@
-# Business Logic: 05_ai_cli_workers
+# Logic: 05_ai_cli_workers
 
-## Goal
-Enable the **Infinite Coding Loop** to invoke real shell commands for AI agents (`claude`, `opencode`, `gemini`, `copilot`).
+## Core Logic
 
-## Execution Logic
-1.  **Shell Context**: Each CLI worker runs in the project root.
-2.  **Command Templates**:
-    - **Claude**: `claude -p "{prompt}"`
-    - **Gemini**: `gemini "{prompt}"`
-    - **OpenCode**: `opencode run "{prompt}"`
-    - **Copilot**: `gh copilot suggest -t shell "{prompt}"` (Placeholder status)
-3.  **Wait Mode**: The loop must await the CLI process completion (async).
-4.  **Buffer Capture**: Standard output is captured and emitted as an `AiResponse` event.
-5.  **Error Handling**: Non-zero exit codes emit a `WorkerError` event.
+### 1. LLM Client Abstraction
+- **Trait**: `LLMClient` with `complete()`, `stream()`.
+- **Implementations**:
+  - `ClaudeClient` (Anthropic API)
+  - `GeminiClient` (Google Vertex/Studio)
+  - `OllamaClient` (Local)
 
-## Integration
-- **Worker Registry**: Mapping `WorkerRole` to a specific CLI tool.
-- **Task Linkage**: When a `Task` is set to `Running`, the assigned worker triggers its CLI template.
+### 2. Worker Actor
+- **Message Handling**: Receive `Task`, Process with LLM, Send `Result`.
+- **Rate Limiting**: Handle 429 errors with exponential backoff.
+- **Context Management**: Prune history if it exceeds limits.
+
+## Data Flow
+TaskQueue -> WorkerActor -> ContextBuilder -> LLMClient -> ResponseParser -> ResultBus

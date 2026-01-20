@@ -1,15 +1,17 @@
 # Logic: 16_socratic_dialogue
 
-## User Logic
-- AI workers challenge each other's assumptions.
-- User review required when a Socratic Dialogue triggers a "Blocker".
-- Enhances code quality by forcing a rethink phase.
+## Core Logic
 
-## Technical Logic
-- New event type: `SocraticQuestion`.
-- Worker role `Critique` that monitors `AiResponse` events and publishes challenges.
+### 1. Questioning Phase
+- **Trigger**: Before finalized Plan or Critical Code Change.
+- **Process**: LLM generates 3 critical questions:
+  1. "Is this the simplest way?"
+  2. "What are the edge cases?"
+  3. "Does this align with the original Goal?"
+- **Answer**: LLM (or User) answers them.
 
-## Implementation Strategy
-1. Define `SocraticQuestion` event schema.
-2. Implement `SocraticWorker` archetype.
-3. Update `Orchestrator` to pause tasks when a high-severity question is raised.
+### 2. Refinement
+- If answers invoke doubt, trigger Replan.
+
+## Data Flow
+PlanCandidate -> SocraticModule -> Q&A -> VerifiedPlan

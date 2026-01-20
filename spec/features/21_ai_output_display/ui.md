@@ -1,10 +1,16 @@
 # UI: 21_ai_output_display
 
-## Components
-- **AI Response Panel:** Dedicated block in the dashboard showing Gemini output.
-- **Scrollable History:** View previous AI responses with `j/k` or arrow keys.
-- **Response Header:** Timestamp and worker name for each response.
+## Visual Components
 
-## Interaction
-- Panel auto-scrolls to latest response.
-- User can manually scroll to review older responses.
+### 1. Markdown Renderer
+- **Bold/Italic**: Rendered with terminal formatting.
+- **Headers**: Colored and bold.
+- **Lists**: Bullet points.
+
+### 2. Code Block Renderer
+- **Syntax Highlighting**: Use `syntect` to colorize code blocks (Rust, Python, etc.).
+- **Background**: Different background color for code blocks to distinguish from text.
+- **Scroll**: Horizontal scroll for long lines.
+
+### 3. Artifact Viewer
+- View generated files with syntax highlighting.

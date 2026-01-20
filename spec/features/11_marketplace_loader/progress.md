@@ -1,10 +1,12 @@
-# Progress: 11_marketplace_loader - COMPLETE
+# Progress: 11_marketplace_loader
 
-- [x] Specification Review
-- [x] Foundational Implementation (Marketplace scanning)
-- [x] User Feature Implementation (External JSON loading)
-- [x] Integration Tests (Passed)
+## Checklist
 
-## Log
-- **Status:** Complete
-- **Note:** Dynamic loading of workers from JSON verified.
+### Core Logic
+- [x] Implement `MarketplaceLoader` struct.
+- [x] `load_workers(path)` functionality.
+- [x] `load_missions(path)` functionality.
+- [x] `load_groups(path)` functionality.
+
+### Integration
+- [x] Load items in `main.rs` startup sequence.

@@ -1,10 +1,12 @@
-# Progress: 10_visual_relationship_map - COMPLETE
+# Progress: 10_visual_relationship_map
 
-- [x] Specification Review
-- [x] Foundational Implementation (petgraph integration)
-- [x] User Feature Implementation (Mental Map TUI)
-- [x] Integration Tests (Passed)
+## Checklist
 
-## Log
-- **Status:** Complete
-- **Note:** Real-time relationship visualization verified.
+### Core Logic
+- [x] Define `MentalMap` struct using `petgraph`.
+- [x] Implement `add_mission`, `add_task`, `assign_worker`.
+- [x] Implement `add_worker_relationship`.
+
+### Integration
+- [x] Update mental map on events in `main.rs`.
+- [ ] Render the graph in TUI/Canvas (Currently internal state only).

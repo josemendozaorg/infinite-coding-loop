@@ -1,10 +1,11 @@
 # Progress: 06_gamified_rewards
 
-- [x] Specification Review
-- [x] Foundational Implementation (Bank logic)
-- [x] User Feature Implementation (TUI Status Bar)
-- [x] Integration Tests (Passed)
+## Checklist
 
-## Log
-- **Status:** Complete
-- **Note:** XP and Coin rewards are live and verified.
+### Core Logic
+- [x] Define `Bank` struct (`xp`, `coins`).
+- [x] Implement `RewardEarned` event logic in `main.rs`.
+- [x] Connect Task Success to Reward Payout.
+
+### UI
+- [x] Display XP/Coins in Dashboard Header.

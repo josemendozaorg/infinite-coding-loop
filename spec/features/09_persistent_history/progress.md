@@ -1,10 +1,17 @@
-# Progress: 09_persistent_history - COMPLETE
+# Progress: 09_persistent_history
 
-- [x] Specification Review
-- [x] Foundational Implementation (SQLite integration)
-- [x] User Feature Implementation (History Replay)
-- [x] Integration Tests (Passed)
+## Checklist
 
-## Log
-- **Status:** Complete
-- **Note:** SQLite event store and durable history verified.
+### Core Storage
+- [x] Define `Event` struct. (`lib.rs`)
+- [x] Implement `EventStore` trait. (`lib.rs`)
+- [x] Create `SqliteEventStore` implementation. (`lib.rs` - uses sqlx)
+- [x] Implement `list(session_id)` retrieval.
+
+### Integration
+- [x] Async EventBus (`InMemoryEventBus`).
+- [x] Connect Store to Bus in `main.rs`.
+
+### Advanced (Pending)
+- [ ] Implement Replay mechanism (Time Travel).
+- [ ] Snapshotting for performance.

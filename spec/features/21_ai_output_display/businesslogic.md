@@ -1,14 +1,15 @@
 # Logic: 21_ai_output_display
 
-## User Logic
-- See the actual AI response from Gemini workers in a dedicated panel.
-- Scroll through historical AI responses for reference.
+## Core Logic
 
-## Technical Logic
-- Filter events by type `AiResponse` from the event store.
-- Render responses in a scrollable, word-wrapped text area.
+### 1. Markdown Parsing
+- **Library**: `pulldown-cmark`.
+- **Process**: Convert Markdown stream -> Events -> Ratatui Span/Text.
 
-## Implementation Strategy
-1. Add `ai_responses: Vec<String>` to `AppState`.
-2. Extract AI responses from incoming `AiResponse` events.
-3. Create a dedicated TUI panel to display the latest responses.
+### 2. Syntax Highlighting
+- **Library**: `syntect`.
+- **Caching**: Cache theme/syntax sets for performance.
+- **Streaming**: Handle streaming chunks (incomplete code blocks) gracefully without breaking formatting (e.g., look for backticks).
+
+## Data Flow
+LLM Stream -> Buffer -> Markdown Parser -> Highlighter -> TUI Widget

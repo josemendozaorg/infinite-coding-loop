@@ -1,9 +1,11 @@
 # Progress: 22_session_isolation
 
-- [ ] Specification Review
-- [ ] Foundational Implementation (Session struct, DB schema)
-- [ ] User Feature Implementation (Session picker, state isolation)
-- [ ] Integration Tests
+## Checklist
 
-## Log
-- **Status:** Ready
+### Core Logic
+- [x] Define `Session` struct.
+- [x] Session ID generation and tracking in `AppState`.
+- [x] Event filtering by Session ID (`EventStore::list(sid)`).
+
+### Integration
+- [x] Session Picker UI in TUI (`main.rs`).
