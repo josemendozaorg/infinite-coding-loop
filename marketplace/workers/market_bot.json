@@ -1,0 +1,6 @@
+{
+    "name": "MarketBot-01",
+    "role": "Coder",
+    "capabilities": ["Rust", "TUI"],
+    "xp": 500
+}

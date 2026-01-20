@@ -11,6 +11,9 @@ pub struct Event {
     pub event_type: String,
     pub payload: String,
 }
+pub mod ui_state;
+
+pub use ui_state::{AppMode, MenuAction, MenuState};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct LoopConfig {
@@ -71,6 +74,43 @@ pub struct Mission {
     pub id: Uuid,
     pub name: String,
     pub tasks: Vec<Task>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
+pub struct MarketplaceLoader;
+
+impl MarketplaceLoader {
+    pub fn load_workers<P: AsRef<std::path::Path>>(path: P) -> Vec<WorkerProfile> {
+        let mut workers = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(path) {
+            for entry in entries.flatten() {
+                if entry.path().extension().map_or(false, |ext| ext == "json") {
+                    if let Ok(content) = std::fs::read_to_string(entry.path()) {
+                        if let Ok(worker) = serde_json::from_str::<WorkerProfile>(&content) {
+                            workers.push(worker);
+                        }
+                    }
+                }
+            }
+        }
+        workers
+    }
+
+    pub fn load_missions<P: AsRef<std::path::Path>>(path: P) -> Vec<Mission> {
+        let mut missions = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(path) {
+            for entry in entries.flatten() {
+                if entry.path().extension().map_or(false, |ext| ext == "json") {
+                    if let Ok(content) = std::fs::read_to_string(entry.path()) {
+                        if let Ok(mission) = serde_json::from_str::<Mission>(&content) {
+                            missions.push(mission);
+                        }
+                    }
+                }
+            }
+        }
+        missions
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
@@ -407,5 +447,126 @@ mod tests {
         let status: LoopStatus = serde_json::from_str(&deserialized.payload).unwrap();
 
         assert_eq!(status, LoopStatus::Paused);
+    }
+
+    #[tokio::test]
+    async fn test_manual_command_serialization() {
+        let event = Event {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            worker_id: "user".to_string(),
+            event_type: "ManualCommandInjected".to_string(),
+            payload: "force success".to_string(),
+        };
+
+        let serialized = serde_json::to_string(&event).unwrap();
+        let deserialized: Event = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(deserialized.event_type, "ManualCommandInjected");
+        assert_eq!(deserialized.payload, "force success");
+    }
+}
+
+pub struct SqliteEventStore {
+    pool: sqlx::SqlitePool,
+}
+
+impl SqliteEventStore {
+    pub async fn new(database_url: &str) -> anyhow::Result<Self> {
+        let pool = sqlx::SqlitePool::connect(database_url).await?;
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS events (
+                id TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                worker_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                payload TEXT NOT NULL
+            )"
+        )
+        .execute(&pool)
+        .await?;
+        Ok(Self { pool })
+    }
+}
+
+#[async_trait::async_trait]
+impl EventStore for SqliteEventStore {
+    async fn append(&self, event: Event) -> anyhow::Result<()> {
+        sqlx::query(
+            "INSERT INTO events (id, timestamp, worker_id, event_type, payload)
+             VALUES (?, ?, ?, ?, ?)"
+        )
+        .bind(event.id.to_string())
+        .bind(event.timestamp.to_rfc3339())
+        .bind(event.worker_id)
+        .bind(event.event_type)
+        .bind(event.payload)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn list(&self) -> anyhow::Result<Vec<Event>> {
+        let rows = sqlx::query_as::<_, (String, String, String, String, String)>(
+            "SELECT id, timestamp, worker_id, event_type, payload FROM events ORDER BY timestamp ASC"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut events = Vec::new();
+        for row in rows {
+            events.push(Event {
+                id: Uuid::parse_str(&row.0)?,
+                timestamp: chrono::DateTime::parse_from_rfc3339(&row.1)?.with_timezone(&Utc),
+                worker_id: row.2,
+                event_type: row.3,
+                payload: row.4,
+            });
+        }
+        Ok(events)
+    }
+}
+
+#[cfg(test)]
+mod sql_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_sqlite_event_store_persistence() {
+        let store = SqliteEventStore::new("sqlite::memory:").await.unwrap();
+        let event = Event {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            worker_id: "test".to_string(),
+            event_type: "TestEvent".to_string(),
+            payload: "test payload".to_string(),
+        };
+
+        store.append(event.clone()).await.unwrap();
+        let events = store.list().await.unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].id, event.id);
+        assert_eq!(events[0].payload, event.payload);
+    }
+
+    #[test]
+    fn test_marketplace_loader_parsing() {
+        let temp_dir = std::env::temp_dir().join(Uuid::new_v4().to_string());
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        
+        let worker_json = r#"{
+            "name": "MarketBot",
+            "role": "Coder",
+            "capabilities": ["Code"],
+            "xp": 100
+        }"#;
+        
+        std::fs::write(temp_dir.join("bot.json"), worker_json).unwrap();
+        
+        let workers = MarketplaceLoader::load_workers(&temp_dir);
+        assert_eq!(workers.len(), 1);
+        assert_eq!(workers[0].name, "MarketBot");
+        
+        std::fs::remove_dir_all(temp_dir).unwrap();
     }
 }
