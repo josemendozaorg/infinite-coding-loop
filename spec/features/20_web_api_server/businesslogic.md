@@ -1,15 +1,16 @@
-# Logic: 19_grpc_remote_workers
+# Logic: 20_web_api_server
 
 ## User Logic
-- Connect external worker nodes (e.g., Python runners) to the core loop.
-- Scale horizontally across machines.
+- Monitor the loop status from a web browser.
+- View live activity feed and metrics remotely.
+- Access historical session data via a REST API.
 
 ## Technical Logic
-- `tonic` gRPC server.
-- Shared `.proto` definition for `WorkerService`.
-- Bi-directional streaming for task updates.
+- `axum` or `actix-web` server.
+- JSON endpoints for `Events` and `State`.
+- WebSocket support for real-time feed streaming.
 
 ## Implementation Strategy
-1. Define `worker.proto`.
-2. Generate Rust code with `prost`.
-3. Implement `GrpcOrchestrator` client and server.
+1. Add `axum` and `tower-http` dependencies.
+2. Implement REST endpoints for `list_events` and `get_state`.
+3. Add a WebSocket handler to broadcast bus events.

@@ -7,6 +7,7 @@ use chrono::{DateTime, Utc};
 pub struct Event {
     pub id: Uuid,
     pub session_id: Uuid,
+    pub trace_id: Uuid,
     pub timestamp: DateTime<Utc>,
     pub worker_id: String,
     pub event_type: String,
@@ -322,6 +323,7 @@ mod tests {
         let event = Event {
             id: Uuid::new_v4(),
             session_id: Uuid::new_v4(),
+            trace_id: Uuid::new_v4(),
             timestamp: Utc::now(),
             worker_id: "test-worker".to_string(),
             event_type: "TestEvent".to_string(),
@@ -379,6 +381,7 @@ mod tests {
         let event = Event {
             id: Uuid::new_v4(),
             session_id: Uuid::new_v4(),
+            trace_id: Uuid::new_v4(),
             timestamp: Utc::now(),
             worker_id: "test-worker".to_string(),
             event_type: "TestEvent".to_string(),
@@ -397,6 +400,7 @@ mod tests {
         let event = Event {
             id: Uuid::new_v4(),
             session_id: Uuid::new_v4(),
+            trace_id: Uuid::new_v4(),
             timestamp: Utc::now(),
             worker_id: "test-worker".to_string(),
             event_type: "TestEvent".to_string(),
@@ -466,6 +470,7 @@ mod tests {
         let event = Event {
             id: Uuid::new_v4(),
             session_id: Uuid::new_v4(),
+            trace_id: Uuid::new_v4(),
             timestamp: Utc::now(),
             worker_id: "system".to_string(),
             event_type: "LoopStatusChanged".to_string(),
@@ -484,6 +489,7 @@ mod tests {
         let event = Event {
             id: Uuid::new_v4(),
             session_id: Uuid::new_v4(),
+            trace_id: Uuid::new_v4(),
             timestamp: Utc::now(),
             worker_id: "user".to_string(),
             event_type: "ManualCommandInjected".to_string(),
@@ -509,6 +515,7 @@ impl SqliteEventStore {
             "CREATE TABLE IF NOT EXISTS events (
                 id TEXT PRIMARY KEY,
                 session_id TEXT NOT NULL,
+                trace_id TEXT NOT NULL,
                 timestamp TEXT NOT NULL,
                 worker_id TEXT NOT NULL,
                 event_type TEXT NOT NULL,
@@ -518,7 +525,10 @@ impl SqliteEventStore {
         .execute(&pool)
         .await?;
         
+        sqlx::query("ALTER TABLE events ADD COLUMN session_id TEXT NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'").execute(&pool).await.ok();
+        sqlx::query("ALTER TABLE events ADD COLUMN trace_id TEXT NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'").execute(&pool).await.ok();
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id)").execute(&pool).await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_events_trace ON events(trace_id)").execute(&pool).await?;
 
         Ok(Self { pool })
     }
@@ -528,11 +538,12 @@ impl SqliteEventStore {
 impl EventStore for SqliteEventStore {
     async fn append(&self, event: Event) -> anyhow::Result<()> {
         sqlx::query(
-            "INSERT INTO events (id, session_id, timestamp, worker_id, event_type, payload)
-             VALUES (?, ?, ?, ?, ?, ?)"
+            "INSERT INTO events (id, session_id, trace_id, timestamp, worker_id, event_type, payload)
+             VALUES (?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(event.id.to_string())
         .bind(event.session_id.to_string())
+        .bind(event.trace_id.to_string())
         .bind(event.timestamp.to_rfc3339())
         .bind(event.worker_id)
         .bind(event.event_type)
@@ -543,8 +554,8 @@ impl EventStore for SqliteEventStore {
     }
 
     async fn list(&self, session_id: Uuid) -> anyhow::Result<Vec<Event>> {
-        let rows = sqlx::query_as::<_, (String, String, String, String, String, String)>(
-            "SELECT id, session_id, timestamp, worker_id, event_type, payload FROM events WHERE session_id = ? ORDER BY timestamp ASC"
+        let rows = sqlx::query_as::<_, (String, String, String, String, String, String, String)>(
+            "SELECT id, session_id, trace_id, timestamp, worker_id, event_type, payload FROM events WHERE session_id = ? ORDER BY timestamp ASC"
         )
         .bind(session_id.to_string())
         .fetch_all(&self.pool)
@@ -555,10 +566,11 @@ impl EventStore for SqliteEventStore {
             events.push(Event {
                 id: Uuid::parse_str(&row.0)?,
                 session_id: Uuid::parse_str(&row.1)?,
-                timestamp: chrono::DateTime::parse_from_rfc3339(&row.2)?.with_timezone(&Utc),
-                worker_id: row.3,
-                event_type: row.4,
-                payload: row.5,
+                trace_id: Uuid::parse_str(&row.2)?,
+                timestamp: chrono::DateTime::parse_from_rfc3339(&row.3)?.with_timezone(&Utc),
+                worker_id: row.4,
+                event_type: row.5,
+                payload: row.6,
             });
         }
         Ok(events)
@@ -590,6 +602,7 @@ mod sql_tests {
         let event = Event {
             id: Uuid::new_v4(),
             session_id,
+            trace_id: Uuid::new_v4(),
             timestamp: Utc::now(),
             worker_id: "test".to_string(),
             event_type: "TestEvent".to_string(),

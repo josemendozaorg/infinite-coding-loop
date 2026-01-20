@@ -30,7 +30,7 @@ use uuid::Uuid;
 #[command(author, version, about, long_about = None)]
 struct Args {
     #[arg(short, long)]
-    goal: String,
+    goal: Option<String>,
 
     #[arg(short, long)]
     max_coins: Option<u64>,
@@ -90,7 +90,16 @@ async fn main() -> Result<()> {
         mental_map: relationship::MentalMap::new(),
         mode: AppMode::MainMenu,
         menu: MenuState::new(),
-        wizard: SetupWizard::new(),
+        wizard: {
+            let mut w = SetupWizard::new();
+            if let Some(g) = _args.goal {
+                w.goal = g;
+            }
+            if let Some(c) = _args.max_coins {
+                w.budget_coins = c;
+            }
+            w
+        },
         current_session_id: None,
         available_sessions: Vec::new(),
         selected_session_index: 0,
@@ -126,6 +135,7 @@ async fn main() -> Result<()> {
             let _ = m_bus_w.publish(Event {
                 id: Uuid::new_v4(),
                 session_id: sid,
+                trace_id: Uuid::new_v4(),
                 timestamp: Utc::now(),
                 worker_id: "system".to_string(),
                 event_type: "WorkerJoined".to_string(),
@@ -147,6 +157,7 @@ async fn main() -> Result<()> {
             let _ = m_bus_m.publish(Event {
                 id: Uuid::new_v4(),
                 session_id: sid,
+                trace_id: Uuid::new_v4(),
                 timestamp: Utc::now(),
                 worker_id: "system".to_string(),
                 event_type: "MissionCreated".to_string(),
@@ -193,10 +204,12 @@ async fn main() -> Result<()> {
                                      if update.status == TaskStatus::Success {
                                          let bus_r = Arc::clone(&bus_reward);
                                          let sid = event.session_id;
+                                         let tid = event.trace_id;
                                          tokio::spawn(async move {
                                              let _ = bus_r.publish(Event {
                                                  id: Uuid::new_v4(),
                                                  session_id: sid,
+                                                 trace_id: tid,
                                                  timestamp: Utc::now(), 
                                                  worker_id: "system".to_string(),
                                                  event_type: "RewardEarned".to_string(),
@@ -239,10 +252,12 @@ async fn main() -> Result<()> {
                                         t.status = TaskStatus::Success;
                                          let b_rew = Arc::clone(&bus_reward);
                                          let sid = event.session_id;
+                                         let tid = event.trace_id;
                                          tokio::spawn(async move {
                                              let _ = b_rew.publish(Event {
                                                  id: Uuid::new_v4(),
                                                  session_id: sid,
+                                                 trace_id: tid,
                                                  timestamp: Utc::now(), 
                                                  worker_id: "system".to_string(),
                                                  event_type: "RewardEarned".to_string(),
@@ -295,6 +310,7 @@ async fn main() -> Result<()> {
         let _ = bus_simulation.publish(Event {
             id: Uuid::new_v4(),
             session_id: sid,
+            trace_id: Uuid::new_v4(),
             timestamp: Utc::now(),
             worker_id: "system".to_string(),
             event_type: "LoopStarted".to_string(),
@@ -312,6 +328,7 @@ async fn main() -> Result<()> {
             let _ = bus_simulation.publish(Event {
                 id: Uuid::new_v4(),
                 session_id: sid,
+                trace_id: Uuid::new_v4(),
                 timestamp: Utc::now(),
                 worker_id: "system".to_string(),
                 event_type: "WorkerJoined".to_string(), payload: serde_json::to_string(&w).unwrap(),
@@ -335,6 +352,7 @@ async fn main() -> Result<()> {
         let _ = bus_simulation.publish(Event {
             id: Uuid::new_v4(),
             session_id: sid,
+            trace_id: Uuid::new_v4(),
             timestamp: Utc::now(),
             worker_id: "Architect".to_string(),
             event_type: "MissionCreated".to_string(), payload: serde_json::to_string(&mission).unwrap(),
@@ -346,6 +364,7 @@ async fn main() -> Result<()> {
         let _ = bus_simulation.publish(Event {
             id: Uuid::new_v4(),
             session_id: sid,
+            trace_id: Uuid::new_v4(),
             timestamp: Utc::now(),
             worker_id: "Architect".to_string(),
             event_type: "TaskUpdated".to_string(),
@@ -355,6 +374,7 @@ async fn main() -> Result<()> {
         let _ = bus_simulation.publish(Event {
             id: Uuid::new_v4(),
             session_id: sid,
+            trace_id: Uuid::new_v4(),
             timestamp: Utc::now(),
             worker_id: "Architect".to_string(),
             event_type: "Log".to_string(), payload: "Invoking Gemini CLI...".to_string(),
@@ -368,6 +388,7 @@ async fn main() -> Result<()> {
                 let _ = bus_simulation.publish(Event {
                     id: Uuid::new_v4(),
                     session_id: sid,
+                    trace_id: Uuid::new_v4(),
                     timestamp: Utc::now(),
                     worker_id: "Architect".to_string(),
                     event_type: "AiResponse".to_string(), payload: response,
@@ -375,6 +396,7 @@ async fn main() -> Result<()> {
                 let _ = bus_simulation.publish(Event {
                     id: Uuid::new_v4(),
                     session_id: sid,
+                    trace_id: Uuid::new_v4(),
                     timestamp: Utc::now(),
                     worker_id: "Architect".to_string(),
                     event_type: "TaskUpdated".to_string(),
@@ -385,6 +407,7 @@ async fn main() -> Result<()> {
                 let _ = bus_simulation.publish(Event {
                     id: Uuid::new_v4(),
                     session_id: sid,
+                    trace_id: Uuid::new_v4(),
                     timestamp: Utc::now(),
                     worker_id: "Architect".to_string(),
                     event_type: "WorkerError".to_string(), payload: e.to_string(),
@@ -398,6 +421,7 @@ async fn main() -> Result<()> {
         let _ = bus_simulation.publish(Event {
             id: Uuid::new_v4(),
             session_id: sid,
+            trace_id: Uuid::new_v4(),
             timestamp: Utc::now(),
             worker_id: "Git-Bot".to_string(),
             event_type: "TaskUpdated".to_string(),
@@ -407,6 +431,7 @@ async fn main() -> Result<()> {
         let _ = bus_simulation.publish(Event {
             id: Uuid::new_v4(),
             session_id: sid,
+            trace_id: Uuid::new_v4(),
             timestamp: Utc::now(),
             worker_id: "Git-Bot".to_string(),
             event_type: "Log".to_string(), payload: "git init && git add . && git commit -m 'Initial commit'".to_string(),
@@ -414,6 +439,7 @@ async fn main() -> Result<()> {
         let _ = bus_simulation.publish(Event {
             id: Uuid::new_v4(),
             session_id: sid,
+            trace_id: Uuid::new_v4(),
             timestamp: Utc::now(),
             worker_id: "Git-Bot".to_string(),
             event_type: "TaskUpdated".to_string(),
@@ -819,6 +845,7 @@ async fn main() -> Result<()> {
                                         let _ = bus_g.publish(Event {
                                             id: Uuid::new_v4(),
                                             session_id: sid,
+                                            trace_id: Uuid::new_v4(),
                                             timestamp: Utc::now(),
                                             worker_id: "god".to_string(),
                                             event_type: "ManualCommandInjected".to_string(),
@@ -848,6 +875,7 @@ async fn main() -> Result<()> {
                                         let _ = bus_p.publish(Event {
                                             id: Uuid::new_v4(),
                                             session_id: sid,
+                                            trace_id: Uuid::new_v4(),
                                             timestamp: Utc::now(),
                                             worker_id: "user".to_string(),
                                             event_type: "LoopStatusChanged".to_string(),
