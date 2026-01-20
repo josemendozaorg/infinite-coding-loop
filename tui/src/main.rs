@@ -9,7 +9,7 @@ use crossterm::{
 };
 use ifcl_core::{
     Event, EventBus, EventStore, InMemoryEventBus, InMemoryEventStore, LoopConfig, 
-    WorkerProfile, WorkerRole, Mission, TaskStatus, Task, CliExecutor, Bank
+    WorkerProfile, WorkerRole, Mission, TaskStatus, Task, CliExecutor, Bank, LoopStatus
 };
 use ratatui::{
     backend::CrosstermBackend,
@@ -37,6 +37,7 @@ struct AppState {
     workers: Vec<WorkerProfile>,
     missions: Vec<Mission>,
     bank: Bank,
+    status: LoopStatus,
 }
 
 #[tokio::main]
@@ -59,6 +60,7 @@ async fn main() -> Result<()> {
         workers: Vec::new(),
         missions: Vec::new(),
         bank: Bank::default(),
+        status: LoopStatus::Running,
     }));
 
     // 3. Pipe Bus to State & Store
@@ -91,10 +93,9 @@ async fn main() -> Result<()> {
                                  if let Some(t) = m.tasks.iter_mut().find(|t| t.id == update.task_id) {
                                      t.status = update.status;
                                      if update.status == TaskStatus::Success {
-                                         // Emit Reward Event
-                                         let bus = Arc::clone(&bus_reward);
+                                         let bus_r = Arc::clone(&bus_reward);
                                          tokio::spawn(async move {
-                                             let _ = bus.publish(Event {
+                                             let _ = bus_r.publish(Event {
                                                  id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "system".to_string(),
                                                  event_type: "RewardEarned".to_string(),
                                                  payload: r#"{"xp":25,"coins":10}"#.to_string(),
@@ -112,6 +113,11 @@ async fn main() -> Result<()> {
                             s.bank.deposit(xp, coins);
                         }
                     }
+                    "LoopStatusChanged" => {
+                        if let Ok(status) = serde_json::from_str::<LoopStatus>(&event.payload) {
+                            s.status = status;
+                        }
+                    }
                     _ => {}
                 }
 
@@ -127,8 +133,19 @@ async fn main() -> Result<()> {
     let bus_simulation = Arc::clone(&bus);
     let goal_simulation = args.goal.clone();
     let coins_simulation = args.max_coins;
+    let state_sim_monitor = Arc::clone(&state);
     
     tokio::spawn(async move {
+        // Helper to check pause state
+        let check_pause = || {
+            loop {
+                if let Ok(s) = state_sim_monitor.lock() {
+                    if s.status == LoopStatus::Running { break; }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        };
+
         // Step 1: Loop Started
         let _ = bus_simulation.publish(Event {
             id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "system".to_string(),
@@ -142,6 +159,7 @@ async fn main() -> Result<()> {
             WorkerProfile { name: "Git-Bot".to_string(), role: WorkerRole::Git, model: None },
         ];
         for w in workers {
+            check_pause();
             tokio::time::sleep(tokio::time::Duration::from_millis(600)).await;
             let _ = bus_simulation.publish(Event {
                 id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "system".to_string(),
@@ -150,6 +168,7 @@ async fn main() -> Result<()> {
         }
 
         // Step 3: Mission Created
+        check_pause();
         tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
         let t1_id = Uuid::new_v4();
         let t2_id = Uuid::new_v4();
@@ -168,6 +187,7 @@ async fn main() -> Result<()> {
         }).await;
 
         // Step 4: Execute Real Gemini Call
+        check_pause();
         tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
         let _ = bus_simulation.publish(Event {
             id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Architect".to_string(),
@@ -175,11 +195,17 @@ async fn main() -> Result<()> {
             payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Running"}}"#, mission_id, t1_id),
         }).await;
 
+        let _ = bus_simulation.publish(Event {
+            id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Architect".to_string(),
+            event_type: "Log".to_string(), payload: "Invoking Gemini CLI...".to_string(),
+        }).await;
+
         let executor = CliExecutor::new("gemini".to_string());
-        let prompt = "Say 'Hello from Gemini! Systems optimized.'";
+        let prompt = "Explain Rust ownership in 1 short sentence.";
         
         match executor.execute(prompt).await {
             Ok(response) => {
+                check_pause();
                 let _ = bus_simulation.publish(Event {
                     id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Architect".to_string(),
                     event_type: "AiResponse".to_string(), payload: response,
@@ -209,13 +235,18 @@ async fn main() -> Result<()> {
                 .split(f.size());
 
             // Header with Bank Info
-            let (xp, coins) = if let Ok(s) = state.lock() {
-                (s.bank.xp, s.bank.coins)
-            } else { (0, 0) };
+            let (xp, coins, loop_status) = if let Ok(s) = state.lock() {
+                (s.bank.xp, s.bank.coins, s.status)
+            } else { (0, 0, LoopStatus::Running) };
 
-            let header_content = format!(" OBJECTIVE: {:<40} | XP: {:<6} | COINS: {:<6}", goal_display, xp, coins);
+            let header_content = format!(" OBJECTIVE: {:<35} | XP: {:<5} | COINS: {:<5} | STATUS: {:?}", goal_display, xp, coins, loop_status);
+            let header_color = match loop_status {
+                LoopStatus::Running => Color::Cyan,
+                LoopStatus::Paused => Color::Yellow,
+            };
+
             let header = Paragraph::new(header_content)
-                .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+                .style(Style::default().fg(header_color).add_modifier(Modifier::BOLD))
                 .block(Block::default().title(" INFINITE CODING LOOP [v0.1.0] ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
             f.render_widget(header, main_layout[0]);
 
@@ -240,6 +271,10 @@ async fn main() -> Result<()> {
             if let Ok(s) = state.lock() {
                 for mission in &s.missions {
                     for task in &mission.tasks {
+                        let status_text = match task.status {
+                            TaskStatus::Running => "Running (Thinking...)".to_string(),
+                            _ => format!("{:?}", task.status),
+                        };
                         let status_style = match task.status {
                             TaskStatus::Pending => Style::default().fg(Color::DarkGray),
                             TaskStatus::Running => Style::default().fg(Color::Cyan).add_modifier(Modifier::SLOW_BLINK),
@@ -249,7 +284,7 @@ async fn main() -> Result<()> {
                         rows.push(Row::new(vec![
                             Cell::from(mission.name.clone()).style(Style::default().fg(Color::DarkGray)),
                             Cell::from(task.name.clone()).style(Style::default().add_modifier(Modifier::BOLD)),
-                            Cell::from(format!("{:?}", task.status)).style(status_style),
+                            Cell::from(status_text).style(status_style),
                             Cell::from(task.assigned_worker.clone().unwrap_or_default()).style(Style::default().fg(Color::Yellow)),
                         ]));
                     }
@@ -267,6 +302,7 @@ async fn main() -> Result<()> {
                         "WorkerJoined" => Color::Blue, 
                         "AiResponse" => Color::Yellow,
                         "RewardEarned" => Color::Green,
+                        "LoopStatusChanged" => Color::Yellow,
                         "WorkerError" => Color::Red,
                         _ => Color::White 
                     };
@@ -274,6 +310,8 @@ async fn main() -> Result<()> {
                         format!(" > AI: {}", e.payload)
                     } else if e.event_type == "RewardEarned" {
                          format!(" + REWARD: {}", e.payload)
+                    } else if e.event_type == "LoopStatusChanged" {
+                         format!(" # STATUS: {}", e.payload)
                     } else if e.event_type == "WorkerError" {
                          format!(" ! ERR: {}", e.payload)
                     } else {
@@ -285,12 +323,36 @@ async fn main() -> Result<()> {
             f.render_widget(List::new(feed_items).block(Block::default().title(" ACTIVITY FEED ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray))), middle_chunks[2]);
 
             // Footer
-            f.render_widget(Paragraph::new(" [Q] Quit | [SPACE] Pause | System Status: ONLINE").style(Style::default().fg(Color::DarkGray)), main_layout[2]);
+            let footer_text = if loop_status == LoopStatus::Running {
+                " [Q] Quit | [SPACE] Pause | System Status: ONLINE"
+            } else {
+                " [Q] Quit | [SPACE] Resume | System Status: PAUSED"
+            };
+            f.render_widget(Paragraph::new(footer_text).style(Style::default().fg(header_color)), main_layout[2]);
         })?;
 
         if event::poll(std::time::Duration::from_millis(50))? {
             if let CEvent::Key(key) = event::read()? {
-                if let KeyCode::Char('q') = key.code { break; }
+                match key.code {
+                    KeyCode::Char('q') => break,
+                    KeyCode::Char(' ') => {
+                        if let Ok(s) = state.lock() {
+                            let new_status = match s.status {
+                                LoopStatus::Running => LoopStatus::Paused,
+                                LoopStatus::Paused => LoopStatus::Running,
+                            };
+                            let bus_p = Arc::clone(&bus);
+                            tokio::spawn(async move {
+                                let _ = bus_p.publish(Event {
+                                    id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "user".to_string(),
+                                    event_type: "LoopStatusChanged".to_string(),
+                                    payload: serde_json::to_string(&new_status).unwrap(),
+                                }).await;
+                            });
+                        }
+                    }
+                    _ => {}
+                }
             }
         }
     }

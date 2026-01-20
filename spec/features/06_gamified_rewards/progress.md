@@ -1,9 +1,10 @@
-# Progress: 05_gamified_rewards
+# Progress: 06_gamified_rewards
 
-- [ ] Specification Review
-- [ ] Foundational Implementation (Tech Stack)
-- [ ] User Feature Implementation
-- [ ] Integration Tests
+- [x] Specification Review
+- [x] Foundational Implementation (Bank logic)
+- [x] User Feature Implementation (TUI Status Bar)
+- [x] Integration Tests (Passed)
 
 ## Log
-- **Status:** Ready
+- **Status:** Complete
+- **Note:** XP and Coin rewards are live and verified.

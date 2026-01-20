@@ -59,6 +59,13 @@ pub struct Task {
     pub assigned_worker: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Default)]
+pub enum LoopStatus {
+    #[default]
+    Running,
+    Paused,
+}
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct Mission {
     pub id: Uuid,
@@ -175,18 +182,28 @@ impl CliExecutor {
     }
 
     pub async fn execute(&self, prompt: &str) -> anyhow::Result<String> {
-        let output = tokio::process::Command::new(&self.binary)
+        let child = tokio::process::Command::new(&self.binary)
             .arg(prompt)
-            .output()
-            .await?;
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()?;
 
-        if output.status.success() {
-            Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-        } else {
-            anyhow::bail!(
-                "CLI Error: {}",
-                String::from_utf8_lossy(&output.stderr).trim()
-            )
+        let timeout = tokio::time::Duration::from_secs(60);
+        
+        match tokio::time::timeout(timeout, child.wait_with_output()).await {
+            Ok(Ok(output)) => {
+                if output.status.success() {
+                    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+                } else {
+                    anyhow::bail!(
+                        "CLI Error: {}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    )
+                }
+            }
+            Ok(Err(e)) => anyhow::bail!("Execution failed: {}", e),
+            Err(_) => anyhow::bail!("CLI execution timed out after 60s"),
         }
     }
 }
@@ -373,5 +390,22 @@ mod tests {
         bank.deposit(50, 25);
         assert_eq!(bank.xp, 150);
         assert_eq!(bank.coins, 75);
+    }
+
+    #[tokio::test]
+    async fn test_loop_status_event_serialization() {
+        let event = Event {
+            id: Uuid::new_v4(),
+            timestamp: Utc::now(),
+            worker_id: "system".to_string(),
+            event_type: "LoopStatusChanged".to_string(),
+            payload: serde_json::to_string(&LoopStatus::Paused).unwrap(),
+        };
+
+        let serialized = serde_json::to_string(&event).unwrap();
+        let deserialized: Event = serde_json::from_str(&serialized).unwrap();
+        let status: LoopStatus = serde_json::from_str(&deserialized.payload).unwrap();
+
+        assert_eq!(status, LoopStatus::Paused);
     }
 }
