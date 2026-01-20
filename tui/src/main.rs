@@ -69,11 +69,11 @@ async fn main() -> Result<()> {
     let history = store.list().await.unwrap_or_default();
     
     let state = Arc::new(Mutex::new(AppState {
-        events: history.clone(),
+        events: Vec::new(),
         workers: Vec::new(),
         missions: Vec::new(),
         bank: Bank::default(),
-        status: LoopStatus::Running,
+        status: LoopStatus::Paused,
         is_intervening: false,
         input_buffer: String::new(),
         mental_map: relationship::MentalMap::new(),
@@ -279,7 +279,7 @@ async fn main() -> Result<()> {
         loop {
             {
                 if let Ok(s) = state.lock() {
-                    if s.status == LoopStatus::Running { break; }
+                    if s.status == LoopStatus::Running && s.mode == AppMode::Running { break; }
                 }
             }
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -689,6 +689,7 @@ async fn main() -> Result<()> {
                             KeyCode::Enter => {
                                 if s.wizard.current_step == WizardStep::Summary {
                                     s.mode = AppMode::Running;
+                                    s.status = LoopStatus::Running;
                                 } else {
                                     let _ = s.wizard.next();
                                 }
