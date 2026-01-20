@@ -52,7 +52,6 @@ struct AppState {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
-    let goal_display = args.goal.clone();
 
     // 1. Setup Terminal
     enable_raw_mode()?;
@@ -270,8 +269,6 @@ async fn main() -> Result<()> {
 
     // 4. Mission Engine (Simulated + Real CLI)
     let bus_simulation = Arc::clone(&bus);
-    let goal_simulation = args.goal.clone();
-    let coins_simulation = args.max_coins;
     let state_sim_monitor = Arc::clone(&state);
     
     // Async helper for pausing
@@ -287,11 +284,19 @@ async fn main() -> Result<()> {
     }
 
     tokio::spawn(async move {
-        // Step 1: Loop Started
+        // Wait for Wizard to complete
+        check_pause_async(Arc::clone(&state_sim_monitor)).await;
+
+        let (final_goal, final_budget) = {
+            let s = state_sim_monitor.lock().unwrap();
+            (s.wizard.goal.clone(), s.wizard.budget_coins)
+        };
+
+        // Step 1: Loop Started with Wizard Config
         let _ = bus_simulation.publish(Event {
             id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "system".to_string(),
             event_type: "LoopStarted".to_string(),
-            payload: serde_json::to_string(&LoopConfig { goal: goal_simulation, max_coins: coins_simulation }).unwrap(),
+            payload: serde_json::to_string(&LoopConfig { goal: final_goal.clone(), max_coins: Some(final_budget) }).unwrap(),
         }).await;
 
         // Step 2: Workers Joined
@@ -342,31 +347,20 @@ async fn main() -> Result<()> {
         }).await;
 
         let executor = CliExecutor::new("gemini".to_string());
-        let prompt = "Explain Rust ownership in 1 short sentence.";
+        let prompt = format!("Explain the goal '{}' in 1 short sentence.", final_goal);
         
-        match executor.execute(prompt).await {
+        match executor.execute(&prompt).await {
             Ok(response) => {
                 check_pause_async(Arc::clone(&state_sim_monitor)).await;
-                let mut should_publish = true;
-                if let Ok(s) = state_sim_monitor.lock() {
-                    if let Some(m) = s.missions.iter().find(|m| m.id == mission_id) {
-                        if let Some(t) = m.tasks.iter().find(|t| t.id == t1_id) {
-                            if t.status == TaskStatus::Success { should_publish = false; }
-                        }
-                    }
-                }
-                
-                if should_publish {
-                    let _ = bus_simulation.publish(Event {
-                        id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Architect".to_string(),
-                        event_type: "AiResponse".to_string(), payload: response,
-                    }).await;
-                    let _ = bus_simulation.publish(Event {
-                        id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Architect".to_string(),
-                        event_type: "TaskUpdated".to_string(),
-                        payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Success"}}"#, mission_id, t1_id),
-                    }).await;
-                }
+                let _ = bus_simulation.publish(Event {
+                    id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Architect".to_string(),
+                    event_type: "AiResponse".to_string(), payload: response,
+                }).await;
+                let _ = bus_simulation.publish(Event {
+                    id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Architect".to_string(),
+                    event_type: "TaskUpdated".to_string(),
+                    payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Success"}}"#, mission_id, t1_id),
+                }).await;
             }
             Err(e) => {
                 let _ = bus_simulation.publish(Event {
@@ -375,6 +369,25 @@ async fn main() -> Result<()> {
                 }).await;
             }
         }
+
+        // Step 5: Git-Bot Completion
+        check_pause_async(Arc::clone(&state_sim_monitor)).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+        let _ = bus_simulation.publish(Event {
+            id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Git-Bot".to_string(),
+            event_type: "TaskUpdated".to_string(),
+            payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Running"}}"#, mission_id, t2_id),
+        }).await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+        let _ = bus_simulation.publish(Event {
+            id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Git-Bot".to_string(),
+            event_type: "Log".to_string(), payload: "git init && git add . && git commit -m 'Initial commit'".to_string(),
+        }).await;
+        let _ = bus_simulation.publish(Event {
+            id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Git-Bot".to_string(),
+            event_type: "TaskUpdated".to_string(),
+            payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Success"}}"#, mission_id, t2_id),
+        }).await;
     });
 
     // 5. Main TUI Loop
@@ -503,11 +516,11 @@ async fn main() -> Result<()> {
                         .constraints([Constraint::Length(3), Constraint::Min(0), Constraint::Length(1)].as_ref())
                         .split(f.size());
 
-                    let (xp, coins, loop_status, is_int) = if let Ok(s) = state.lock() {
-                        (s.bank.xp, s.bank.coins, s.status, s.is_intervening)
-                    } else { (0, 0, LoopStatus::Running, false) };
+                    let (xp, coins, loop_status, is_int, active_goal) = if let Ok(s) = state.lock() {
+                        (s.bank.xp, s.bank.coins, s.status, s.is_intervening, s.wizard.goal.clone())
+                    } else { (0, 0, LoopStatus::Running, false, String::new()) };
 
-                    let header_content = format!(" OBJECTIVE: {:<35} | XP: {:<5} | COINS: {:<5} | STATUS: {:?}", goal_display, xp, coins, loop_status);
+                    let header_content = format!(" OBJECTIVE: {:<35} | XP: {:<5} | COINS: {:<5} | STATUS: {:?}", active_goal, xp, coins, loop_status);
                     let header_color = if is_int { Color::Magenta } else {
                         match loop_status {
                             LoopStatus::Running => Color::Cyan,
