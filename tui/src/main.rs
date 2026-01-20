@@ -7,12 +7,15 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use ifcl_core::{Event, EventBus, EventStore, InMemoryEventBus, InMemoryEventStore, LoopConfig, WorkerProfile, WorkerRole};
+use ifcl_core::{
+    Event, EventBus, EventStore, InMemoryEventBus, InMemoryEventStore, LoopConfig, 
+    WorkerProfile, WorkerRole, Mission, TaskStatus, Task
+};
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Table, Row, Cell},
     Terminal,
 };
 use std::io;
@@ -32,6 +35,7 @@ struct Args {
 struct AppState {
     events: Vec<Event>,
     workers: Vec<WorkerProfile>,
+    missions: Vec<Mission>,
 }
 
 #[tokio::main]
@@ -47,11 +51,12 @@ async fn main() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // 2. Initialize Infrastructure
-    let bus = Arc::new(InMemoryEventBus::new(100));
+    let bus = Arc::new(InMemoryEventBus::new(200));
     let store = Arc::new(InMemoryEventStore::new());
     let state = Arc::new(Mutex::new(AppState {
         events: Vec::new(),
         workers: Vec::new(),
+        missions: Vec::new(),
     }));
 
     // 3. Pipe Bus to State & Store
@@ -63,16 +68,33 @@ async fn main() -> Result<()> {
         while let Ok(event) = rx.recv().await {
             let _ = store_clone.append(event.clone()).await;
             
-            // Handle specific events
-            if event.event_type == "WorkerJoined" {
-                if let Ok(profile) = serde_json::from_str::<WorkerProfile>(&event.payload) {
-                    if let Ok(mut s) = state_clone.lock() {
-                        s.workers.push(profile);
-                    }
-                }
-            }
-
             if let Ok(mut s) = state_clone.lock() {
+                // Update specific state based on event type
+                match event.event_type.as_str() {
+                    "WorkerJoined" => {
+                        if let Ok(profile) = serde_json::from_str::<WorkerProfile>(&event.payload) {
+                            s.workers.push(profile);
+                        }
+                    }
+                    "MissionCreated" => {
+                        if let Ok(mission) = serde_json::from_str::<Mission>(&event.payload) {
+                            s.missions.push(mission);
+                        }
+                    }
+                    "TaskUpdated" => {
+                         #[derive(serde::Deserialize)]
+                         struct TaskUpdate { mission_id: Uuid, task_id: Uuid, status: TaskStatus }
+                         if let Ok(update) = serde_json::from_str::<TaskUpdate>(&event.payload) {
+                             if let Some(m) = s.missions.iter_mut().find(|m| m.id == update.mission_id) {
+                                 if let Some(t) = m.tasks.iter_mut().find(|t| t.id == update.task_id) {
+                                     t.status = update.status;
+                                 }
+                             }
+                         }
+                    }
+                    _ => {}
+                }
+
                 if s.events.len() > 100 {
                     s.events.remove(0);
                 }
@@ -81,41 +103,64 @@ async fn main() -> Result<()> {
         }
     });
 
-    // 4. Emit Initial Simulation Events
-    let bus_clone = Arc::clone(&bus);
-    let goal_clone = args.goal.clone();
-    let coins_clone = args.max_coins;
+    // 4. Simulation Engine
+    let bus_simulation = Arc::clone(&bus);
+    let goal_simulation = args.goal.clone();
+    let coins_simulation = args.max_coins;
     
     tokio::spawn(async move {
-        // Loop Started
-        let _ = bus_clone.publish(Event {
-            id: Uuid::new_v4(),
-            timestamp: Utc::now(),
-            worker_id: "system".to_string(),
+        // Step 1: Loop Started
+        let _ = bus_simulation.publish(Event {
+            id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "system".to_string(),
             event_type: "LoopStarted".to_string(),
-            payload: serde_json::to_string(&LoopConfig {
-                goal: goal_clone,
-                max_coins: coins_clone,
-            }).unwrap(),
+            payload: serde_json::to_string(&LoopConfig { goal: goal_simulation, max_coins: coins_simulation }).unwrap(),
         }).await;
 
-        // Simulate Workers joining
-        let initial_team = vec![
+        // Step 2: Workers Joined
+        let workers = vec![
+            WorkerProfile { name: "Architect".to_string(), role: WorkerRole::Architect, model: None },
             WorkerProfile { name: "Git-Bot".to_string(), role: WorkerRole::Git, model: None },
-            WorkerProfile { name: "Claude".to_string(), role: WorkerRole::Coder, model: Some("claude-3-5".to_string()) },
-            WorkerProfile { name: "Search-1".to_string(), role: WorkerRole::Researcher, model: None },
         ];
-
-        for w in initial_team {
-            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-            let _ = bus_clone.publish(Event {
-                id: Uuid::new_v4(),
-                timestamp: Utc::now(),
-                worker_id: "system".to_string(),
-                event_type: "WorkerJoined".to_string(),
-                payload: serde_json::to_string(&w).unwrap(),
+        for w in workers {
+            tokio::time::sleep(tokio::time::Duration::from_millis(600)).await;
+            let _ = bus_simulation.publish(Event {
+                id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "system".to_string(),
+                event_type: "WorkerJoined".to_string(), payload: serde_json::to_string(&w).unwrap(),
             }).await;
         }
+
+        // Step 3: Mission Created
+        tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
+        let t1_id = Uuid::new_v4();
+        let t2_id = Uuid::new_v4();
+        let mission = Mission {
+            id: Uuid::new_v4(),
+            name: "Phase 1: Scaffolding".to_string(),
+            tasks: vec![
+                Task { id: t1_id, name: "Init Repo".to_string(), description: "Setup git".to_string(), status: TaskStatus::Pending, assigned_worker: Some("Git-Bot".to_string()) },
+                Task { id: t2_id, name: "Project Spec".to_string(), description: "Technical docs".to_string(), status: TaskStatus::Pending, assigned_worker: Some("Architect".to_string()) },
+            ],
+        };
+        let mission_id = mission.id;
+        let _ = bus_simulation.publish(Event {
+            id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Architect".to_string(),
+            event_type: "MissionCreated".to_string(), payload: serde_json::to_string(&mission).unwrap(),
+        }).await;
+
+        // Step 4: Simulate Progress
+        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+        let _ = bus_simulation.publish(Event {
+            id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Git-Bot".to_string(),
+            event_type: "TaskUpdated".to_string(),
+            payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Running"}}"#, mission_id, t1_id),
+        }).await;
+        
+        tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
+        let _ = bus_simulation.publish(Event {
+            id: Uuid::new_v4(), timestamp: Utc::now(), worker_id: "Git-Bot".to_string(),
+            event_type: "TaskUpdated".to_string(),
+            payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Success"}}"#, mission_id, t1_id),
+        }).await;
     });
 
     // 5. Main TUI Loop
@@ -124,106 +169,84 @@ async fn main() -> Result<()> {
             let main_layout = Layout::default()
                 .direction(Direction::Vertical)
                 .margin(1)
-                .constraints(
-                    [
-                        Constraint::Length(3),
-                        Constraint::Min(0),
-                        Constraint::Length(1),
-                    ]
-                    .as_ref(),
-                )
+                .constraints([Constraint::Length(3), Constraint::Min(0), Constraint::Length(1)].as_ref())
                 .split(f.size());
 
-            // Header - Cyber Blue
+            // Header
             let header = Paragraph::new(format!(" OBJECTIVE: {}", goal_display))
                 .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
-                .block(Block::default()
-                    .title(" INFINITE CODING LOOP [v0.1.0] ")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::DarkGray)));
+                .block(Block::default().title(" INFINITE CODING LOOP [v0.1.0] ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
             f.render_widget(header, main_layout[0]);
 
-            // Middle Layout: Sidebar + Feed
+            // Middle Layout
             let middle_chunks = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints(
-                    [
-                        Constraint::Percentage(25), // Roster
-                        Constraint::Percentage(75), // Feed
-                    ]
-                    .as_ref(),
-                )
+                .constraints([Constraint::Percentage(20), Constraint::Percentage(50), Constraint::Percentage(30)].as_ref())
                 .split(main_layout[1]);
 
-            // ROSTER Panel
-            let mut worker_items: Vec<ListItem> = Vec::new();
-            if let Ok(state_lock) = state.lock() {
-                worker_items = state_lock.workers.iter().map(|w| {
-                    let symbol = match w.role {
-                        WorkerRole::Git => "󰊢",
-                        WorkerRole::Coder => "󰅩",
-                        WorkerRole::Researcher => "󰍉",
-                        _ => "󰚩",
-                    };
-                    ListItem::new(format!(" {} {} ({:?})", symbol, w.name, w.role))
-                        .style(Style::default().fg(Color::Yellow))
+            // 1. ROSTER
+            let mut worker_items = Vec::new();
+            if let Ok(s) = state.lock() {
+                worker_items = s.workers.iter().map(|w| {
+                    let symbol = match w.role { WorkerRole::Git => "󰊢", WorkerRole::Coder => "󰅩", WorkerRole::Architect => "󰉪", _ => "󰚩" };
+                    ListItem::new(format!(" {} {}", symbol, w.name)).style(Style::default().fg(Color::Yellow))
                 }).collect();
             }
-            let roster = List::new(worker_items)
-                .block(Block::default()
-                    .title(" BARRACKS / ROSTER ")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::DarkGray)));
-            f.render_widget(roster, middle_chunks[0]);
+            f.render_widget(List::new(worker_items).block(Block::default().title(" BARRACKS ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray))), middle_chunks[0]);
 
-            // FEED Panel
-            let mut feed_items: Vec<ListItem> = Vec::new();
-            if let Ok(state_lock) = state.lock() {
-                feed_items = state_lock.events.iter().rev().map(|e| {
-                    let color = match e.event_type.as_str() {
-                        "LoopStarted" => Color::Green,
-                        "WorkerJoined" => Color::Blue,
-                        _ => Color::White,
-                    };
-                    
-                    ListItem::new(format!(
-                        " {:<10} | {:<15} | {}",
-                        e.timestamp.format("%H:%M:%S"),
-                        e.event_type,
-                        e.payload
-                    )).style(Style::default().fg(color))
+            // 2. MISSION CONTROL GRID
+            let mut rows = Vec::new();
+            if let Ok(s) = state.lock() {
+                for mission in &s.missions {
+                    for task in &mission.tasks {
+                        let status_style = match task.status {
+                            TaskStatus::Pending => Style::default().fg(Color::DarkGray),
+                            TaskStatus::Running => Style::default().fg(Color::Cyan).add_modifier(Modifier::SLOW_BLINK),
+                            TaskStatus::Success => Style::default().fg(Color::Green),
+                            TaskStatus::Failure => Style::default().fg(Color::Red),
+                        };
+                        rows.push(Row::new(vec![
+                            Cell::from(mission.name.clone()).style(Style::default().fg(Color::DarkGray)),
+                            Cell::from(task.name.clone()).style(Style::default().add_modifier(Modifier::BOLD)),
+                            Cell::from(format!("{:?}", task.status)).style(status_style),
+                            Cell::from(task.assigned_worker.clone().unwrap_or_default()).style(Style::default().fg(Color::Yellow)),
+                        ]));
+                    }
+                }
+            }
+            let widths = [
+                Constraint::Percentage(30),
+                Constraint::Percentage(30),
+                Constraint::Percentage(20),
+                Constraint::Percentage(20),
+            ];
+            let table = Table::new(rows, widths)
+                .header(Row::new(vec!["MISSION", "TASK", "STATUS", "WORKER"]).style(Style::default().fg(Color::White).add_modifier(Modifier::BOLD)))
+                .block(Block::default().title(" MISSION CONTROL GRID ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
+            f.render_widget(table, middle_chunks[1]);
+
+            // 3. EVENT LOG
+            let mut feed_items = Vec::new();
+            if let Ok(s) = state.lock() {
+                feed_items = s.events.iter().rev().map(|e| {
+                    let color = match e.event_type.as_str() { "LoopStarted" => Color::Green, "WorkerJoined" => Color::Blue, "MissionCreated" => Color::Magenta, _ => Color::White };
+                    ListItem::new(format!(" {:<8} | {}", e.timestamp.format("%H:%M:%S"), e.event_type)).style(Style::default().fg(color))
                 }).collect();
             }
-            let list = List::new(feed_items)
-                .block(Block::default()
-                    .title(" LIVE ACTIVITY FEED ")
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::DarkGray)));
-            f.render_widget(list, middle_chunks[1]);
+            f.render_widget(List::new(feed_items).block(Block::default().title(" ACTIVITY FEED ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray))), middle_chunks[2]);
 
             // Footer
-            let footer = Paragraph::new(" [Q] Quit | [SPACE] Pause (N/A) | System Status: ONLINE")
-                .style(Style::default().fg(Color::DarkGray));
-            f.render_widget(footer, main_layout[2]);
+            f.render_widget(Paragraph::new(" [Q] Quit | [SPACE] Pause | System Status: ONLINE").style(Style::default().fg(Color::DarkGray)), main_layout[2]);
         })?;
 
         if event::poll(std::time::Duration::from_millis(50))? {
             if let CEvent::Key(key) = event::read()? {
-                if let KeyCode::Char('q') = key.code {
-                    break;
-                }
+                if let KeyCode::Char('q') = key.code { break; }
             }
         }
     }
-
-    // 6. Cleanup
     disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
     terminal.show_cursor()?;
-
     Ok(())
 }
