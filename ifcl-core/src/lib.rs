@@ -66,6 +66,19 @@ pub struct Mission {
     pub tasks: Vec<Task>,
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
+pub struct Bank {
+    pub xp: u64,
+    pub coins: u64,
+}
+
+impl Bank {
+    pub fn deposit(&mut self, xp: u64, coins: u64) {
+        self.xp += xp;
+        self.coins += coins;
+    }
+}
+
 pub trait Worker: Send + Sync {
     fn id(&self) -> &str;
     fn role(&self) -> WorkerRole;
@@ -148,6 +161,32 @@ impl BasicOrchestrator {
     pub fn new() -> Self {
         Self {
             missions: tokio::sync::RwLock::new(Vec::new()),
+        }
+    }
+}
+
+pub struct CliExecutor {
+    pub binary: String,
+}
+
+impl CliExecutor {
+    pub fn new(binary: String) -> Self {
+        Self { binary }
+    }
+
+    pub async fn execute(&self, prompt: &str) -> anyhow::Result<String> {
+        let output = tokio::process::Command::new(&self.binary)
+            .arg(prompt)
+            .output()
+            .await?;
+
+        if output.status.success() {
+            Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        } else {
+            anyhow::bail!(
+                "CLI Error: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            )
         }
     }
 }
@@ -308,5 +347,31 @@ mod tests {
 
         let missions = orch.get_missions().await.unwrap();
         assert_eq!(missions[0].tasks[0].status, TaskStatus::Running);
+    }
+
+    #[tokio::test]
+    async fn test_cli_executor_echo() {
+        let executor = CliExecutor::new("echo".to_string());
+        let result = executor.execute("hello world").await.unwrap();
+        assert_eq!(result, "hello world");
+    }
+
+    #[tokio::test]
+    async fn test_cli_executor_error() {
+        let executor = CliExecutor::new("false".to_string());
+        let result = executor.execute("").await;
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_bank_progression() {
+        let mut bank = Bank::default();
+        bank.deposit(100, 50);
+        assert_eq!(bank.xp, 100);
+        assert_eq!(bank.coins, 50);
+        
+        bank.deposit(50, 25);
+        assert_eq!(bank.xp, 150);
+        assert_eq!(bank.coins, 75);
     }
 }
