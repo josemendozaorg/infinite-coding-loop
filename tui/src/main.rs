@@ -12,7 +12,7 @@ use crossterm::{
 use ifcl_core::{
     Event, EventBus, EventStore, InMemoryEventBus, Mission, TaskStatus, Task, 
     CliExecutor, Bank, LoopStatus, SqliteEventStore, WorkerProfile, WorkerRole, LoopConfig,
-    MarketplaceLoader, AppMode, MenuAction, MenuState, SetupWizard, WizardStep
+    MarketplaceLoader, AppMode, MenuAction, MenuState, SetupWizard, WizardStep, LogPayload, ThoughtPayload
 };
 use petgraph::visit::EdgeRef;
 use ratatui::{
@@ -298,153 +298,246 @@ async fn main() -> Result<()> {
     }
 
     tokio::spawn(async move {
-        // Wait for Wizard to complete
-        check_pause_async(Arc::clone(&state_sim_monitor)).await;
-
-        let (final_goal, final_budget, sid) = {
-            let s = state_sim_monitor.lock().unwrap();
-            (s.wizard.goal.clone(), s.wizard.budget_coins, s.current_session_id.unwrap_or_default())
-        };
-
-        // Step 1: Loop Started with Wizard Config
-        let _ = bus_simulation.publish(Event {
-            id: Uuid::new_v4(),
-            session_id: sid,
-            trace_id: Uuid::new_v4(),
-            timestamp: Utc::now(),
-            worker_id: "system".to_string(),
-            event_type: "LoopStarted".to_string(),
-            payload: serde_json::to_string(&LoopConfig { goal: final_goal.clone(), max_coins: Some(final_budget) }).unwrap(),
-        }).await;
-
-        // Step 2: Workers Joined
-        let workers = vec![
-            WorkerProfile { name: "Architect".to_string(), role: WorkerRole::Architect, model: Some("gemini".to_string()) },
-            WorkerProfile { name: "Git-Bot".to_string(), role: WorkerRole::Git, model: None },
-        ];
-        for w in workers {
+        loop {
+            // Wait for App to be in Running mode and Unpaused
             check_pause_async(Arc::clone(&state_sim_monitor)).await;
-            tokio::time::sleep(tokio::time::Duration::from_millis(600)).await;
-            let _ = bus_simulation.publish(Event {
-                id: Uuid::new_v4(),
-                session_id: sid,
-                trace_id: Uuid::new_v4(),
-                timestamp: Utc::now(),
-                worker_id: "system".to_string(),
-                event_type: "WorkerJoined".to_string(), payload: serde_json::to_string(&w).unwrap(),
-            }).await;
-        }
 
-        // Step 3: Mission Created
-        check_pause_async(Arc::clone(&state_sim_monitor)).await;
-        tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
-        let t1_id = Uuid::new_v4();
-        let t2_id = Uuid::new_v4();
-        let mission = Mission {
-            id: Uuid::new_v4(),
-            name: "Phase 1: Analysis".to_string(),
-            tasks: vec![
-                Task { id: t1_id, name: "Consult Gemini".to_string(), description: "Ask for greeting".to_string(), status: TaskStatus::Pending, assigned_worker: Some("Architect".to_string()) },
-                Task { id: t2_id, name: "Init Repo".to_string(), description: "Setup git".to_string(), status: TaskStatus::Pending, assigned_worker: Some("Git-Bot".to_string()) },
-            ],
-        };
-        let mission_id = mission.id;
-        let _ = bus_simulation.publish(Event {
-            id: Uuid::new_v4(),
-            session_id: sid,
-            trace_id: Uuid::new_v4(),
-            timestamp: Utc::now(),
-            worker_id: "Architect".to_string(),
-            event_type: "MissionCreated".to_string(), payload: serde_json::to_string(&mission).unwrap(),
-        }).await;
+            let (sid, missions, workers, goal, budget) = {
+                let s = state_sim_monitor.lock().unwrap();
+                (
+                    s.current_session_id.unwrap_or_default(),
+                    s.missions.clone(),
+                    s.workers.clone(),
+                    s.wizard.goal.clone(),
+                    s.wizard.budget_coins
+                )
+            };
 
-        // Step 4: Execute Real Gemini Call
-        check_pause_async(Arc::clone(&state_sim_monitor)).await;
-        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-        let _ = bus_simulation.publish(Event {
-            id: Uuid::new_v4(),
-            session_id: sid,
-            trace_id: Uuid::new_v4(),
-            timestamp: Utc::now(),
-            worker_id: "Architect".to_string(),
-            event_type: "TaskUpdated".to_string(),
-            payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Running"}}"#, mission_id, t1_id),
-        }).await;
-
-        let _ = bus_simulation.publish(Event {
-            id: Uuid::new_v4(),
-            session_id: sid,
-            trace_id: Uuid::new_v4(),
-            timestamp: Utc::now(),
-            worker_id: "Architect".to_string(),
-            event_type: "Log".to_string(), payload: "Invoking Gemini CLI...".to_string(),
-        }).await;
-
-        let executor = CliExecutor::new("gemini".to_string());
-        let prompt = format!("Explain the goal '{}' in 1 short sentence.", final_goal);
-        
-        match executor.execute(&prompt).await {
-            Ok(response) => {
-                let _ = bus_simulation.publish(Event {
-                    id: Uuid::new_v4(),
-                    session_id: sid,
-                    trace_id: Uuid::new_v4(),
-                    timestamp: Utc::now(),
-                    worker_id: "Architect".to_string(),
-                    event_type: "AiResponse".to_string(), payload: response,
-                }).await;
-                let _ = bus_simulation.publish(Event {
-                    id: Uuid::new_v4(),
-                    session_id: sid,
-                    trace_id: Uuid::new_v4(),
-                    timestamp: Utc::now(),
-                    worker_id: "Architect".to_string(),
-                    event_type: "TaskUpdated".to_string(),
-                    payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Success"}}"#, mission_id, t1_id),
-                }).await;
+            if sid == Uuid::nil() {
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                continue;
             }
-            Err(e) => {
+
+            // Step 1: Handle Infrastructure/Context setup if missing
+            if missions.is_empty() {
+                // Check if LoopStarted exists (simulated by checking if we have goal)
+                // In a real system we'd check event store. Here we just push if empty.
+                let _ = bus_simulation.publish(Event {
+                    id: Uuid::new_v4(),
+                    session_id: sid,
+                    trace_id: Uuid::new_v4(),
+                    timestamp: Utc::now(),
+                    worker_id: "system".to_string(),
+                    event_type: "LoopStarted".to_string(),
+                    payload: serde_json::to_string(&LoopConfig { goal: goal.clone(), max_coins: Some(budget) }).unwrap(),
+                }).await;
+
+                // Step 2: Ensure Workers exist
+                if workers.is_empty() {
+                    let startup_workers = vec![
+                        WorkerProfile { name: "Architect".to_string(), role: WorkerRole::Architect, model: Some("gemini".to_string()) },
+                        WorkerProfile { name: "Git-Bot".to_string(), role: WorkerRole::Git, model: None },
+                    ];
+                    for w in startup_workers {
+                        let _ = bus_simulation.publish(Event {
+                            id: Uuid::new_v4(),
+                            session_id: sid,
+                            trace_id: Uuid::new_v4(),
+                            timestamp: Utc::now(),
+                            worker_id: "system".to_string(),
+                            event_type: "WorkerJoined".to_string(), payload: serde_json::to_string(&w).unwrap(),
+                        }).await;
+                    }
+                }
+
+                // Step 3: Create Phase 1 Mission
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                let mission = Mission {
+                    id: Uuid::new_v4(),
+                    name: "Phase 1: Analysis".to_string(),
+                    tasks: vec![
+                        Task { id: Uuid::new_v4(), name: "Consult Gemini".to_string(), description: "Ask for greeting".to_string(), status: TaskStatus::Pending, assigned_worker: Some("Architect".to_string()) },
+                        Task { id: Uuid::new_v4(), name: "Init Repo".to_string(), description: "Setup git".to_string(), status: TaskStatus::Pending, assigned_worker: Some("Git-Bot".to_string()) },
+                    ],
+                };
                 let _ = bus_simulation.publish(Event {
                     id: Uuid::new_v4(),
                     session_id: sid,
                     trace_id: Uuid::new_v4(),
                     timestamp: Utc::now(),
                     worker_id: "Architect".to_string(),
-                    event_type: "WorkerError".to_string(), payload: e.to_string(),
+                    event_type: "MissionCreated".to_string(), payload: serde_json::to_string(&mission).unwrap(),
                 }).await;
+                
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                continue; // Let state update
+            }
+
+            // Step 2: Find first PENDING task
+            let mut pending_task = None;
+            for m in &missions {
+                for t in &m.tasks {
+                    if t.status == TaskStatus::Pending {
+                        pending_task = Some((m.id, t.id, t.name.clone(), t.assigned_worker.clone().unwrap_or("system".to_string())));
+                        break;
+                    }
+                }
+                if pending_task.is_some() { break; }
+            }
+
+            match pending_task {
+                Some((mid, tid, name, worker)) => {
+                    // Execute Task
+                    let _ = bus_simulation.publish(Event {
+                        id: Uuid::new_v4(),
+                        session_id: sid,
+                        trace_id: Uuid::new_v4(),
+                        timestamp: Utc::now(),
+                        worker_id: worker.clone(),
+                        event_type: "TaskUpdated".to_string(),
+                        payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Running"}}"#, mid, tid),
+                    }).await;
+
+                    if name == "Consult Gemini" {
+                        // NEW: Worker Transparency - Reasoning and Confidence
+                        let _ = bus_simulation.publish(Event {
+                            id: Uuid::new_v4(),
+                            session_id: sid,
+                            trace_id: Uuid::new_v4(),
+                            timestamp: Utc::now(),
+                            worker_id: worker.clone(),
+                            event_type: "WorkerThought".to_string(),
+                            payload: serde_json::to_string(&ThoughtPayload {
+                                confidence: 0.92,
+                                reasoning: vec![
+                                    "Analyzing user goal...".to_string(),
+                                    "Selecting optimal model (Gemini)...".to_string(),
+                                    "Formulating prompt...".to_string(),
+                                ],
+                            }).unwrap(),
+                        }).await;
+                        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
+                        let _ = bus_simulation.publish(Event {
+                            id: Uuid::new_v4(),
+                            session_id: sid,
+                            trace_id: Uuid::new_v4(),
+                            timestamp: Utc::now(),
+                            worker_id: worker.clone(),
+                            event_type: "Log".to_string(), 
+                            payload: serde_json::to_string(&LogPayload { level: "INFO".to_string(), message: "Invoking Gemini CLI...".to_string() }).unwrap(),
+                        }).await;
+
+                        let executor = CliExecutor::new("gemini".to_string());
+                        let prompt = format!("Explain the goal '{}' in 1 short sentence.", goal);
+                        match executor.execute(&prompt).await {
+                            Ok(result) => {
+                                // Log STDOUT
+                                if !result.stdout.is_empty() {
+                                    let _ = bus_simulation.publish(Event {
+                                        id: Uuid::new_v4(),
+                                        session_id: sid,
+                                        trace_id: Uuid::new_v4(),
+                                        timestamp: Utc::now(),
+                                        worker_id: worker.clone(),
+                                        event_type: "Log".to_string(), 
+                                        payload: serde_json::to_string(&LogPayload { level: "STDOUT".to_string(), message: result.stdout.clone() }).unwrap(),
+                                    }).await;
+                                }
+                                // Log STDERR
+                                if !result.stderr.is_empty() {
+                                    let _ = bus_simulation.publish(Event {
+                                        id: Uuid::new_v4(),
+                                        session_id: sid,
+                                        trace_id: Uuid::new_v4(),
+                                        timestamp: Utc::now(),
+                                        worker_id: worker.clone(),
+                                        event_type: "Log".to_string(), 
+                                        payload: serde_json::to_string(&LogPayload { level: "STDERR".to_string(), message: result.stderr.clone() }).unwrap(),
+                                    }).await;
+                                }
+
+                                if result.status.success() {
+                                    let _ = bus_simulation.publish(Event {
+                                        id: Uuid::new_v4(),
+                                        session_id: sid,
+                                        trace_id: Uuid::new_v4(),
+                                        timestamp: Utc::now(),
+                                        worker_id: worker.clone(),
+                                        event_type: "AiResponse".to_string(), payload: result.stdout,
+                                    }).await;
+                                    let _ = bus_simulation.publish(Event {
+                                        id: Uuid::new_v4(),
+                                        session_id: sid,
+                                        trace_id: Uuid::new_v4(),
+                                        timestamp: Utc::now(),
+                                        worker_id: worker.clone(),
+                                        event_type: "TaskUpdated".to_string(),
+                                        payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Success"}}"#, mid, tid),
+                                    }).await;
+                                } else {
+                                    let _ = bus_simulation.publish(Event {
+                                        id: Uuid::new_v4(),
+                                        session_id: sid,
+                                        trace_id: Uuid::new_v4(),
+                                        timestamp: Utc::now(),
+                                        worker_id: worker.clone(),
+                                        event_type: "WorkerError".to_string(), 
+                                        payload: format!("CLI exited with non-zero: {}", result.status),
+                                    }).await;
+                                }
+                            }
+                            Err(e) => {
+                                let _ = bus_simulation.publish(Event {
+                                    id: Uuid::new_v4(),
+                                    session_id: sid,
+                                    trace_id: Uuid::new_v4(),
+                                    timestamp: Utc::now(),
+                                    worker_id: worker.clone(),
+                                    event_type: "WorkerError".to_string(), payload: e.to_string(),
+                                }).await;
+                            }
+                        }
+                    } else if name == "Init Repo" {
+                        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+                        let _ = bus_simulation.publish(Event {
+                            id: Uuid::new_v4(),
+                            session_id: sid,
+                            trace_id: Uuid::new_v4(),
+                            timestamp: Utc::now(),
+                            worker_id: worker.clone(),
+                            event_type: "Log".to_string(), 
+                            payload: serde_json::to_string(&LogPayload { level: "STDOUT".to_string(), message: "git init && git add . && git commit -m 'Initial commit'".to_string() }).unwrap(),
+                        }).await;
+                        let _ = bus_simulation.publish(Event {
+                            id: Uuid::new_v4(),
+                            session_id: sid,
+                            trace_id: Uuid::new_v4(),
+                            timestamp: Utc::now(),
+                            worker_id: worker.clone(),
+                            event_type: "TaskUpdated".to_string(),
+                            payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Success"}}"#, mid, tid),
+                        }).await;
+                    } else {
+                        // Generic success for other tasks
+                        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                        let _ = bus_simulation.publish(Event {
+                            id: Uuid::new_v4(),
+                            session_id: sid,
+                            trace_id: Uuid::new_v4(),
+                            timestamp: Utc::now(),
+                            worker_id: worker.clone(),
+                            event_type: "TaskUpdated".to_string(),
+                            payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Success"}}"#, mid, tid),
+                        }).await;
+                    }
+                }
+                None => {
+                    // All tasks finished for now
+                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                }
             }
         }
-
-        // Step 5: Git-Bot Completion
-        check_pause_async(Arc::clone(&state_sim_monitor)).await;
-        tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
-        let _ = bus_simulation.publish(Event {
-            id: Uuid::new_v4(),
-            session_id: sid,
-            trace_id: Uuid::new_v4(),
-            timestamp: Utc::now(),
-            worker_id: "Git-Bot".to_string(),
-            event_type: "TaskUpdated".to_string(),
-            payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Running"}}"#, mission_id, t2_id),
-        }).await;
-        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-        let _ = bus_simulation.publish(Event {
-            id: Uuid::new_v4(),
-            session_id: sid,
-            trace_id: Uuid::new_v4(),
-            timestamp: Utc::now(),
-            worker_id: "Git-Bot".to_string(),
-            event_type: "Log".to_string(), payload: "git init && git add . && git commit -m 'Initial commit'".to_string(),
-        }).await;
-        let _ = bus_simulation.publish(Event {
-            id: Uuid::new_v4(),
-            session_id: sid,
-            trace_id: Uuid::new_v4(),
-            timestamp: Utc::now(),
-            worker_id: "Git-Bot".to_string(),
-            event_type: "TaskUpdated".to_string(),
-            payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Success"}}"#, mission_id, t2_id),
-        }).await;
     });
 
     // 5. Main TUI Loop
@@ -702,6 +795,7 @@ async fn main() -> Result<()> {
                                 "LoopStatusChanged" | "Log" => Color::Yellow,
                                 "ManualCommandInjected" => Color::Magenta,
                                 "WorkerError" => Color::Red,
+                                "WorkerThought" => Color::Cyan,
                                 _ => Color::White 
                             };
                             let content = if e.event_type == "AiResponse" {
@@ -711,7 +805,17 @@ async fn main() -> Result<()> {
                             } else if e.event_type == "LoopStatusChanged" {
                                  format!(" # STATUS: {}", e.payload)
                             } else if e.event_type == "Log" {
-                                 format!(" * LOG: {}", e.payload)
+                                 if let Ok(p) = serde_json::from_str::<LogPayload>(&e.payload) {
+                                     format!(" * {}: {}", p.level, p.message)
+                                 } else {
+                                     format!(" * LOG: {}", e.payload)
+                                 }
+                            } else if e.event_type == "WorkerThought" {
+                                 if let Ok(p) = serde_json::from_str::<ThoughtPayload>(&e.payload) {
+                                     format!(" ? [{:.1}%] {}", p.confidence * 100.0, p.reasoning.last().unwrap_or(&"Thinking...".to_string()))
+                                 } else {
+                                     format!(" ? THINKING: {}", e.payload)
+                                 }
                             } else if e.event_type == "ManualCommandInjected" {
                                  format!(" @ GOD: {}", e.payload)
                             } else if e.event_type == "WorkerError" {

@@ -239,6 +239,25 @@ impl Default for BasicOrchestrator {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ThoughtPayload {
+    pub confidence: f32,
+    pub reasoning: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct LogPayload {
+    pub level: String,
+    pub message: String,
+}
+
+#[derive(Debug)]
+pub struct CliResult {
+    pub stdout: String,
+    pub stderr: String,
+    pub status: std::process::ExitStatus,
+}
+
 pub struct CliExecutor {
     pub binary: String,
 }
@@ -248,7 +267,7 @@ impl CliExecutor {
         Self { binary }
     }
 
-    pub async fn execute(&self, prompt: &str) -> anyhow::Result<String> {
+    pub async fn execute(&self, prompt: &str) -> anyhow::Result<CliResult> {
         let child = tokio::process::Command::new(&self.binary)
             .arg(prompt)
             .stdin(std::process::Stdio::null())
@@ -260,14 +279,11 @@ impl CliExecutor {
         
         match tokio::time::timeout(timeout, child.wait_with_output()).await {
             Ok(Ok(output)) => {
-                if output.status.success() {
-                    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-                } else {
-                    anyhow::bail!(
-                        "CLI Error: {}",
-                        String::from_utf8_lossy(&output.stderr).trim()
-                    )
-                }
+                Ok(CliResult {
+                    stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                    stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                    status: output.status,
+                })
             }
             Ok(Err(e)) => anyhow::bail!("Execution failed: {}", e),
             Err(_) => anyhow::bail!("CLI execution timed out after 60s"),
@@ -443,14 +459,14 @@ mod tests {
     async fn test_cli_executor_echo() {
         let executor = CliExecutor::new("echo".to_string());
         let result = executor.execute("hello world").await.unwrap();
-        assert_eq!(result, "hello world");
+        assert_eq!(result.stdout, "hello world");
     }
 
     #[tokio::test]
     async fn test_cli_executor_error() {
         let executor = CliExecutor::new("false".to_string());
-        let result = executor.execute("").await;
-        assert!(result.is_err());
+        let result = executor.execute("").await.unwrap();
+        assert!(!result.status.success());
     }
 
     #[test]
@@ -463,6 +479,18 @@ mod tests {
         bank.deposit(50, 25);
         assert_eq!(bank.xp, 150);
         assert_eq!(bank.coins, 75);
+    }
+
+    #[test]
+    fn test_thought_serialization() {
+        let payload = ThoughtPayload {
+            confidence: 0.85,
+            reasoning: vec!["Step 1".to_string(), "Step 2".to_string()],
+        };
+        let serialized = serde_json::to_string(&payload).unwrap();
+        let deserialized: ThoughtPayload = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized.confidence, 0.85);
+        assert_eq!(deserialized.reasoning.len(), 2);
     }
 
     #[tokio::test]
