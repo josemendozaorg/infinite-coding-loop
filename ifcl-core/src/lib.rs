@@ -30,6 +30,9 @@ pub use marketplace::MarketplaceLoader;
 pub use orchestrator::{Orchestrator, BasicOrchestrator, WorkerRequest};
 pub use context::*;
 pub use planner::*;
+pub use memory::*;
+
+pub mod memory;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct LoopConfig {
