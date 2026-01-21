@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  app:
+    container_name: infinite-coding-loop-web
+    build: .
+    ports:
+      - "8090:8080"
+    volumes:
+      # Persist the SQLite database
+      - ./ifcl.db:/app/ifcl.db
+      # Mount marketplace for easy editing/persistence
+      - ./marketplace:/app/marketplace
+    # Restart policy
+    restart: unless-stopped
+    # Environment variables if needed
+    environment:
+      - RUST_LOG=info
