@@ -18,7 +18,8 @@ Single source of truth for features and their status.
 - [DONE] - **F11 Marketplace Loader** - [Spec](features/11_marketplace_loader)
 - [DONE] - **F12 Main Menu Interactive** - [Spec](features/12_main_menu_interactive)
 - [DONE] - **F13 Setup Wizard UI** - [Spec](features/13_setup_wizard_ui)
-- [DONE] - **F22 Session Isolation** - [Spec](features/22_session_isolation)
+- [DONE] - **F39 Memory Manager** - [Spec](features/39_memory_manager)
+- [DONE] - **F40 Learning Manager** - [Spec](features/40_learning_manager)
 
 ## 🟡 In Progress
 - [IN PROGRESS] - **F01 User Onboarding CLI** - [Spec](features/01_user_onboarding_cli)
@@ -31,8 +32,6 @@ Single source of truth for features and their status.
 - [IN PROGRESS] - **F25 Worker Transparency** - [Spec](features/25_worker_transparency)
 - [IN PROGRESS] - **F34 Context Manager** - [Spec](features/34_context_manager)
 - [IN PROGRESS] - **F38 Planner Worker** - [Spec](features/38_planner_worker)
-- [IN PROGRESS] - **F39 Memory Manager** - [Spec](features/39_memory_manager)
-- [IN PROGRESS] - **F40 Learning Manager** - [Spec](features/40_learning_manager)
 
 
 ## 📋 Backlog (Prioritized)

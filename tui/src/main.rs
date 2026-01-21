@@ -13,7 +13,8 @@ use ifcl_core::{
     Event, EventBus, EventStore, InMemoryEventBus, Mission, TaskStatus, 
     CliExecutor, Bank, LoopStatus, SqliteEventStore, WorkerProfile, WorkerRole, LoopConfig,
     MarketplaceLoader, AppMode, MenuAction, MenuState, SetupWizard, WizardStep, LogPayload, ThoughtPayload,
-    groups::WorkerGroup, orchestrator::WorkerRequest
+    groups::WorkerGroup, orchestrator::WorkerRequest,
+    learning::{LearningManager, BasicLearningManager, Insight, Optimization, MissionOutcome}
 };
 use ratatui::{
     backend::CrosstermBackend,
@@ -60,6 +61,9 @@ struct AppState {
     selected_session_index: usize,
     ai_outputs: Vec<AiOutput>,
     available_groups: Vec<WorkerGroup>,
+    insights: Vec<Insight>,
+    optimizations: Vec<Optimization>,
+    managed_context_stats: Option<(usize, usize)>, // (tokens, pruned)
 }
 
 struct SimulationSnapshot {
@@ -86,6 +90,7 @@ async fn main() -> Result<()> {
     // 2. Initialize Infrastructure
     let bus = Arc::new(InMemoryEventBus::new(200));
     let store = Arc::new(SqliteEventStore::new("sqlite://ifcl.db?mode=rwc").await?);
+    let learning_manager = Arc::new(BasicLearningManager::new());
     
     // We don't load history at the top level anymore. 
     // It will be loaded when a session is selected.
@@ -116,6 +121,9 @@ async fn main() -> Result<()> {
         selected_session_index: 0,
         ai_outputs: Vec::new(),
         available_groups: MarketplaceLoader::load_groups("marketplace/groups"),
+        insights: Vec::new(),
+        optimizations: Vec::new(),
+        managed_context_stats: None,
     }));
 
     // Replay history will be handled later
@@ -125,6 +133,7 @@ async fn main() -> Result<()> {
     let state_c = Arc::clone(&state);
     let store_c = Arc::clone(&store);
     let bus_reward = Arc::clone(&bus); // Keep this for the reward publishing inside the loop
+    let learning_c = Arc::clone(&learning_manager);
     
     // Create marketplace directories if they don't exist
     let _ = std::fs::create_dir_all("marketplace/workers");
@@ -289,6 +298,42 @@ async fn main() -> Result<()> {
                     s.events.remove(0);
                 }
                 s.events.push(event);
+
+                // F40: Check all missions for completion to record outcome
+                let mut completed_missions = Vec::new();
+                for m in &s.missions {
+                    if !m.tasks.is_empty() && m.tasks.iter().all(|t| t.status == TaskStatus::Success || t.status == TaskStatus::Failure) {
+                        completed_missions.push(m.clone());
+                    }
+                }
+                
+                if !completed_missions.is_empty() {
+                    let l_c = Arc::clone(&learning_c);
+                    let s_cc = Arc::clone(&state_c);
+                    tokio::spawn(async move {
+                        for m in completed_missions {
+                            let success = m.tasks.iter().all(|t| t.status == TaskStatus::Success);
+                            let outcome = MissionOutcome {
+                                mission_id: m.id,
+                                success,
+                                duration_seconds: 0,
+                                metadata: serde_json::json!({"name": m.name}),
+                            };
+                            let _ = l_c.record_outcome(outcome).await;
+                        }
+                        // Update insights/optimizations in state
+                        if let Ok(bits) = l_c.analyze_history().await {
+                            if let Ok(mut state) = s_cc.lock() {
+                                state.insights = bits;
+                            }
+                        }
+                        if let Ok(opts) = l_c.propose_optimizations().await {
+                            if let Ok(mut state) = s_cc.lock() {
+                                state.optimizations = opts;
+                            }
+                        }
+                    });
+                }
             }
         }
     });
@@ -408,28 +453,6 @@ async fn main() -> Result<()> {
                 }
 
                 // --- CONTEXT MANAGEMENT INTEGRATION ---
-                // Before "Architect" responds, we prune context
-                {
-                    use ifcl_core::context::{SlidingWindowPruner, SimpleTokenCounter, ContextPruner};
-                    let pruner = SlidingWindowPruner;
-                    let counter = SimpleTokenCounter;
-                    
-                    // Prune to a very small limit (e.g. 100 tokens) to demonstrate pruning
-                    let managed = pruner.prune(&all_events, 100, &counter);
-                    
-                    let _ = bus_simulation.publish(Event {
-                        id: Uuid::new_v4(),
-                        session_id: sid,
-                        trace_id: Uuid::new_v4(),
-                        timestamp: Utc::now(),
-                        worker_id: "system".to_string(),
-                        event_type: "Log".to_string(),
-                        payload: serde_json::to_string(&LogPayload {
-                            level: "DEBUG".to_string(),
-                            message: format!("Managed Context: {} tokens, {} pruned", managed.estimated_tokens, managed.pruned_count),
-                        }).unwrap(),
-                    }).await;
-                }
                 // --------------------------------------
                 
                 tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
@@ -465,6 +488,21 @@ async fn main() -> Result<()> {
                 tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                 continue; // Let state update
             }
+
+            // --- CONTEXT MANAGEMENT INTEGRATION (Periodic) ---
+            {
+                use ifcl_core::context::{SlidingWindowPruner, SimpleTokenCounter, ContextPruner};
+                let pruner = SlidingWindowPruner;
+                let counter = SimpleTokenCounter;
+                
+                // Prune to a very small limit (e.g. 100 tokens) to demonstrate pruning
+                let managed = pruner.prune(&all_events, 200, &counter);
+                
+                if let Ok(mut st) = state_sim_monitor.lock() {
+                    st.managed_context_stats = Some((managed.estimated_tokens, managed.pruned_count));
+                }
+            }
+            // --------------------------------------
 
             // Step 2: Find first PENDING task
             let mut pending_task = None;
@@ -800,11 +838,21 @@ async fn main() -> Result<()> {
                         .constraints([Constraint::Length(3), Constraint::Min(0), Constraint::Length(1)].as_ref())
                         .split(f.size());
 
-                    let (xp, coins, loop_status, is_int, active_goal) = if let Ok(s) = state.lock() {
-                        (s.bank.xp, s.bank.coins, s.status, s.is_intervening, s.wizard.goal.clone())
-                    } else { (0, 0, LoopStatus::Running, false, String::new()) };
+                    let (xp, coins, loop_status, is_int, active_goal, ctx_stats) = if let Ok(s) = state.lock() {
+                        (s.bank.xp, s.bank.coins, s.status, s.is_intervening, s.wizard.goal.clone(), s.managed_context_stats)
+                    } else { (0, 0, LoopStatus::Running, false, String::new(), None) };
 
-                    let header_content = format!(" OBJECTIVE: {:<35} | XP: {:<5} | COINS: {:<5} | STATUS: {:?}", active_goal, xp, coins, loop_status);
+                    let ctx_info = if let Some((tokens, pruned)) = ctx_stats {
+                        format!(" | CTX: {}tk ({}p)", tokens, pruned)
+                    } else {
+                        String::new()
+                    };
+
+                    let header_content = format!(" OBJ: {:<20} | XP: {} | $: {} | ST: {:?}{}", 
+                        if active_goal.len() > 20 { format!("{}...", &active_goal[..17]) } else { active_goal.clone() },
+                        xp, coins, loop_status, ctx_info
+                    );
+
                     let header_color = if is_int { Color::Magenta } else {
                         match loop_status {
                             LoopStatus::Running => Color::Cyan,
@@ -822,10 +870,11 @@ async fn main() -> Result<()> {
                         .direction(Direction::Horizontal)
                         .constraints([
                             Constraint::Percentage(12), 
-                            Constraint::Percentage(23), 
-                            Constraint::Percentage(20), 
-                            Constraint::Percentage(20),
-                            Constraint::Percentage(25)
+                            Constraint::Percentage(18), 
+                            Constraint::Percentage(18), 
+                            Constraint::Percentage(18),
+                            Constraint::Percentage(18),
+                            Constraint::Percentage(18)
                         ].as_ref())
                         .split(main_layout[1]);
 
@@ -946,6 +995,25 @@ async fn main() -> Result<()> {
                             .wrap(Wrap { trim: true })
                             .block(Block::default().title(" AI TERMINAL ").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow))),
                         middle_chunks[4]
+                    );
+
+                    // 6. INSIGHTS & OPTIMIZATIONS
+                    let mut learning_items = Vec::new();
+                    if let Ok(s) = state.lock() {
+                        for insight in &s.insights {
+                            learning_items.push(ListItem::new(format!(" 󰋗 {}", insight.description)).style(Style::default().fg(Color::Cyan)));
+                        }
+                        for opt in &s.optimizations {
+                            learning_items.push(ListItem::new(format!(" 󰒓 [{}]: {}", opt.target_component, opt.suggestion)).style(Style::default().fg(Color::Magenta)));
+                        }
+                    }
+                    if learning_items.is_empty() {
+                         learning_items.push(ListItem::new(" Gathering experience...").style(Style::default().fg(Color::DarkGray)));
+                    }
+                    f.render_widget(
+                        List::new(learning_items)
+                            .block(Block::default().title(" LEARNINGS ").borders(Borders::ALL).border_style(Style::default().fg(Color::Magenta))),
+                        middle_chunks[5]
                     );
 
                     let footer_text = if is_int {

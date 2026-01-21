@@ -8,5 +8,5 @@
 - [x] [TEST] Unit tests for LearningManager
 - [x] [CODE] Implement LearningManager
 - [x] [VERIFY] Run tests
-- [ ] [GIT] Commit
-- [ ] [UI] Integration into TUI (Mission Grid/Feed)
+- [x] [GIT] Commit
+- [x] [UI] Integration into TUI (Mission Grid/Feed)
