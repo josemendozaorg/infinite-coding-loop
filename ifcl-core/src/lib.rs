@@ -555,3 +555,4 @@ mod sql_tests {
         assert_eq!(events[0].payload, event.payload);
     }
 }
+pub mod learning;

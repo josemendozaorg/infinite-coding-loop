@@ -62,6 +62,16 @@ struct AppState {
     available_groups: Vec<WorkerGroup>,
 }
 
+struct SimulationSnapshot {
+    sid: Uuid,
+    missions: Vec<Mission>,
+    workers: Vec<WorkerProfile>,
+    goal: String,
+    budget: u64,
+    selected_workers: Vec<WorkerProfile>,
+    all_events: Vec<Event>,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let _args = Args::parse();
@@ -304,23 +314,25 @@ async fn main() -> Result<()> {
             // Wait for App to be in Running mode and Unpaused
             check_pause_async(Arc::clone(&state_sim_monitor)).await;
 
-            let (sid, missions, workers, goal, budget, selected_workers, all_events): (Uuid, Vec<Mission>, Vec<WorkerProfile>, String, u64, Vec<WorkerProfile>, Vec<Event>) = {
+            let snapshot: SimulationSnapshot = {
                 let s = state_sim_monitor.lock().unwrap();
                 let grp_workers = if let Some(grp) = s.available_groups.get(s.wizard.selected_group_index) {
                      grp.workers.clone()
                 } else {
                      Vec::new()
                 };
-                (
-                    s.current_session_id.unwrap_or_default(),
-                    s.missions.clone(),
-                    s.workers.clone(),
-                    s.wizard.goal.clone(),
-                    s.wizard.budget_coins,
-                    grp_workers,
-                    s.events.clone()
-                )
+                SimulationSnapshot {
+                    sid: s.current_session_id.unwrap_or_default(),
+                    missions: s.missions.clone(),
+                    workers: s.workers.clone(),
+                    goal: s.wizard.goal.clone(),
+                    budget: s.wizard.budget_coins,
+                    selected_workers: grp_workers,
+                    all_events: s.events.clone(),
+                }
             };
+            
+            let SimulationSnapshot { sid, missions, workers, goal, budget, selected_workers, all_events } = snapshot;
 
             if sid == Uuid::nil() {
                 tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;

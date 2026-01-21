@@ -1,6 +1,11 @@
 # Product Development Progress
 
+
 Single source of truth for features and their status.
+
+> [!IMPORTANT]
+> **Workflow Rule**: Every feature MUST have the following steps: **Plan, TDD, Code, Verify (Lint, Compile, Test), Git Versioning**.
+
 
 ## 🟢 Completed
 - [DONE] - **F01 User Onboarding CLI** - [Spec](features/01_user_onboarding_cli)
@@ -20,9 +25,10 @@ Single source of truth for features and their status.
 - [DONE] - **F34 Context Manager** - [Spec](features/34_context_manager)
 - [DONE] - **F38 Planner Worker** - [Spec](features/38_planner_worker)
 - [DONE] - **F39 Memory Manager** - [Spec](features/39_memory_manager)
+- [DONE] - **F40 Learning Manager** - [Spec](features/40_learning_manager)
 
 ## 🟡 In Progress
-- [IN PROGRESS] - **F40 Learning Manager** - [Spec](features/40_learning_manager)
+
 
 ## 📋 Backlog (Prioritized)
 
