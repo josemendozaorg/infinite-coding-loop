@@ -9,3 +9,4 @@
 - [x] [CODE] Implement LearningManager
 - [x] [VERIFY] Run tests
 - [ ] [GIT] Commit
+- [ ] [UI] Integration into TUI (Mission Grid/Feed)
