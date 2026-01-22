@@ -97,11 +97,7 @@ async fn main() -> Result<()> {
         println!("🚀 Starting Infinite Coding Loop in Headless Mode...");
         println!("Objective: {}", _args.goal.clone().unwrap_or_else(|| "General Autonomy".to_string()));
         println!("Budget: {} coins", _args.max_coins.unwrap_or(100));
-        
-        // In a real system, we would initialize the loop and run without the TUI.
-        // For this demo, we'll either print a summary or implement a minimal logging loop.
-        // For now, let's just exit to show the bypass works, or we could spawn a headless runner.
-        // return Ok(()); 
+        return Ok(());
     }
 
     // 1. Setup Terminal
@@ -962,66 +958,57 @@ async fn main() -> Result<()> {
                     );
                 }
                 AppMode::Running => {
+                    let mut state_guard = state.lock().unwrap();
+                    let s = &mut *state_guard;
+                    let focus_mode = s.focus_mode;
+
                     let main_layout = Layout::default()
                         .direction(Direction::Vertical)
-                        .margin(1)
                         .constraints([
-                            Constraint::Length(3), // Header
-                            Constraint::Length(3), // Progress Bar
-                            Constraint::Min(0),    // Main content
-                            Constraint::Length(1)  // Debug/Input
+                            Constraint::Length(3), 
+                            Constraint::Length(3), 
+                            Constraint::Min(0),
+                            Constraint::Length(1),
                         ].as_ref())
                         .split(f.size());
 
-                    let (xp, coins, loop_status, is_int, active_goal, ctx_stats) = if let Ok(s) = state.lock() {
-                        (s.bank.xp, s.bank.coins, s.status, s.is_intervening, s.wizard.goal.clone(), s.managed_context_stats)
-                    } else { (0, 0, LoopStatus::Running, false, String::new(), None) };
-
-                    let ctx_info = if let Some((tokens, pruned)) = ctx_stats {
-                        format!(" | CTX: {}tk ({}p)", tokens, pruned)
-                    } else {
-                        String::new()
-                    };
-
-                    let header_content = format!(" OBJ: {:<20} | XP: {} | $: {} | ST: {:?}{}", 
-                        if active_goal.len() > 20 { format!("{}...", &active_goal[..17]) } else { active_goal.clone() },
-                        xp, coins, loop_status, ctx_info
-                    );
-
-                    let header_color = if is_int { Color::Magenta } else {
-                        match loop_status {
+                    // --- Header ---
+                    let header_color = if s.is_intervening { Color::Magenta } else {
+                        match s.status {
                             LoopStatus::Running => Color::Cyan,
                             LoopStatus::Paused => Color::Yellow,
                         }
                     };
-
-                    let header = Paragraph::new(header_content)
+                    let ctx_info = if let Some((tokens, pruned)) = s.managed_context_stats {
+                        format!(" | CTX: {}tk ({}p)", tokens, pruned)
+                    } else {
+                        String::new()
+                    };
+                    let header = Paragraph::new(format!(" OBJ: {:<20} | XP: {} | $: {} | ST: {:?}{}", 
+                        if s.wizard.goal.len() > 20 { format!("{}...", &s.wizard.goal[..17]) } else { s.wizard.goal.clone() },
+                        s.bank.xp, s.bank.coins, s.status, ctx_info))
                         .style(Style::default().fg(header_color).add_modifier(Modifier::BOLD))
                         .block(Block::default().title(" INFINITE CODING LOOP [v0.1.0] ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
                     f.render_widget(header, main_layout[0]);
 
                     // --- Progress Bar ---
-                    if let Ok(s) = state.lock() {
-                        if let Some(stats) = &s.progress_stats {
-                            let gauge = Gauge::default()
-                                .block(Block::default().borders(Borders::ALL).title(" MISSION PROGRESS ").border_style(Style::default().fg(Color::DarkGray)))
-                                .gauge_style(Style::default().fg(if stats.is_stalled { Color::Red } else { Color::Cyan }).bg(Color::Black))
-                                .percent(stats.progress_percentage as u16)
-                                .label(format!("{:.1}% ({} / {}){}", 
-                                    stats.progress_percentage, 
-                                    stats.completed_tasks, 
-                                    stats.total_tasks,
-                                    if stats.is_stalled { " [STALLED!]" } else { "" }
-                                ));
-                            f.render_widget(gauge, main_layout[1]);
-                        } else {
-                           f.render_widget(Block::default().title(" MISSION PROGRESS ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)), main_layout[1]);
-                        }
+                    if let Some(stats) = &s.progress_stats {
+                        let gauge = Gauge::default()
+                            .block(Block::default().borders(Borders::ALL).title(" MISSION PROGRESS ").border_style(Style::default().fg(Color::DarkGray)))
+                            .gauge_style(Style::default().fg(if stats.is_stalled { Color::Red } else { Color::Cyan }).bg(Color::Black))
+                            .percent(stats.progress_percentage as u16)
+                            .label(format!("{:.1}% ({} / {}){}", 
+                                stats.progress_percentage, 
+                                stats.completed_tasks, 
+                                stats.total_tasks,
+                                if stats.is_stalled { " [STALLED!]" } else { "" }
+                            ));
+                        f.render_widget(gauge, main_layout[1]);
+                    } else {
+                        f.render_widget(Block::default().title(" MISSION PROGRESS ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)), main_layout[1]);
                     }
 
                     // Middle Layout
-                    let focus_mode = if let Ok(s) = state.lock() { s.focus_mode } else { FocusMode::None };
-
                     let middle_chunks = if focus_mode == FocusMode::None {
                         Layout::default()
                             .direction(Direction::Horizontal)
@@ -1040,41 +1027,36 @@ async fn main() -> Result<()> {
 
                     // 1. ROSTER
                     if focus_mode == FocusMode::None || focus_mode == FocusMode::Roster {
-                        let area = if focus_mode == FocusMode::Roster { middle_chunks[0] } else { middle_chunks[0] };
-                        let mut worker_items = Vec::new();
-                        if let Ok(s) = state.lock() {
-                            worker_items = s.workers.iter().map(|w| {
-                                let symbol = match w.role { WorkerRole::Git => "󰊢", WorkerRole::Coder => "󰅩", WorkerRole::Architect => "󰉪", _ => "󰚩" };
-                                ListItem::new(format!(" {} {}", symbol, w.name)).style(Style::default().fg(Color::Yellow))
-                            }).collect();
-                        }
+                        let area = middle_chunks[if focus_mode == FocusMode::Roster { 0 } else { 0 }];
+                        let worker_items: Vec<_> = s.workers.iter().map(|w| {
+                            let symbol = match w.role { WorkerRole::Git => "󰊢", WorkerRole::Coder => "󰅩", WorkerRole::Architect => "󰉪", _ => "󰚩" };
+                            ListItem::new(format!(" {} {}", symbol, w.name)).style(Style::default().fg(Color::Yellow))
+                        }).collect();
                         f.render_widget(List::new(worker_items).block(Block::default().title(" BARRACKS [1] ").borders(Borders::ALL).border_style(if focus_mode == FocusMode::Roster { Style::default().fg(Color::Cyan) } else { Style::default().fg(Color::DarkGray) })), area);
                     }
 
                     // 2. MISSION CONTROL
                     if focus_mode == FocusMode::None || focus_mode == FocusMode::MissionControl {
-                        let area = if focus_mode == FocusMode::MissionControl { middle_chunks[0] } else { middle_chunks[1] };
+                        let area = middle_chunks[if focus_mode == FocusMode::MissionControl { 0 } else { 1 }];
                         let mut rows = Vec::new();
-                        if let Ok(s) = state.lock() {
-                            for mission in &s.missions {
-                                for task in &mission.tasks {
-                                    let status_text = match task.status {
-                                        TaskStatus::Running => "Running (Thinking...)".to_string(),
-                                        _ => format!("{:?}", task.status),
-                                    };
-                                    let status_style = match task.status {
-                                        TaskStatus::Pending => Style::default().fg(Color::DarkGray),
-                                        TaskStatus::Running => Style::default().fg(Color::Cyan).add_modifier(Modifier::SLOW_BLINK),
-                                        TaskStatus::Success => Style::default().fg(Color::Green),
-                                        TaskStatus::Failure => Style::default().fg(Color::Red),
-                                    };
-                                    rows.push(Row::new(vec![
-                                        Cell::from(mission.name.clone()).style(Style::default().fg(Color::DarkGray)),
-                                        Cell::from(task.name.clone()).style(Style::default().add_modifier(Modifier::BOLD)),
-                                        Cell::from(status_text).style(status_style),
-                                        Cell::from(task.assigned_worker.clone().unwrap_or_default()).style(Style::default().fg(Color::Yellow)),
-                                    ]));
-                                }
+                        for mission in &s.missions {
+                            for task in &mission.tasks {
+                                let status_text = match task.status {
+                                    TaskStatus::Running => "Running (Thinking...)".to_string(),
+                                    _ => format!("{:?}", task.status),
+                                };
+                                let status_style = match task.status {
+                                    TaskStatus::Pending => Style::default().fg(Color::DarkGray),
+                                    TaskStatus::Running => Style::default().fg(Color::Cyan).add_modifier(Modifier::SLOW_BLINK),
+                                    TaskStatus::Success => Style::default().fg(Color::Green),
+                                    TaskStatus::Failure => Style::default().fg(Color::Red),
+                                };
+                                rows.push(Row::new(vec![
+                                    Cell::from(mission.name.clone()).style(Style::default().fg(Color::DarkGray)),
+                                    Cell::from(task.name.clone()).style(Style::default().add_modifier(Modifier::BOLD)),
+                                    Cell::from(status_text).style(status_style),
+                                    Cell::from(task.assigned_worker.clone().unwrap_or_default()).style(Style::default().fg(Color::Yellow)),
+                                ]));
                             }
                         }
                         let widths = [Constraint::Percentage(30), Constraint::Percentage(30), Constraint::Percentage(20), Constraint::Percentage(20)];
@@ -1083,95 +1065,88 @@ async fn main() -> Result<()> {
 
                     // 3. MENTAL MAP
                     if focus_mode == FocusMode::None || focus_mode == FocusMode::MentalMap {
-                        let area = if focus_mode == FocusMode::MentalMap { middle_chunks[0] } else { middle_chunks[2] };
+                        let area = middle_chunks[if focus_mode == FocusMode::MentalMap { 0 } else { 2 }];
                         let mut map_items = Vec::new();
-                        if let Ok(s) = state.lock() {
-                            use petgraph::Direction;
-                            
-                            // Show all root nodes initially
-                            let roots: Vec<_> = s.mental_map.graph.node_indices()
-                                .filter(|&idx| s.mental_map.graph.neighbors_directed(idx, Direction::Incoming).count() == 0)
-                                .collect();
-                            let count = roots.len();
+                        use petgraph::Direction;
+                        let roots: Vec<_> = s.mental_map.graph.node_indices()
+                            .filter(|&idx| s.mental_map.graph.neighbors_directed(idx, Direction::Incoming).count() == 0)
+                            .collect();
+                        let count = roots.len();
+                        let mut visited = std::collections::HashSet::new();
 
-                            for (i, node_idx) in roots.into_iter().enumerate() {
-                                render_node_recursive(&s.mental_map.graph, node_idx, 0, "", i == count - 1, &mut map_items);
-                            }
+                        for (i, node_idx) in roots.into_iter().enumerate() {
+                            render_node_recursive(&s.mental_map.graph, node_idx, 0, "", i == count - 1, &mut map_items, &mut visited);
                         }
                         f.render_widget(List::new(map_items).block(Block::default().title(" MENTAL MAP [3] ").borders(Borders::ALL).border_style(if focus_mode == FocusMode::MentalMap { Style::default().fg(Color::Cyan) } else { Style::default().fg(Color::DarkGray) })), area);
                     }
 
                     // 4. EVENT FEED
                     if focus_mode == FocusMode::None || focus_mode == FocusMode::Feed {
-                        let area = if focus_mode == FocusMode::Feed { middle_chunks[0] } else { middle_chunks[3] };
-                        if let Ok(mut s) = state.lock() {
-                            let feed_items: Vec<ListItem> = s.events.iter().map(|e| {
-                                let color = match e.event_type.as_str() { 
-                                    "LoopStarted" => Color::Green, 
-                                    "WorkerJoined" => Color::Blue, 
-                                    "AiResponse" => Color::Yellow,
-                                    "RewardEarned" => Color::Green,
-                                    "LoopStatusChanged" | "Log" => Color::Yellow,
-                                    "ManualCommandInjected" => Color::Magenta,
-                                    "WorkerError" => Color::Red,
-                                    "WorkerThought" => Color::Cyan,
-                                    _ => Color::White 
-                                };
-                                let content = if e.event_type == "AiResponse" {
-                                    format!(" > AI: {}", e.payload.chars().take(40).collect::<String>())
-                                } else if e.event_type == "RewardEarned" {
-                                     format!(" + REWARD: {}", e.payload)
-                                } else if e.event_type == "LoopStatusChanged" {
-                                     format!(" # STATUS: {}", e.payload)
-                                } else if e.event_type == "Log" {
-                                     if let Ok(p) = serde_json::from_str::<LogPayload>(&e.payload) {
-                                         format!(" * {}: {}", p.level, p.message)
-                                     } else {
-                                         format!(" * LOG: {}", e.payload)
-                                     }
-                                } else if e.event_type == "WorkerThought" {
-                                     if let Ok(p) = serde_json::from_str::<ThoughtPayload>(&e.payload) {
-                                         format!(" ? [{:.1}%] {}", p.confidence * 100.0, p.reasoning.last().unwrap_or(&"Thinking...".to_string()))
-                                     } else {
-                                         format!(" ? THINKING: {}", e.payload)
-                                     }
-                                } else if e.event_type == "ManualCommandInjected" {
-                                     format!(" @ GOD: {}", e.payload)
-                                } else if e.event_type == "WorkerError" {
-                                     format!(" ! ERR: {}", e.payload)
-                                } else {
-                                    format!(" {:<8} | {}", e.timestamp.format("%H:%M:%S"), e.event_type)
-                                };
-                                ListItem::new(content).style(Style::default().fg(color))
-                            }).collect();
+                        let area = middle_chunks[if focus_mode == FocusMode::Feed { 0 } else { 3 }];
+                        let feed_items: Vec<ListItem> = s.events.iter().map(|e| {
+                            let color = match e.event_type.as_str() { 
+                                "LoopStarted" => Color::Green, 
+                                "WorkerJoined" => Color::Blue, 
+                                "AiResponse" => Color::Yellow,
+                                "RewardEarned" => Color::Green,
+                                "LoopStatusChanged" | "Log" => Color::Yellow,
+                                "ManualCommandInjected" => Color::Magenta,
+                                "WorkerError" => Color::Red,
+                                "WorkerThought" => Color::Cyan,
+                                _ => Color::White 
+                            };
+                            let content = if e.event_type == "AiResponse" {
+                                format!(" > AI: {}", e.payload.chars().take(40).collect::<String>())
+                            } else if e.event_type == "RewardEarned" {
+                                 format!(" + REWARD: {}", e.payload)
+                            } else if e.event_type == "LoopStatusChanged" {
+                                 format!(" # STATUS: {}", e.payload)
+                            } else if e.event_type == "Log" {
+                                 if let Ok(p) = serde_json::from_str::<LogPayload>(&e.payload) {
+                                     format!(" * {}: {}", p.level, p.message)
+                                 } else {
+                                     format!(" * LOG: {}", e.payload)
+                                 }
+                            } else if e.event_type == "WorkerThought" {
+                                 if let Ok(p) = serde_json::from_str::<ThoughtPayload>(&e.payload) {
+                                     format!(" ? [{:.1}%] {}", p.confidence * 100.0, p.reasoning.last().unwrap_or(&"Thinking...".to_string()))
+                                 } else {
+                                     format!(" ? THINKING: {}", e.payload)
+                                 }
+                            } else if e.event_type == "ManualCommandInjected" {
+                                 format!(" @ GOD: {}", e.payload)
+                            } else if e.event_type == "WorkerError" {
+                                 format!(" ! ERR: {}", e.payload)
+                            } else {
+                                format!(" {:<8} | {}", e.timestamp.format("%H:%M:%S"), e.event_type)
+                            };
+                            ListItem::new(content).style(Style::default().fg(color))
+                        }).collect();
 
-                            let feed_list = List::new(feed_items)
-                                .block(Block::default().title(" FEED [4] ").borders(Borders::ALL).border_style(if focus_mode == FocusMode::Feed { Style::default().fg(Color::Cyan) } else { Style::default().fg(Color::DarkGray) }))
-                                .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD))
-                                .highlight_symbol(">> ");
-                            
-                            // Auto-scroll logic: if not selecting anything, show the last item
-                            if s.selected_event_index.is_none() && !s.events.is_empty() {
-                                let last_idx = s.events.len().saturating_sub(1);
-                                s.feed_state.select(Some(last_idx));
-                            }
-
-                            f.render_stateful_widget(feed_list, area, &mut s.feed_state);
+                        let feed_list = List::new(feed_items)
+                            .block(Block::default().title(" FEED [4] ").borders(Borders::ALL).border_style(if focus_mode == FocusMode::Feed { Style::default().fg(Color::Cyan) } else { Style::default().fg(Color::DarkGray) }))
+                            .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD))
+                            .highlight_symbol(">> ");
+                        
+                        // Auto-scroll logic: if not selecting anything, show the last item
+                        if s.selected_event_index.is_none() && !s.events.is_empty() {
+                            let last_idx = s.events.len().saturating_sub(1);
+                            s.feed_state.select(Some(last_idx));
                         }
+
+                        f.render_stateful_widget(feed_list, area, &mut s.feed_state);
                     }
 
                     // 5. AI TERMINAL
                     if focus_mode == FocusMode::None || focus_mode == FocusMode::Terminal {
-                        let area = if focus_mode == FocusMode::Terminal { middle_chunks[0] } else { middle_chunks[4] };
+                        let area = middle_chunks[if focus_mode == FocusMode::Terminal { 0 } else { 4 }];
                         let mut ai_content = String::new();
-                        if let Ok(s) = state.lock() {
-                            if let Some(latest) = s.ai_outputs.last() {
-                                ai_content = format!(" [{}] {}\n\n{}", 
-                                    latest.timestamp.format("%H:%M:%S"),
-                                    latest.worker_id,
-                                    latest.content
-                                );
-                            }
+                        if let Some(latest) = s.ai_outputs.last() {
+                            ai_content = format!(" [{}] {}\n\n{}", 
+                                latest.timestamp.format("%H:%M:%S"),
+                                latest.worker_id,
+                                latest.content
+                            );
                         }
                         if ai_content.is_empty() {
                             ai_content = "Waiting for AI response...".to_string();
@@ -1187,20 +1162,17 @@ async fn main() -> Result<()> {
 
                     // 6. INSIGHTS & OPTIMIZATIONS
                     if focus_mode == FocusMode::None || focus_mode == FocusMode::Learnings {
-                        let area = if focus_mode == FocusMode::Learnings { middle_chunks[0] } else { middle_chunks[5] };
+                        let area = middle_chunks[if focus_mode == FocusMode::Learnings { 0 } else { 5 }];
                         let mut learning_items = Vec::new();
-                        if let Ok(s) = state.lock() {
-                            for insight in &s.insights {
-                                learning_items.push(ListItem::new(format!(" 󰋗 {}", insight.description)).style(Style::default().fg(Color::Cyan)));
-                            }
-                            for opt in &s.optimizations {
-                                learning_items.push(ListItem::new(format!(" 󰒓 [{}]: {}", opt.target_component, opt.suggestion)).style(Style::default().fg(Color::Magenta)));
-                            }
+                        for insight in &s.insights {
+                            learning_items.push(ListItem::new(format!(" 󰋗 {}", insight.description)).style(Style::default().fg(Color::Cyan)));
+                        }
+                        for opt in &s.optimizations {
+                            learning_items.push(ListItem::new(format!(" 󰒓 [{}]: {}", opt.target_component, opt.suggestion)).style(Style::default().fg(Color::Magenta)));
                         }
                         if learning_items.is_empty() {
-                             let (recorded, total) = if let Ok(s) = state.lock() {
-                                 (s.recorded_missions.len(), s.missions.len())
-                             } else { (0, 0) };
+                             let recorded = s.recorded_missions.len();
+                             let total = s.missions.len();
                              learning_items.push(ListItem::new(format!(" Gathering experience ({}/{} missions)...", recorded, total)).style(Style::default().fg(Color::DarkGray)));
                         }
                         f.render_widget(
@@ -1210,47 +1182,34 @@ async fn main() -> Result<()> {
                         );
                     }
 
-                    let footer_text = if is_int {
+                    let footer_text = if s.is_intervening {
                         " [ESC] Cancel | [ENTER] Send | MODE: INTERVENTION"
-                    } else if loop_status == LoopStatus::Running {
-                        " [Q] Quit | [SPACE] Pause | [I] Intervene | STATUS: ONLINE"
+                    } else if s.show_event_details {
+                        " [ESC] Close | MODE: DETAIL VIEW"
                     } else {
-                        " [Q] Quit | [SPACE] Resume | [I] Intervene | STATUS: PAUSED"
+                        " [Q] Quit | [SPACE] Pause | [I] Intervene | [1-6] Focus | [J/K] Feed Scroll | [ENTER] Event Details"
                     };
-                    f.render_widget(Paragraph::new(footer_text).style(Style::default().fg(header_color)), main_layout[2]);
+                    let footer = Paragraph::new(footer_text)
+                        .style(Style::default().fg(Color::DarkGray))
+                        .alignment(Alignment::Center);
+                    f.render_widget(footer, main_layout[3]);
 
-                    if is_int {
-                        let input_val = if let Ok(s) = state.lock() { s.input_buffer.clone() } else { String::new() };
-                        let area = centered_rect(60, 20, f.size());
-                        f.render_widget(Clear, area);
-                        let block = Block::default()
-                            .title(" GOD MODE INTERVENTION ")
-                            .borders(Borders::ALL)
-                            .border_style(Style::default().fg(Color::Magenta));
-                        let input = Paragraph::new(format!("> {}", input_val))
-                            .block(block)
-                            .style(Style::default().fg(Color::White));
-                        f.render_widget(input, area);
-                    }
-
-                    if let Ok(s) = state.lock() {
-                        if s.show_event_details {
-                            if let Some(idx) = s.selected_event_index {
-                                if let Some(event) = s.events.get(idx) {
-                                    let area = centered_rect(80, 80, f.size());
-                                    f.render_widget(Clear, area);
-                                    let content = format!(
-                                        "ID: {}\nType: {}\nTimestamp: {}\nWorker: {}\nPayload:\n{}",
-                                        event.id, event.event_type, event.timestamp, event.worker_id,
-                                        serde_json::to_string_pretty(&serde_json::from_str::<serde_json::Value>(&event.payload).unwrap_or(serde_json::json!({"raw": event.payload}))).unwrap()
-                                    );
-                                    f.render_widget(
-                                        Paragraph::new(content)
-                                            .block(Block::default().title(" EVENT DETAILS ").borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)))
-                                            .wrap(Wrap { trim: false }),
-                                        area
-                                    );
-                                }
+                    if s.show_event_details {
+                        if let Some(idx) = s.selected_event_index {
+                            if let Some(event) = s.events.get(idx) {
+                                let area = centered_rect(80, 80, f.size());
+                                f.render_widget(Clear, area);
+                                let content = format!(
+                                    "ID: {}\nType: {}\nTimestamp: {}\nWorker: {}\nPayload:\n{}",
+                                    event.id, event.event_type, event.timestamp, event.worker_id,
+                                    serde_json::to_string_pretty(&serde_json::from_str::<serde_json::Value>(&event.payload).unwrap_or(serde_json::json!({"raw": event.payload}))).unwrap()
+                                );
+                                f.render_widget(
+                                    Paragraph::new(content)
+                                        .block(Block::default().title(" EVENT DETAILS ").borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)))
+                                        .wrap(Wrap { trim: false }),
+                                    area
+                                );
                             }
                         }
                     }
@@ -1592,10 +1551,15 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         )
         .split(popup_layout[1])[1]
 }
-fn render_node_recursive(graph: &petgraph::graph::DiGraph<relationship::NodeType, ()>, node_idx: petgraph::graph::NodeIndex, depth: usize, prefix: &str, is_last: bool, items: &mut Vec<ratatui::widgets::ListItem>) {
+fn render_node_recursive(graph: &petgraph::graph::DiGraph<relationship::NodeType, ()>, node_idx: petgraph::graph::NodeIndex, depth: usize, prefix: &str, is_last: bool, items: &mut Vec<ratatui::widgets::ListItem>, visited: &mut std::collections::HashSet<petgraph::graph::NodeIndex>) {
     use relationship::NodeType;
     use ratatui::style::{Color, Style, Modifier};
     use petgraph::visit::EdgeRef;
+
+    if visited.contains(&node_idx) {
+        return;
+    }
+    visited.insert(node_idx);
 
     let node = &graph[node_idx];
     
@@ -1636,7 +1600,7 @@ fn render_node_recursive(graph: &petgraph::graph::DiGraph<relationship::NodeType
                 items.push(ratatui::widgets::ListItem::new(format!("{}{}(calls) 󰜴 {}", new_prefix, rel_marker, partner_name)).style(Style::default().fg(Color::Magenta).add_modifier(Modifier::ITALIC)));
             }
         } else {
-            render_node_recursive(graph, child_idx, depth + 1, &new_prefix, child_is_last, items);
+            render_node_recursive(graph, child_idx, depth + 1, &new_prefix, child_is_last, items, visited);
         }
     }
 }
