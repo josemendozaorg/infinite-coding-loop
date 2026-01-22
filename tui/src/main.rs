@@ -72,6 +72,8 @@ struct AppState {
     recorded_missions: std::collections::HashSet<Uuid>,
     progress_stats: Option<ifcl_core::ProgressStats>,
     last_event_at: DateTime<Utc>,
+    last_event_type: String,
+    pulse: bool,
     feed_state: ListState,
     selected_event_index: Option<usize>,
     show_event_details: bool,
@@ -148,6 +150,8 @@ async fn main() -> Result<()> {
         recorded_missions: std::collections::HashSet::new(),
         progress_stats: None,
         last_event_at: Utc::now(),
+        last_event_type: "Waiting...".to_string(),
+        pulse: false,
         feed_state: ListState::default(),
         selected_event_index: None,
         show_event_details: false,
@@ -222,6 +226,9 @@ async fn main() -> Result<()> {
             
             if let Ok(mut s) = state_c.lock() {
                 s.last_event_at = Utc::now();
+                s.last_event_type = event.event_type.clone();
+                s.pulse = !s.pulse;
+
                 if Some(event.session_id) != s.current_session_id && event.session_id != Uuid::nil() {
                     continue;
                 }
@@ -965,10 +972,11 @@ async fn main() -> Result<()> {
                     let main_layout = Layout::default()
                         .direction(Direction::Vertical)
                         .constraints([
-                            Constraint::Length(3), 
-                            Constraint::Length(3), 
-                            Constraint::Min(0),
-                            Constraint::Length(1),
+                            Constraint::Length(3), // Header
+                            Constraint::Length(3), // Progress Bar
+                            Constraint::Min(0),    // Main content
+                            Constraint::Length(1), // Activity Bar
+                            Constraint::Length(1), // Debug/Footer
                         ].as_ref())
                         .split(f.size());
 
@@ -984,14 +992,21 @@ async fn main() -> Result<()> {
                     } else {
                         String::new()
                     };
-                    let header = Paragraph::new(format!(" OBJ: {:<20} | XP: {} | $: {} | ST: {:?}{}", 
+
+                    let pulse_indicator = if s.pulse { "󰐊" } else { "  " };
+                    let last_activity_secs = (Utc::now() - s.last_event_at).num_seconds();
+                    let activity_timer = format!(" ({}s ago)", last_activity_secs);
+
+                    let header = Paragraph::new(format!(" {} OBJ: {:<20} | XP: {} | $: {} | ST: {:?}{}{}", 
+                        pulse_indicator,
                         if s.wizard.goal.len() > 20 { format!("{}...", &s.wizard.goal[..17]) } else { s.wizard.goal.clone() },
-                        s.bank.xp, s.bank.coins, s.status, ctx_info))
+                        s.bank.xp, s.bank.coins, s.status, ctx_info, activity_timer))
                         .style(Style::default().fg(header_color).add_modifier(Modifier::BOLD))
                         .block(Block::default().title(" INFINITE CODING LOOP [v0.1.0] ").borders(Borders::ALL).border_style(Style::default().fg(Color::DarkGray)));
                     f.render_widget(header, main_layout[0]);
 
                     // --- Progress Bar ---
+                    // ... (unchanged gauge logic) ...
                     if let Some(stats) = &s.progress_stats {
                         let gauge = Gauge::default()
                             .block(Block::default().borders(Borders::ALL).title(" MISSION PROGRESS ").border_style(Style::default().fg(Color::DarkGray)))
@@ -1024,7 +1039,8 @@ async fn main() -> Result<()> {
                     } else {
                         vec![main_layout[2]]
                     };
-
+                    
+                    // ... (panels 1-6 unchanged) ...
                     // 1. ROSTER
                     if focus_mode == FocusMode::None || focus_mode == FocusMode::Roster {
                         let area = middle_chunks[if focus_mode == FocusMode::Roster { 0 } else { 0 }];
@@ -1182,6 +1198,13 @@ async fn main() -> Result<()> {
                         );
                     }
 
+                    // --- Activity Bar ---
+                    let last_activity_text = format!(" [SYSTEM PULSE] Last: {} | Trace: {}", s.last_event_type, s.events.last().map(|e| e.trace_id.to_string()).unwrap_or_default());
+                    let activity_bar = Paragraph::new(last_activity_text)
+                        .style(Style::default().fg(if last_activity_secs > 30 { Color::Red } else if last_activity_secs > 10 { Color::Yellow } else { Color::Green }))
+                        .alignment(Alignment::Left);
+                    f.render_widget(activity_bar, main_layout[3]);
+
                     let footer_text = if s.is_intervening {
                         " [ESC] Cancel | [ENTER] Send | MODE: INTERVENTION"
                     } else if s.show_event_details {
@@ -1192,7 +1215,7 @@ async fn main() -> Result<()> {
                     let footer = Paragraph::new(footer_text)
                         .style(Style::default().fg(Color::DarkGray))
                         .alignment(Alignment::Center);
-                    f.render_widget(footer, main_layout[3]);
+                    f.render_widget(footer, main_layout[4]);
 
                     if s.show_event_details {
                         if let Some(idx) = s.selected_event_index {
