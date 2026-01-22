@@ -12,6 +12,6 @@
 - [x] Async EventBus (`InMemoryEventBus`).
 - [x] Connect Store to Bus in `main.rs`.
 
-### Advanced (Pending)
-- [ ] Implement Replay mechanism (Time Travel).
-- [ ] Snapshotting for performance.
+### Advanced
+- [x] Implement Replay mechanism (Time Travel). (Implemented in TUI and Core replay logic)
+- [ ] Snapshotting for performance. (Planned for Phase 2)

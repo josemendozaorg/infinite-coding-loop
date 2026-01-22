@@ -18,26 +18,26 @@ Single source of truth for features and their status.
 - [DONE] - **F11 Marketplace Loader** - [Spec](features/11_marketplace_loader)
 - [DONE] - **F12 Main Menu Interactive** - [Spec](features/12_main_menu_interactive)
 - [DONE] - **F13 Setup Wizard UI** - [Spec](features/13_setup_wizard_ui)
+- [DONE] - **F34 Context Manager** - [Spec](features/34_context_manager)
+- [DONE] - **F38 Planner Worker** - [Spec](features/38_planner_worker)
 - [DONE] - **F39 Memory Manager** - [Spec](features/39_memory_manager)
 - [DONE] - **F40 Learning Manager** - [Spec](features/40_learning_manager)
 
 ## 🟡 In Progress
-- [IN PROGRESS] - **F01 User Onboarding CLI** - [Spec](features/01_user_onboarding_cli)
-- [IN PROGRESS] - **F02 Live Activity Feed** - [Spec](features/02_live_activity_feed)
-- [IN PROGRESS] - **F04 Mission Control Grid** - [Spec](features/04_mission_control_grid)
-- [IN PROGRESS] - **F09 Persistent History** - [Spec](features/09_persistent_history)
-- [IN PROGRESS] - **F10 Visual Relationship Map** - [Spec](features/10_visual_relationship_map)
-- [IN PROGRESS] - **F23 Structured Tracing** - [Spec](features/23_structured_tracing)
-- [IN PROGRESS] - **F24 System Logging** - [Spec](features/24_system_logging)
-- [IN PROGRESS] - **F25 Worker Transparency** - [Spec](features/25_worker_transparency)
-- [IN PROGRESS] - **F34 Context Manager** - [Spec](features/34_context_manager)
-- [IN PROGRESS] - **F38 Planner Worker** - [Spec](features/38_planner_worker)
+- [DONE] - **F01 User Onboarding CLI** - [Spec](features/01_user_onboarding_cli)
+- [DONE] - **F02 Live Activity Feed** - [Spec](features/02_live_activity_feed)
+- [DONE] - **F04 Mission Control Grid** - [Spec](features/04_mission_control_grid)
+- [DONE] - **F09 Persistent History** - [Spec](features/09_persistent_history)
+- [DONE] - **F10 Visual Relationship Map** - [Spec](features/10_visual_relationship_map)
+- [DONE] - **F23 Structured Tracing** - [Spec](features/23_structured_tracing)
+- [DONE] - **F24 System Logging** - [Spec](features/24_system_logging)
+- [DONE] - **F25 Worker Transparency** - [Spec](features/25_worker_transparency)
 
 
 ## 📋 Backlog (Prioritized)
 
 ### Phase 1: Cognitive Engine
-- [PLANNED] - **F41 Progress Manager** - [Spec](features/41_progress_manager)
+- [DONE] - **F41 Progress Manager** - [Spec](features/41_progress_manager)
 - [PLANNED] - **F47 Context Enricher** - [Spec](features/47_context_enricher)
 
 ### Phase 2: Native Worker Capability

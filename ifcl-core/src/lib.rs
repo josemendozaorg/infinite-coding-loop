@@ -33,6 +33,9 @@ pub use planner::*;
 pub use memory::*;
 
 pub mod memory;
+pub mod progress;
+
+pub use progress::{ProgressStats, ProgressManager, BasicProgressManager};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct LoopConfig {
@@ -556,3 +559,4 @@ mod sql_tests {
     }
 }
 pub mod learning;
+mod session_replay_tests;

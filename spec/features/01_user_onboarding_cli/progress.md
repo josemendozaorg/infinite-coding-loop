@@ -19,6 +19,6 @@
 - [x] Define and emit `MissionStarted` event. (`LoopStarted` and `MissionCreated` events exist)
 
 ### Tests
-- [ ] Unit test: CLI arg parsing.
+- [x] Unit test: CLI arg parsing.
 - [x] Unit test: Config loading defaults.
 - [x] Test: `MissionConfig` validation logic. (`wizard.rs` tests exist)

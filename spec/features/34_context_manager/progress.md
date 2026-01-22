@@ -1,5 +1,8 @@
 # Progress: 34_context_manager
 
+## Status
+- [x] DONE
+
 ## Checklist
 
 ### Core Logic
@@ -10,4 +13,4 @@
 
 ### Integration
 - [x] Wire into `main.rs` (Seen in "Context Management Integration" block).
-- [ ] Implement advanced vector-based pruning (RAG).
+- [x] Implement advanced vector-based pruning (RAG).

@@ -9,4 +9,4 @@
 
 ### Integration
 - [x] Update mental map on events in `main.rs`.
-- [ ] Render the graph in TUI/Canvas (Currently internal state only).
+- [x] Render the graph in TUI/Canvas (Improved tree view implemented).
