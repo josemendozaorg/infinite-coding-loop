@@ -9,14 +9,14 @@ use clap::Parser;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event as CEvent, KeyCode},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ifcl_core::{
-    Event, EventBus, EventStore, InMemoryEventBus, Mission, Task, TaskStatus, 
+    Event, EventStore, InMemoryEventBus, Mission, Task, TaskStatus, 
     CliExecutor, Bank, LoopStatus, SqliteEventStore, WorkerProfile, WorkerRole, LoopConfig,
     MarketplaceLoader, AppMode, MenuAction, MenuState, SetupWizard, WizardStep, LogPayload, ThoughtPayload,
-    WorkerOutputPayload, CliWorker, BasicOrchestrator,
-    groups::WorkerGroup, orchestrator::{WorkerRequest, Orchestrator},
+    WorkerOutputPayload, CliWorker,
+    groups::WorkerGroup, orchestrator::WorkerRequest,
     learning::{LearningManager, BasicLearningManager, Insight, Optimization, MissionOutcome}
 };
 use ratatui::{
@@ -1186,7 +1186,7 @@ async fn main() -> Result<()> {
                     // ... (panels 1-6 unchanged) ...
                     // 1. ROSTER
                     if focus_mode == FocusMode::None || focus_mode == FocusMode::Roster {
-                        let area = middle_chunks[if focus_mode == FocusMode::Roster { 0 } else { 0 }];
+                        let area = middle_chunks[0];
                         let worker_items: Vec<_> = s.workers.iter().map(|w| {
                             let symbol = match w.role { WorkerRole::Git => "󰊢", WorkerRole::Coder => "󰅩", WorkerRole::Architect => "󰉪", _ => "󰚩" };
                             ListItem::new(format!(" {} {}", symbol, w.name)).style(Style::default().fg(Color::Yellow))

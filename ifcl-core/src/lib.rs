@@ -572,4 +572,5 @@ mod sql_tests {
     }
 }
 pub mod learning;
+#[cfg(test)]
 mod session_replay_tests;

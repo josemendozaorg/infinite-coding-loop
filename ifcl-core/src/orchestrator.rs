@@ -75,7 +75,7 @@ impl Orchestrator for BasicOrchestrator {
     }
 
     async fn execute_task(&self, bus: std::sync::Arc<dyn crate::EventBus>, mission_id: Uuid, task_id: Uuid, worker: &dyn crate::Worker) -> anyhow::Result<String> {
-        let (task, workspace, session_id) = {
+        let (task, workspace, _session_id) = {
             let missions = self.missions.read().await;
             let mission = missions.iter().find(|m| m.id == mission_id).ok_or_else(|| anyhow::anyhow!("Mission not found"))?;
             let task = mission.tasks.iter().find(|t| t.id == task_id).ok_or_else(|| anyhow::anyhow!("Task not found"))?;

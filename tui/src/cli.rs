@@ -28,28 +28,28 @@ mod tests {
 
     #[test]
     fn test_parse_goal() {
-        let args = CliArgs::try_parse_from(&["test", "--goal", "Build a site"]).unwrap();
+        let args = CliArgs::try_parse_from(["test", "--goal", "Build a site"]).unwrap();
         assert_eq!(args.goal, Some("Build a site".to_string()));
         assert!(args.is_headless());
     }
 
     #[test]
     fn test_parse_coins() {
-        let args = CliArgs::try_parse_from(&["test", "--max-coins", "50"]).unwrap();
+        let args = CliArgs::try_parse_from(["test", "--max-coins", "50"]).unwrap();
         assert_eq!(args.max_coins, Some(50));
         assert!(!args.is_headless()); // Goal is missing, so not automatically headless unless flag is set
     }
 
     #[test]
     fn test_parse_headless_flag() {
-        let args = CliArgs::try_parse_from(&["test", "--headless"]).unwrap();
+        let args = CliArgs::try_parse_from(["test", "--headless"]).unwrap();
         assert!(args.headless);
         assert!(args.is_headless());
     }
 
     #[test]
     fn test_parse_no_args() {
-        let args = CliArgs::try_parse_from(&["test"]).unwrap();
+        let args = CliArgs::try_parse_from(["test"]).unwrap();
         assert_eq!(args.goal, None);
         assert!(!args.headless);
         assert!(!args.is_headless());
