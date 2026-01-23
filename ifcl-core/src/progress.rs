@@ -61,6 +61,7 @@ mod tests {
             id: Uuid::new_v4(),
             name: "Empty Mission".to_string(),
             tasks: vec![],
+            workspace_path: None,
         };
         let stats = manager.calculate_progress(&mission, Utc::now());
         assert_eq!(stats.progress_percentage, 100.0);
@@ -77,6 +78,7 @@ mod tests {
                 Task { id: Uuid::new_v4(), name: "T1".to_string(), description: "".to_string(), status: TaskStatus::Success, assigned_worker: None },
                 Task { id: Uuid::new_v4(), name: "T2".to_string(), description: "".to_string(), status: TaskStatus::Pending, assigned_worker: None },
             ],
+            workspace_path: None,
         };
         let stats = manager.calculate_progress(&mission, Utc::now());
         assert_eq!(stats.progress_percentage, 50.0);
@@ -93,6 +95,7 @@ mod tests {
             tasks: vec![
                 Task { id: Uuid::new_v4(), name: "T1".to_string(), description: "".to_string(), status: TaskStatus::Pending, assigned_worker: None },
             ],
+            workspace_path: None,
         };
         
         // Mock a timestamp from 10 minutes ago
@@ -112,6 +115,7 @@ mod tests {
             tasks: vec![
                 Task { id: Uuid::new_v4(), name: "T1".to_string(), description: "".to_string(), status: TaskStatus::Success, assigned_worker: None },
             ],
+            workspace_path: None,
         };
         
         let old_timestamp = Utc::now() - Duration::minutes(10);

@@ -12,10 +12,11 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ifcl_core::{
-    Event, EventBus, EventStore, InMemoryEventBus, Mission, TaskStatus, 
+    Event, EventBus, EventStore, InMemoryEventBus, Mission, Task, TaskStatus, 
     CliExecutor, Bank, LoopStatus, SqliteEventStore, WorkerProfile, WorkerRole, LoopConfig,
     MarketplaceLoader, AppMode, MenuAction, MenuState, SetupWizard, WizardStep, LogPayload, ThoughtPayload,
-    groups::WorkerGroup, orchestrator::WorkerRequest,
+    WorkerOutputPayload, CliWorker, BasicOrchestrator,
+    groups::WorkerGroup, orchestrator::{WorkerRequest, Orchestrator},
     learning::{LearningManager, BasicLearningManager, Insight, Optimization, MissionOutcome}
 };
 use ratatui::{
@@ -94,26 +95,99 @@ struct SimulationSnapshot {
 async fn main() -> Result<()> {
     let _args = CliArgs::parse();
 
-    // 1. Check if Headless Mode should be skipped
+    // 1. Initialize Infrastructure (Shared)
+    let bus: Arc<dyn ifcl_core::EventBus> = Arc::new(InMemoryEventBus::new(200));
+    let store = Arc::new(SqliteEventStore::new("sqlite://ifcl.db?mode=rwc").await?);
+    let learning_manager = Arc::new(BasicLearningManager::new());
+    let memory_store: Arc<dyn ifcl_core::MemoryStore> = Arc::new(ifcl_core::memory::InMemoryMemoryStore::new());
+    let orchestrator: Arc<dyn ifcl_core::Orchestrator> = Arc::new(ifcl_core::BasicOrchestrator::new());
+
+    // 2. Check for Headless Mode
     if _args.is_headless() {
         println!("🚀 Starting Infinite Coding Loop in Headless Mode...");
-        println!("Objective: {}", _args.goal.clone().unwrap_or_else(|| "General Autonomy".to_string()));
-        println!("Budget: {} coins", _args.max_coins.unwrap_or(100));
+        let goal = _args.goal.clone().unwrap_or_else(|| "General Autonomy".to_string());
+        println!("Objective: {}", goal);
+        
+        let workspace = _args.workspace.clone();
+        if let Some(ws) = &workspace {
+             println!("Workspace: {}", ws);
+        }
+
+        // Create initial mission
+        let mission = orchestrator.create_mission(
+            &goal,
+            vec![
+                ("Initialize Project".to_string(), "Initialize workspace and create basic structure".to_string()),
+                ("Create Readme".to_string(), "echo '# Infinite Coding Loop Benchmark' > README.md".to_string())
+            ],
+            workspace.clone()
+        ).await?;
+
+        println!("Mission Created: {} (ID: {})", mission.name, mission.id);
+
+        // Headless Execution Loop
+        let worker = CliWorker::new("Headless-Bot", WorkerRole::Coder);
+        let bus_c = Arc::clone(&bus);
+        
+        // Subscribe to print output
+        let mut rx = bus.subscribe();
+        tokio::spawn(async move {
+            while let Ok(event) = rx.recv().await {
+                if event.event_type == "WorkerOutput" {
+                    if let Ok(payload) = serde_json::from_str::<WorkerOutputPayload>(&event.payload) {
+                        print!("{}", payload.content); // Stream to stdout
+                    }
+                }
+            }
+        });
+
+        loop {
+            // Check for pending tasks
+            let missions = orchestrator.get_missions().await?;
+            let mut pending_task = None;
+            let mut all_done = true;
+
+            for m in missions {
+                for t in m.tasks {
+                    if t.status == TaskStatus::Pending {
+                        pending_task = Some((m.id, t.id));
+                        all_done = false;
+                        break;
+                    }
+                    if t.status == TaskStatus::Running {
+                        all_done = false; 
+                    }
+                    if t.status == TaskStatus::Failure {
+                        println!("❌ Task Failed: {}", t.name);
+                        return Ok(());
+                    }
+                }
+                if pending_task.is_some() { break; }
+            }
+
+            if let Some((mid, tid)) = pending_task {
+                println!("▶ Executing Task...");
+                match orchestrator.execute_task(Arc::clone(&bus_c), mid, tid, &worker).await {
+                    Ok(out) => println!("✅ Task Success:\n{}", out),
+                    Err(e) => println!("❌ Task Execution Failed: {}", e),
+                }
+            } else if all_done {
+                println!("✨ All tasks completed successfully.");
+                break;
+            }
+
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        }
+
         return Ok(());
     }
 
-    // 1. Setup Terminal
+    // 3. Setup Terminal (GUI Mode)
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
-
-    // 2. Initialize Infrastructure
-    let bus = Arc::new(InMemoryEventBus::new(200));
-    let store = Arc::new(SqliteEventStore::new("sqlite://ifcl.db?mode=rwc").await?);
-    let learning_manager = Arc::new(BasicLearningManager::new());
-    let memory_store: Arc<dyn ifcl_core::MemoryStore> = Arc::new(ifcl_core::memory::InMemoryMemoryStore::new());
     
     // We don't load history at the top level anymore. 
     // It will be loaded when a session is selected.
@@ -136,6 +210,9 @@ async fn main() -> Result<()> {
             }
             if let Some(c) = _args.max_coins {
                 w.budget_coins = c;
+            }
+            if let Some(ws) = _args.workspace {
+                w.workspace_path = ws;
             }
             w
         },
@@ -167,57 +244,59 @@ async fn main() -> Result<()> {
     let bus_reward = Arc::clone(&bus); // Keep this for the reward publishing inside the loop
     let learning_c = Arc::clone(&learning_manager);
     
-    // Create marketplace directories if they don't exist
-    let _ = std::fs::create_dir_all("marketplace/workers");
-    let _ = std::fs::create_dir_all("marketplace/missions");
-
-    // Load Marketplace items
-    let mut startup_tasks = Vec::new();
+    // 4. Load Marketplace items (Async)
     let m_bus = Arc::clone(&bus);
+    let s_c_marketplace = Arc::clone(&state_c);
     
-    // Load Workers
-    let marketplace_workers = MarketplaceLoader::load_workers("marketplace/workers");
-    for worker in marketplace_workers {
-        let m_bus_w = Arc::clone(&m_bus);
-        let worker_cloned: WorkerProfile = worker.clone();
-        let s_c = Arc::clone(&state_c);
-        startup_tasks.push(tokio::spawn(async move {
-            let sid = {
-                s_c.lock().unwrap().current_session_id.unwrap_or_default()
-            };
-            let _ = m_bus_w.publish(Event {
-                id: Uuid::new_v4(),
-                session_id: sid,
-                trace_id: Uuid::new_v4(),
-                timestamp: Utc::now(),
-                worker_id: "system".to_string(),
-                event_type: "WorkerJoined".to_string(),
-                payload: serde_json::to_string(&worker_cloned).unwrap(),
-            }).await;
-        }));
-    }
+    tokio::spawn(async move {
+        // Create marketplace directories if they don't exist
+        let _ = std::fs::create_dir_all("marketplace/workers");
+        let _ = std::fs::create_dir_all("marketplace/missions");
 
-    // Load Missions
-    let marketplace_missions = MarketplaceLoader::load_missions("marketplace/missions");
-    for mission in marketplace_missions {
-        let m_bus_m = Arc::clone(&m_bus);
-        let mission_cloned: Mission = mission.clone();
-        let s_c = Arc::clone(&state_c);
-        startup_tasks.push(tokio::spawn(async move {
-            let sid = {
-                s_c.lock().unwrap().current_session_id.unwrap_or_default()
-            };
-            let _ = m_bus_m.publish(Event {
-                id: Uuid::new_v4(),
-                session_id: sid,
-                trace_id: Uuid::new_v4(),
-                timestamp: Utc::now(),
-                worker_id: "system".to_string(),
-                event_type: "MissionCreated".to_string(),
-                payload: serde_json::to_string(&mission_cloned).unwrap(),
-            }).await;
-        }));
-    }
+        // Load Workers
+        let marketplace_workers = MarketplaceLoader::load_workers("marketplace/workers");
+        for worker in marketplace_workers {
+            let m_bus_w = Arc::clone(&m_bus);
+            let worker_cloned: WorkerProfile = worker.clone();
+            let s_c = Arc::clone(&s_c_marketplace);
+            tokio::spawn(async move {
+                let sid = {
+                    s_c.lock().unwrap().current_session_id.unwrap_or_default()
+                };
+                let _ = m_bus_w.publish(Event {
+                    id: Uuid::new_v4(),
+                    session_id: sid,
+                    trace_id: Uuid::new_v4(),
+                    timestamp: Utc::now(),
+                    worker_id: "system".to_string(),
+                    event_type: "WorkerJoined".to_string(),
+                    payload: serde_json::to_string(&worker_cloned).unwrap(),
+                }).await;
+            });
+        }
+
+        // Load Missions
+        let marketplace_missions = MarketplaceLoader::load_missions("marketplace/missions");
+        for mission in marketplace_missions {
+            let m_bus_m = Arc::clone(&m_bus);
+            let mission_cloned: Mission = mission.clone();
+            let s_c = Arc::clone(&s_c_marketplace);
+            tokio::spawn(async move {
+                let sid = {
+                    s_c.lock().unwrap().current_session_id.unwrap_or_default()
+                };
+                let _ = m_bus_m.publish(Event {
+                    id: Uuid::new_v4(),
+                    session_id: sid,
+                    trace_id: Uuid::new_v4(),
+                    timestamp: Utc::now(),
+                    worker_id: "system".to_string(),
+                    event_type: "MissionCreated".to_string(),
+                    payload: serde_json::to_string(&mission_cloned).unwrap(),
+                }).await;
+            });
+        }
+    });
 
     tokio::spawn(async move {
         let mut sub = bus_c.subscribe();
@@ -293,6 +372,31 @@ async fn main() -> Result<()> {
                         });
                         if s.ai_outputs.len() > 50 {
                             s.ai_outputs.remove(0);
+                        }
+                    }
+                    "WorkerOutput" => {
+                        if let Ok(payload) = serde_json::from_str::<WorkerOutputPayload>(&event.payload) {
+                            if let Some(latest) = s.ai_outputs.last_mut() {
+                                if latest.worker_id == event.worker_id {
+                                    latest.content.push_str(&payload.content);
+                                    latest.content.push('\n');
+                                } else {
+                                    s.ai_outputs.push(AiOutput {
+                                        timestamp: event.timestamp,
+                                        worker_id: event.worker_id.clone(),
+                                        content: payload.content,
+                                    });
+                                }
+                            } else {
+                                s.ai_outputs.push(AiOutput {
+                                    timestamp: event.timestamp,
+                                    worker_id: event.worker_id.clone(),
+                                    content: payload.content,
+                                });
+                            }
+                            if s.ai_outputs.len() > 50 {
+                                s.ai_outputs.remove(0);
+                            }
                         }
                     }
                     "LoopStatusChanged" => {
@@ -804,7 +908,44 @@ async fn main() -> Result<()> {
         }
     });
 
-    // 5. Main TUI Loop
+    // 5. Background Task Runner (The Real Loop Engine)
+    let bus_runner = Arc::clone(&bus);
+    let state_runner = Arc::clone(&state);
+    let orch_runner = Arc::clone(&orchestrator);
+    
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+            
+            let (target_mission_id, target_task_id) = {
+                let s = state_runner.lock().unwrap();
+                if s.status != LoopStatus::Running { continue; }
+                
+                let mut found = None;
+                for mission in &s.missions {
+                    for task in &mission.tasks {
+                        if task.status == TaskStatus::Pending {
+                            found = Some((mission.id, task.id));
+                            break;
+                        }
+                    }
+                    if found.is_some() { break; }
+                }
+                found
+            }.unwrap_or((Uuid::nil(), Uuid::nil()));
+
+            if target_mission_id != Uuid::nil() {
+                // Execute task
+                let bus_exec = Arc::clone(&bus_runner);
+                let orch_exec = Arc::clone(&orch_runner);
+                let worker = CliWorker::new("Loop-Bot", WorkerRole::Coder); // Default real worker
+                
+                let _ = orch_exec.execute_task(bus_exec, target_mission_id, target_task_id, &worker).await;
+            }
+        }
+    });
+
+    // 6. TUI Rendering Loop
     loop {
         terminal.draw(|f| {
             // Check AppMode first
@@ -905,16 +1046,17 @@ async fn main() -> Result<()> {
                         )
                         .split(f.size());
 
-                    let (step, goal, stack, team, budget, avail_groups, sel_grp_idx) = if let Ok(s) = state.lock() {
-                        (s.wizard.current_step.clone(), s.wizard.goal.clone(), s.wizard.stack.clone(), s.wizard.team_size, s.wizard.budget_coins, s.available_groups.clone(), s.wizard.selected_group_index)
-                    } else { (WizardStep::Goal, String::new(), String::new(), 0, 0, Vec::new(), 0) };
+                    let (step, goal, stack, workspace, team, budget, avail_groups, sel_grp_idx) = if let Ok(s) = state.lock() {
+                        (s.wizard.current_step.clone(), s.wizard.goal.clone(), s.wizard.stack.clone(), s.wizard.workspace_path.clone(), s.wizard.team_size, s.wizard.budget_coins, s.available_groups.clone(), s.wizard.selected_group_index)
+                    } else { (WizardStep::Goal, String::new(), String::new(), String::new(), 0, 0, Vec::new(), 0) };
 
                     let step_text = match step {
-                        WizardStep::Goal => "Step 1/5: Define Objective",
-                        WizardStep::Stack => "Step 2/5: Technology Stack",
-                        WizardStep::Team => "Step 3/5: Squad Size",
-                        WizardStep::Budget => "Step 4/5: Resource Credits",
-                        WizardStep::Summary => "Step 5/5: Final Review",
+                        WizardStep::Goal => "Step 1/6: Define Objective",
+                        WizardStep::Stack => "Step 2/6: Technology Stack",
+                        WizardStep::Workspace => "Step 3/6: Project Workspace",
+                        WizardStep::Team => "Step 4/6: Squad Size",
+                        WizardStep::Budget => "Step 5/6: Resource Credits",
+                        WizardStep::Summary => "Step 6/6: Final Review",
                     };
 
                     f.render_widget(
@@ -927,6 +1069,7 @@ async fn main() -> Result<()> {
                     let content = match step {
                         WizardStep::Goal => format!("Define your mission goal:\n\n> {}", goal),
                         WizardStep::Stack => format!("Selected Technology:\n\n [ {} ]", stack),
+                        WizardStep::Workspace => format!("Project output directory:\n (Where files will be built)\n\n> {}", workspace),
                         WizardStep::Team => {
                             let mut s = String::from("Select a Worker Team:\n\n");
                             for (i, grp) in avail_groups.iter().enumerate() {
@@ -947,8 +1090,8 @@ async fn main() -> Result<()> {
                         },
                         WizardStep::Budget => format!("Initial Credit Allotment:\n\n [ {} ] Coins", budget),
                         WizardStep::Summary => format!(
-                            "Mission: {}\nStack: {}\nTeam: {} Workers\nBudget: {} Coins\n\n[ PRESS ENTER TO START ]",
-                            goal, stack, team, budget
+                            "Mission: {}\nStack: {}\nWorkspace: {}\nTeam: {} Workers\nBudget: {} Coins\n\n[ PRESS ENTER TO START ]",
+                            goal, stack, workspace, team, budget
                         ),
                     };
 
@@ -1294,9 +1437,42 @@ async fn main() -> Result<()> {
                             KeyCode::Esc => s.mode = AppMode::MainMenu,
                             KeyCode::Enter => {
                                 if s.wizard.current_step == WizardStep::Summary {
-                                    s.current_session_id = Some(Uuid::new_v4());
+                                    let sid = Uuid::new_v4();
+                                    s.current_session_id = Some(sid);
                                     s.mode = AppMode::Running;
                                     s.status = LoopStatus::Running;
+                                    
+                                    // Publish real mission creation event
+                                    let bus_m = Arc::clone(&bus);
+                                    let goal = s.wizard.goal.clone();
+                                    let workspace = if s.wizard.workspace_path.is_empty() { None } else { Some(s.wizard.workspace_path.clone()) };
+                                    
+                                    tokio::spawn(async move {
+                                        let mission = Mission {
+                                            id: Uuid::new_v4(),
+                                            name: goal,
+                                            tasks: vec![
+                                                Task {
+                                                    id: Uuid::new_v4(),
+                                                    name: "Initialize Project".to_string(),
+                                                    description: "Initialize workspace and create basic structure".to_string(),
+                                                    status: TaskStatus::Pending,
+                                                    assigned_worker: None,
+                                                }
+                                            ],
+                                            workspace_path: workspace,
+                                        };
+                                        let _ = bus_m.publish(Event {
+                                            id: Uuid::new_v4(),
+                                            session_id: sid,
+                                            trace_id: Uuid::new_v4(),
+                                            timestamp: Utc::now(),
+                                            worker_id: "system".to_string(),
+                                            event_type: "MissionCreated".to_string(),
+                                            payload: serde_json::to_string(&mission).unwrap(),
+                                        }).await;
+                                    });
+
                                 } else {
                                     let _ = s.wizard.next();
                                 }
@@ -1304,6 +1480,8 @@ async fn main() -> Result<()> {
                             KeyCode::Backspace => {
                                 if s.wizard.current_step == WizardStep::Goal {
                                     s.wizard.goal.pop();
+                                } else if s.wizard.current_step == WizardStep::Workspace {
+                                    s.wizard.workspace_path.pop();
                                 } else {
                                     s.wizard.prev();
                                 }
@@ -1324,6 +1502,8 @@ async fn main() -> Result<()> {
                             KeyCode::Char(c) => {
                                 if s.wizard.current_step == WizardStep::Goal {
                                     s.wizard.goal.push(c);
+                                } else if s.wizard.current_step == WizardStep::Workspace {
+                                    s.wizard.workspace_path.push(c);
                                 }
                             }
                             _ => {}
@@ -1543,7 +1723,12 @@ async fn main() -> Result<()> {
             }
         }
     }
-    disable_raw_mode()?;
+    // 3. Setup Terminal (GUI Mode)
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
     terminal.show_cursor()?;
     Ok(())

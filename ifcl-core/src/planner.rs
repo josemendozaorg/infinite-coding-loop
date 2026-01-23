@@ -44,6 +44,7 @@ impl Planner for BasicPlanner {
                     assigned_worker: Some("Architect".to_string()),
                 },
             ],
+            workspace_path: None,
         });
 
         // Mission 2: Initial Setup
@@ -59,6 +60,7 @@ impl Planner for BasicPlanner {
                     assigned_worker: Some("Git-Bot".to_string()),
                 },
             ],
+            workspace_path: None,
         });
 
         missions
@@ -147,6 +149,7 @@ mod tests {
                 status: TaskStatus::Failure,
                 assigned_worker: None,
             }],
+            workspace_path: None,
         };
         let failed_id = mission.tasks[0].id;
         let replanned = planner.replan_on_failure("goal", &mission, failed_id).await;

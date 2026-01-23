@@ -9,6 +9,9 @@ pub struct CliArgs {
     #[arg(short, long)]
     pub max_coins: Option<u64>,
 
+    #[arg(short, long)]
+    pub workspace: Option<String>,
+
     #[arg(long)]
     pub headless: bool,
 }

@@ -34,8 +34,12 @@ pub use memory::*;
 
 pub mod memory;
 pub mod progress;
+pub mod workspace;
+pub mod cli_worker;
 
 pub use progress::{ProgressStats, ProgressManager, BasicProgressManager};
+pub use workspace::*;
+pub use cli_worker::*;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct LoopConfig {
@@ -59,6 +63,12 @@ pub struct WorkerProfile {
     pub name: String,
     pub role: WorkerRole,
     pub model: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct WorkerOutputPayload {
+    pub content: String,
+    pub is_stderr: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy)]
@@ -90,6 +100,7 @@ pub struct Mission {
     pub id: Uuid,
     pub name: String,
     pub tasks: Vec<Task>,
+    pub workspace_path: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
@@ -105,10 +116,12 @@ impl Bank {
     }
 }
 
+#[async_trait::async_trait]
 pub trait Worker: Send + Sync {
     fn id(&self) -> &str;
     fn role(&self) -> WorkerRole;
     fn metadata(&self) -> &WorkerProfile;
+    async fn execute(&self, bus: std::sync::Arc<dyn EventBus>, task: &Task, workspace_path: &str) -> anyhow::Result<String>;
 }
 
 #[async_trait::async_trait]
@@ -349,7 +362,7 @@ mod tests {
         let orch = BasicOrchestrator::new();
         let mission = orch.create_mission("Initial Setup", vec![
             ("Init Repo".to_string(), "Set up git repository".to_string()),
-        ]).await.unwrap();
+        ], None).await.unwrap();
 
         assert_eq!(mission.tasks.len(), 1);
         assert_eq!(mission.tasks[0].status, TaskStatus::Pending);
@@ -360,7 +373,7 @@ mod tests {
         let orch = BasicOrchestrator::new();
         let mission = orch.create_mission("Alpha", vec![
             ("Task 1".to_string(), "Desc 1".to_string()),
-        ]).await.unwrap();
+        ], None).await.unwrap();
 
         let task_id = mission.tasks[0].id;
         orch.update_task_status(mission.id, task_id, TaskStatus::Running).await.unwrap();

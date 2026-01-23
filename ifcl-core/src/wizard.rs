@@ -6,6 +6,7 @@ use crate::LoopConfig;
 pub enum WizardStep {
     Goal,
     Stack,
+    Workspace,
     Team,
     Budget,
     Summary,
@@ -15,6 +16,7 @@ pub struct SetupWizard {
     pub current_step: WizardStep,
     pub goal: String,
     pub stack: String,
+    pub workspace_path: String,
     pub team_size: usize,
     pub budget_coins: u64,
     pub selected_group_index: usize,
@@ -26,6 +28,7 @@ impl SetupWizard {
             current_step: WizardStep::Goal,
             goal: String::new(),
             stack: "Rust".to_string(), // Default
+            workspace_path: ".".to_string(),
             team_size: 2,
             budget_coins: 100,
             selected_group_index: 0,
@@ -49,7 +52,13 @@ impl SetupWizard {
                 }
                 self.current_step = WizardStep::Stack;
             }
-            WizardStep::Stack => self.current_step = WizardStep::Team,
+            WizardStep::Stack => self.current_step = WizardStep::Workspace,
+            WizardStep::Workspace => {
+                if self.workspace_path.trim().is_empty() {
+                    return Err("Workspace path cannot be empty".to_string());
+                }
+                self.current_step = WizardStep::Team;
+            }
             WizardStep::Team => self.current_step = WizardStep::Budget,
             WizardStep::Budget => self.current_step = WizardStep::Summary,
             WizardStep::Summary => (),
@@ -61,7 +70,8 @@ impl SetupWizard {
         match self.current_step {
             WizardStep::Goal => (),
             WizardStep::Stack => self.current_step = WizardStep::Goal,
-            WizardStep::Team => self.current_step = WizardStep::Stack,
+            WizardStep::Workspace => self.current_step = WizardStep::Stack,
+            WizardStep::Team => self.current_step = WizardStep::Workspace,
             WizardStep::Budget => self.current_step = WizardStep::Team,
             WizardStep::Summary => self.current_step = WizardStep::Budget,
         }
@@ -92,11 +102,18 @@ mod tests {
         assert_eq!(wizard.current_step, WizardStep::Stack);
 
         wizard.next().unwrap();
+        assert_eq!(wizard.current_step, WizardStep::Workspace);
+        wizard.workspace_path = "/tmp".to_string();
+        wizard.next().unwrap();
         wizard.next().unwrap();
         wizard.next().unwrap();
         assert_eq!(wizard.current_step, WizardStep::Summary);
 
         wizard.prev();
         assert_eq!(wizard.current_step, WizardStep::Budget);
+        wizard.prev();
+        assert_eq!(wizard.current_step, WizardStep::Team);
+        wizard.prev();
+        assert_eq!(wizard.current_step, WizardStep::Workspace);
     }
 }

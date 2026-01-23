@@ -47,6 +47,7 @@ Single source of truth for features and their status.
 - [PLANNED] - **F42 Linter Worker** - [Spec](features/42_linter_worker)
 - [PLANNED] - **F43 Compiler Worker** - [Spec](features/43_compiler_worker)
 - [PLANNED] - **F48 CLI Environment Verifier** - [Spec](features/48_cli_environment_verifier)
+- [IN PROGRESS] - **F49 Real Loop Engine** - [Spec](features/49_real_loop_engine)
 - [PLANNED] - **F44 Tests Runner Worker** - [Spec](features/44_test_runner)
 
 ### Phase 3: Loop Autonomy & Web
