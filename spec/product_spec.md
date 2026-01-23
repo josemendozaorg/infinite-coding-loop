@@ -14,6 +14,7 @@ The **Infinite Coding Loop** is an autonomous, self-evolving software developmen
 ## 3. System Scope
 - **Inputs:** A high-level Goal ("Build a Blog"), a Worker Profile ("Team A"), and Constraints ("Max $10 budget").
 - **Outputs:** A Git Repository with formulated code, tests, and deployment scripts. The system runs indefinitely to maintain and improve this output.
+- **Integration:** Seamlessly verifies and manipulates the external environment, treating tools like `git`, `gh`, `docker`, and AI CLIs (`opencode`, `claude`) as first-class primitives.
 - **Platform:** Native Desktop Application (Rust) with TUI, exposing an API for future Web/Mobile clients.
 
 ## 4. Documentation Suite
