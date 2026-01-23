@@ -81,15 +81,6 @@ struct AppState {
     focus_mode: FocusMode,
 }
 
-struct SimulationSnapshot {
-    sid: Uuid,
-    missions: Vec<Mission>,
-    workers: Vec<WorkerProfile>,
-    goal: String,
-    budget: u64,
-    selected_workers: Vec<WorkerProfile>,
-    all_events: Vec<Event>,
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -456,6 +447,18 @@ async fn main() -> Result<()> {
                             }
                         }
                     }
+                    "Log" => {
+                         if let Ok(payload) = serde_json::from_str::<LogPayload>(&event.payload) {
+                             s.last_event_type = format!("{}: {}", payload.level, payload.message).chars().take(40).collect();
+                             // Also push to AI terminal for visibility
+                             s.ai_outputs.push(AiOutput {
+                                 timestamp: event.timestamp,
+                                 worker_id: event.worker_id.clone(),
+                                 content: format!("LOG [{}]: {}", payload.level, payload.message),
+                             });
+                             if s.ai_outputs.len() > 50 { s.ai_outputs.remove(0); }
+                         }
+                    }
                     _ => {}
                 }
 
@@ -523,391 +526,6 @@ async fn main() -> Result<()> {
         }
     });
 
-    // 4. Mission Engine (Simulated + Real CLI)
-    let bus_simulation = Arc::clone(&bus);
-    let state_sim_monitor = Arc::clone(&state);
-    
-    // Async helper for pausing
-    async fn check_pause_async(state: Arc<Mutex<AppState>>) {
-        loop {
-            {
-                if let Ok(s) = state.lock() {
-                    if s.status == LoopStatus::Running && s.mode == AppMode::Running { break; }
-                }
-            }
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        }
-    }
-
-    tokio::spawn(async move {
-        loop {
-            // Wait for App to be in Running mode and Unpaused
-            check_pause_async(Arc::clone(&state_sim_monitor)).await;
-
-            let snapshot: SimulationSnapshot = {
-                let s = state_sim_monitor.lock().unwrap();
-                let grp_workers = if let Some(grp) = s.available_groups.get(s.wizard.selected_group_index) {
-                     grp.workers.clone()
-                } else {
-                     Vec::new()
-                };
-                SimulationSnapshot {
-                    sid: s.current_session_id.unwrap_or_default(),
-                    missions: s.missions.clone(),
-                    workers: s.workers.clone(),
-                    goal: s.wizard.goal.clone(),
-                    budget: s.wizard.budget_coins,
-                    selected_workers: grp_workers,
-                    all_events: s.events.clone(),
-                }
-            };
-            
-            let SimulationSnapshot { sid, missions, workers, goal, budget, selected_workers, all_events } = snapshot;
-
-            if sid == Uuid::nil() {
-                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                continue;
-            }
-
-            // Step 1: Handle Infrastructure/Context setup if missing
-            if missions.is_empty() {
-                // Check if LoopStarted exists (simulated by checking if we have goal)
-                // In a real system we'd check event store. Here we just push if empty.
-                let _ = bus_simulation.publish(Event {
-                    id: Uuid::new_v4(),
-                    session_id: sid,
-                    trace_id: Uuid::new_v4(),
-                    timestamp: Utc::now(),
-                    worker_id: "system".to_string(),
-                    event_type: "LoopStarted".to_string(),
-                    payload: serde_json::to_string(&LoopConfig { goal: goal.clone(), max_coins: Some(budget) }).unwrap(),
-                }).await;
-
-                // Step 2: Ensure Workers exist
-                if workers.is_empty() {
-                    let startup_workers = if !selected_workers.is_empty() {
-                        selected_workers
-                    } else {
-                        vec![
-                            WorkerProfile { name: "Architect".to_string(), role: WorkerRole::Architect, model: Some("gemini".to_string()) },
-                            WorkerProfile { name: "Git-Bot".to_string(), role: WorkerRole::Git, model: None },
-                        ]
-                    };
-                    for w in startup_workers {
-                        let _ = bus_simulation.publish(Event {
-                            id: Uuid::new_v4(),
-                            session_id: sid,
-                            trace_id: Uuid::new_v4(),
-                            timestamp: Utc::now(),
-                            worker_id: "system".to_string(),
-                            event_type: "WorkerJoined".to_string(), payload: serde_json::to_string(&w).unwrap(),
-                        }).await;
-                    }
-                }
-
-                // Step 3: Create Initial Missions via Planner
-                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                use ifcl_core::planner::{LLMPlanner, Planner};
-                let planner = LLMPlanner { executor: ifcl_core::CliExecutor::new("gemini".to_string()) };
-                let generated_missions = planner.generate_initial_missions(&goal).await;
-
-                if let Some(mission) = generated_missions.first() {
-                    let _ = bus_simulation.publish(Event {
-                        id: Uuid::new_v4(),
-                        session_id: sid,
-                        trace_id: Uuid::new_v4(),
-                        timestamp: Utc::now(),
-                        worker_id: "system".to_string(),
-                        event_type: "MissionCreated".to_string(), 
-                        payload: serde_json::to_string(mission).unwrap(),
-                    }).await;
-                    
-                    // Log the planning action
-                    let _ = bus_simulation.publish(Event {
-                        id: Uuid::new_v4(),
-                        session_id: sid,
-                        trace_id: Uuid::new_v4(),
-                        timestamp: Utc::now(),
-                        worker_id: "system".to_string(),
-                        event_type: "Log".to_string(),
-                        payload: serde_json::to_string(&LogPayload {
-                            level: "INFO".to_string(),
-                            message: format!("Planner generated {} initial missions", generated_missions.len()),
-                        }).unwrap(),
-                    }).await;
-                }
-
-                // --- CONTEXT MANAGEMENT INTEGRATION ---
-                // --------------------------------------
-                
-                tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
-
-                // Simulate collaboration: Architect calls for Git assistance
-                let req = WorkerRequest {
-                    requester_id: "Architect".to_string(),
-                    target_role: "Git-Bot".to_string(),
-                    context: "Need to initialize the repository structure.".to_string(),
-                };
-                let _ = bus_simulation.publish(Event {
-                    id: Uuid::new_v4(),
-                    session_id: sid,
-                    trace_id: Uuid::new_v4(),
-                    timestamp: Utc::now(),
-                    worker_id: "system".to_string(),
-                    event_type: "WorkerRequestAssistance".to_string(),
-                    payload: serde_json::to_string(&req).unwrap(),
-                }).await;
-
-                // Log the request for visibility in the FEED
-                let log = LogPayload { level: "INFO".to_string(), message: "Architect requested assistance from Git-Bot".to_string() };
-                let _ = bus_simulation.publish(Event {
-                    id: Uuid::new_v4(),
-                    session_id: sid,
-                    trace_id: Uuid::new_v4(),
-                    timestamp: Utc::now(),
-                    worker_id: "system".to_string(),
-                    event_type: "Log".to_string(),
-                    payload: serde_json::to_string(&log).unwrap(),
-                }).await;
-                
-                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                continue; // Let state update
-            }
-
-            // --- CONTEXT MANAGEMENT INTEGRATION (Periodic) ---
-            {
-                use ifcl_core::context::{VectorPruner, SimpleTokenCounter, ContextPruner};
-                let counter = SimpleTokenCounter;
-                
-                // Use VectorPruner with the real memory store
-                let pruner = VectorPruner { store: Arc::clone(&memory_store) };
-                let managed = pruner.prune(&all_events, 200, &counter).await;
-                
-                if let Ok(mut st) = state_sim_monitor.lock() {
-                    st.managed_context_stats = Some((managed.estimated_tokens, managed.pruned_count));
-                }
-            }
-
-            // --- PROGRESS MANAGEMENT INTEGRATION ---
-            {
-                if let Some(mission) = missions.first() {
-                    use ifcl_core::progress::{BasicProgressManager, ProgressManager};
-                    let manager = BasicProgressManager;
-                    let last_event_at = if let Ok(s) = state_sim_monitor.lock() { s.last_event_at } else { Utc::now() };
-                    let stats = manager.calculate_progress(mission, last_event_at);
-                    
-                    if let Ok(mut st) = state_sim_monitor.lock() {
-                        st.progress_stats = Some(stats);
-                    }
-                }
-            }
-            // --------------------------------------
-
-            // Step 2: Find first PENDING task
-            let mut pending_task = None;
-            for m in &missions {
-                for t in &m.tasks {
-                    if t.status == TaskStatus::Pending {
-                        pending_task = Some((m.id, t.id, t.name.clone(), t.assigned_worker.clone().unwrap_or("system".to_string())));
-                        break;
-                    }
-                }
-                if pending_task.is_some() { break; }
-            }
-
-            match pending_task {
-                Some((mid, tid, name, worker)) => {
-                    // Execute Task
-                    let _ = bus_simulation.publish(Event {
-                        id: Uuid::new_v4(),
-                        session_id: sid,
-                        trace_id: Uuid::new_v4(),
-                        timestamp: Utc::now(),
-                        worker_id: worker.clone(),
-                        event_type: "TaskUpdated".to_string(),
-                        payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Running"}}"#, mid, tid),
-                    }).await;
-
-                    if name == "Consult Gemini" {
-                        // NEW: Worker Transparency - Reasoning and Confidence
-                        let _ = bus_simulation.publish(Event {
-                            id: Uuid::new_v4(),
-                            session_id: sid,
-                            trace_id: Uuid::new_v4(),
-                            timestamp: Utc::now(),
-                            worker_id: worker.clone(),
-                            event_type: "WorkerThought".to_string(),
-                            payload: serde_json::to_string(&ThoughtPayload {
-                                confidence: 0.92,
-                                reasoning: vec![
-                                    "Analyzing user goal...".to_string(),
-                                    "Selecting optimal model (Gemini)...".to_string(),
-                                    "Formulating prompt...".to_string(),
-                                ],
-                            }).unwrap(),
-                        }).await;
-                        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-
-                        let _ = bus_simulation.publish(Event {
-                            id: Uuid::new_v4(),
-                            session_id: sid,
-                            trace_id: Uuid::new_v4(),
-                            timestamp: Utc::now(),
-                            worker_id: worker.clone(),
-                            event_type: "Log".to_string(), 
-                            payload: serde_json::to_string(&LogPayload { level: "INFO".to_string(), message: "Invoking Gemini CLI...".to_string() }).unwrap(),
-                        }).await;
-
-                        let executor = CliExecutor::new("gemini".to_string());
-                        let prompt = format!("Explain the goal '{}' in 1 short sentence.", goal);
-                        match executor.execute(&prompt).await {
-                            Ok(result) => {
-                                // Log STDOUT
-                                if !result.stdout.is_empty() {
-                                    let _ = bus_simulation.publish(Event {
-                                        id: Uuid::new_v4(),
-                                        session_id: sid,
-                                        trace_id: Uuid::new_v4(),
-                                        timestamp: Utc::now(),
-                                        worker_id: worker.clone(),
-                                        event_type: "Log".to_string(), 
-                                        payload: serde_json::to_string(&LogPayload { level: "STDOUT".to_string(), message: result.stdout.clone() }).unwrap(),
-                                    }).await;
-                                }
-                                
-                                // NEW: Force success for demonstration if CLI fails (or just mock it)
-                                let (success, output) = if result.status.success() {
-                                    (true, result.stdout)
-                                } else {
-                                    // Mocking AI response for demonstration if real tool fails
-                                    (true, format!("Simulated Gemini response for: {}", goal))
-                                };
-
-                                if success {
-                                    let _ = bus_simulation.publish(Event {
-                                        id: Uuid::new_v4(),
-                                        session_id: sid,
-                                        trace_id: Uuid::new_v4(),
-                                        timestamp: Utc::now(),
-                                        worker_id: worker.clone(),
-                                        event_type: "AiResponse".to_string(), payload: output,
-                                    }).await;
-                                    let _ = bus_simulation.publish(Event {
-                                        id: Uuid::new_v4(),
-                                        session_id: sid,
-                                        trace_id: Uuid::new_v4(),
-                                        timestamp: Utc::now(),
-                                        worker_id: worker.clone(),
-                                        event_type: "TaskUpdated".to_string(),
-                                        payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Success"}}"#, mid, tid),
-                                    }).await;
-                                } else {
-                                     // (Reduced chance of actual error logs cluttering demo)
-                                }
-                            }
-                            Err(_) => {
-                                // Mock it anyway for the demo
-                                let _ = bus_simulation.publish(Event {
-                                    id: Uuid::new_v4(),
-                                    session_id: sid,
-                                    trace_id: Uuid::new_v4(),
-                                    timestamp: Utc::now(),
-                                    worker_id: worker.clone(),
-                                    event_type: "AiResponse".to_string(), payload: format!("Simulated Gemini response for: {}", goal),
-                                }).await;
-                                let _ = bus_simulation.publish(Event {
-                                    id: Uuid::new_v4(),
-                                    session_id: sid,
-                                    trace_id: Uuid::new_v4(),
-                                    timestamp: Utc::now(),
-                                    worker_id: worker.clone(),
-                                    event_type: "TaskUpdated".to_string(),
-                                    payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Success"}}"#, mid, tid),
-                                }).await;
-                            }
-                        }
-                    } else if name == "Init Repo" || name == "Initialize Repository" {
-                        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-                        let _ = bus_simulation.publish(Event {
-                            id: Uuid::new_v4(),
-                            session_id: sid,
-                            trace_id: Uuid::new_v4(),
-                            timestamp: Utc::now(),
-                            worker_id: worker.clone(),
-                            event_type: "Log".to_string(), 
-                            payload: serde_json::to_string(&LogPayload { level: "STDOUT".to_string(), message: "git init && git add . && git commit -m 'Initial commit'".to_string() }).unwrap(),
-                        }).await;
-                        let _ = bus_simulation.publish(Event {
-                            id: Uuid::new_v4(),
-                            session_id: sid,
-                            trace_id: Uuid::new_v4(),
-                            timestamp: Utc::now(),
-                            worker_id: worker.clone(),
-                            event_type: "TaskUpdated".to_string(),
-                            payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"Success"}}"#, mid, tid),
-                        }).await;
-                    } else {
-                        // Generic Task Handling
-                        tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
-                        
-                        let (status, log_level, log_msg): (TaskStatus, &str, String) = {
-                            use rand::Rng;
-                            let mut rng = rand::rng();
-                            if rng.random_bool(0.2) {
-                                (TaskStatus::Failure, "ERROR", format!("Task '{}' failed unexpectedly", name))
-                            } else {
-                                (TaskStatus::Success, "INFO", format!("Task '{}' completed successfully", name))
-                            }
-                        };
-
-                        let _ = bus_simulation.publish(Event {
-                            id: Uuid::new_v4(),
-                            session_id: sid,
-                            trace_id: Uuid::new_v4(),
-                            timestamp: Utc::now(),
-                            worker_id: worker.clone(),
-                            event_type: "Log".to_string(), 
-                            payload: serde_json::to_string(&LogPayload { level: log_level.to_string(), message: log_msg }).unwrap(),
-                        }).await;
-
-                        let _ = bus_simulation.publish(Event {
-                            id: Uuid::new_v4(),
-                            session_id: sid,
-                            trace_id: Uuid::new_v4(),
-                            timestamp: Utc::now(),
-                            worker_id: worker.clone(),
-                            event_type: "TaskUpdated".to_string(),
-                            payload: format!(r#"{{"mission_id":"{}","task_id":"{}","status":"{:?}"}}"#, mid, tid, status),
-                        }).await;
-
-                        // Trigger replanning if failure occurs
-                        if status == TaskStatus::Failure {
-                            use ifcl_core::planner::{LLMPlanner, Planner};
-                            let planner = LLMPlanner { executor: ifcl_core::CliExecutor::new("gemini".to_string()) };
-                            let mission = missions.iter().find(|m| m.id == mid).unwrap();
-                            let recovery_missions = planner.replan_on_failure(&goal, mission, tid).await;
-                            
-                            for rm in recovery_missions {
-                                let _ = bus_simulation.publish(Event {
-                                    id: Uuid::new_v4(),
-                                    session_id: sid,
-                                    trace_id: Uuid::new_v4(),
-                                    timestamp: Utc::now(),
-                                    worker_id: "system".to_string(),
-                                    event_type: "MissionCreated".to_string(), 
-                                    payload: serde_json::to_string(&rm).unwrap(),
-                                }).await;
-                            }
-                        }
-                    }
-                }
-                None => {
-                    // All tasks finished for now
-                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-                }
-            }
-        }
-    });
 
     // 5. Background Task Runner (The Real Loop Engine)
     let bus_runner = Arc::clone(&bus);
@@ -916,35 +534,39 @@ async fn main() -> Result<()> {
     
     tokio::spawn(async move {
         loop {
-            tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-            
-            let (target_mission_id, target_task_id) = {
+            let target = {
                 let s = state_runner.lock().unwrap();
-                if s.status != LoopStatus::Running { continue; }
-                
-                let mut found = None;
-                for mission in &s.missions {
-                    for task in &mission.tasks {
-                        if task.status == TaskStatus::Pending {
-                            found = Some((mission.id, task.id));
-                            break;
+                if s.status != LoopStatus::Running { 
+                    None 
+                } else {
+                    let mut found = None;
+                    for mission in &s.missions {
+                        for task in &mission.tasks {
+                            if task.status == TaskStatus::Pending {
+                                found = Some((mission.id, task.id));
+                                break;
+                            }
                         }
+                        if found.is_some() { break; }
                     }
-                    if found.is_some() { break; }
+                    found
                 }
-                found
-            }.unwrap_or((Uuid::nil(), Uuid::nil()));
+            };
 
-            if target_mission_id != Uuid::nil() {
-                // Execute task
+            if let Some((mid, tid)) = target {
+                // Execute task immediately
                 let bus_exec = Arc::clone(&bus_runner);
                 let orch_exec = Arc::clone(&orch_runner);
-                let worker = CliWorker::new("Loop-Bot", WorkerRole::Coder); // Default real worker
+                let worker = CliWorker::new("Loop-Bot", WorkerRole::Coder);
                 
-                let _ = orch_exec.execute_task(bus_exec, target_mission_id, target_task_id, &worker).await;
+                let _ = orch_exec.execute_task(bus_exec, mid, tid, &worker).await;
+            } else {
+                // Idle: short poll
+                tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
             }
         }
     });
+
 
     // 6. TUI Rendering Loop
     loop {
@@ -976,7 +598,7 @@ async fn main() -> Result<()> {
   _| |_| |\  || |    _| |_| |\  |_| |_  | | | |___ 
   \___/\_| \_/\_|    \___/\_| \_/\___/  \_/ \____/ 
                                                    
-   C O D I N G   L O O P   S I M U L A T I O N
+   A U T O N O M O U S   C O D I N G   L O O P
                         "#,
                     )
                     .style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
@@ -1207,13 +829,13 @@ async fn main() -> Result<()> {
                                 };
                                 let status_style = match task.status {
                                     TaskStatus::Pending => Style::default().fg(Color::DarkGray),
-                                    TaskStatus::Running => Style::default().fg(Color::Cyan).add_modifier(Modifier::SLOW_BLINK),
+                                    TaskStatus::Running => Style::default().fg(Color::Cyan).bg(Color::DarkGray).add_modifier(Modifier::BOLD),
                                     TaskStatus::Success => Style::default().fg(Color::Green),
                                     TaskStatus::Failure => Style::default().fg(Color::Red),
                                 };
                                 rows.push(Row::new(vec![
                                     Cell::from(mission.name.clone()).style(Style::default().fg(Color::DarkGray)),
-                                    Cell::from(task.name.clone()).style(Style::default().add_modifier(Modifier::BOLD)),
+                                    Cell::from(task.name.clone()).style(if task.status == TaskStatus::Running { Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD) } else { Style::default().add_modifier(Modifier::BOLD) }),
                                     Cell::from(status_text).style(status_style),
                                     Cell::from(task.assigned_worker.clone().unwrap_or_default()).style(Style::default().fg(Color::Yellow)),
                                 ]));
@@ -1343,7 +965,12 @@ async fn main() -> Result<()> {
                     }
 
                     // --- Activity Bar ---
-                    let last_activity_text = format!(" [SYSTEM PULSE] Last: {} | Trace: {}", s.last_event_type, s.events.last().map(|e| e.trace_id.to_string()).unwrap_or_default());
+                    let current_task_name = s.missions.iter()
+                        .flat_map(|m| m.tasks.iter())
+                        .find(|t| t.status == TaskStatus::Running)
+                        .map(|t| t.name.clone())
+                        .unwrap_or_else(|| "Idle".to_string());
+                    let last_activity_text = format!(" [ACTIVITY] Task: {} | Last Event: {} ({}s ago)", current_task_name, s.last_event_type, last_activity_secs);
                     let activity_bar = Paragraph::new(last_activity_text)
                         .style(Style::default().fg(if last_activity_secs > 30 { Color::Red } else if last_activity_secs > 10 { Color::Yellow } else { Color::Green }))
                         .alignment(Alignment::Left);
