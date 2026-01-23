@@ -13,5 +13,5 @@
     - [x] Connect `CliWorker` to event bus
 - [x] **TUI Integration**
     - [x] Stream `WorkerOutput` events to AI Terminal
-- [ ] **Verification**
-    - [ ] Full end-to-end test with complex mission
+- [x] **Verification**
+    - [x] Full end-to-end test with complex mission (Headless Benchmark Verified)
