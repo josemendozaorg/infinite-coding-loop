@@ -98,6 +98,7 @@ pub enum LoopStatus {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct Mission {
     pub id: Uuid,
+    pub session_id: Uuid,
     pub name: String,
     pub tasks: Vec<Task>,
     pub workspace_path: Option<String>,
@@ -121,7 +122,7 @@ pub trait Worker: Send + Sync {
     fn id(&self) -> &str;
     fn role(&self) -> WorkerRole;
     fn metadata(&self) -> &WorkerProfile;
-    async fn execute(&self, bus: std::sync::Arc<dyn EventBus>, task: &Task, workspace_path: &str) -> anyhow::Result<String>;
+    async fn execute(&self, bus: std::sync::Arc<dyn EventBus>, task: &Task, workspace_path: &str, session_id: Uuid) -> anyhow::Result<String>;
 }
 
 #[async_trait::async_trait]
@@ -360,7 +361,7 @@ mod tests {
     #[tokio::test]
     async fn test_orchestrator_mission_creation() {
         let orch = BasicOrchestrator::new();
-        let mission = orch.create_mission("Initial Setup", vec![
+        let mission = orch.create_mission(Uuid::new_v4(), "Initial Setup", vec![
             ("Init Repo".to_string(), "Set up git repository".to_string()),
         ], None).await.unwrap();
 
@@ -371,7 +372,7 @@ mod tests {
     #[tokio::test]
     async fn test_orchestrator_task_updates() {
         let orch = BasicOrchestrator::new();
-        let mission = orch.create_mission("Alpha", vec![
+        let mission = orch.create_mission(Uuid::new_v4(), "Alpha", vec![
             ("Task 1".to_string(), "Desc 1".to_string()),
         ], None).await.unwrap();
 

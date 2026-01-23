@@ -59,6 +59,7 @@ mod tests {
         let manager = BasicProgressManager;
         let mission = Mission {
             id: Uuid::new_v4(),
+            session_id: Uuid::nil(),
             name: "Empty Mission".to_string(),
             tasks: vec![],
             workspace_path: None,
@@ -73,6 +74,7 @@ mod tests {
         let manager = BasicProgressManager;
         let mission = Mission {
             id: Uuid::new_v4(),
+            session_id: Uuid::nil(),
             name: "Partial Mission".to_string(),
             tasks: vec![
                 Task { id: Uuid::new_v4(), name: "T1".to_string(), description: "".to_string(), status: TaskStatus::Success, assigned_worker: None },
@@ -91,6 +93,7 @@ mod tests {
         let manager = BasicProgressManager;
         let mission = Mission {
             id: Uuid::new_v4(),
+            session_id: Uuid::nil(),
             name: "Stalled Mission".to_string(),
             tasks: vec![
                 Task { id: Uuid::new_v4(), name: "T1".to_string(), description: "".to_string(), status: TaskStatus::Pending, assigned_worker: None },
@@ -111,6 +114,7 @@ mod tests {
         let manager = BasicProgressManager;
         let mission = Mission {
             id: Uuid::new_v4(),
+            session_id: Uuid::nil(),
             name: "Completed Mission".to_string(),
             tasks: vec![
                 Task { id: Uuid::new_v4(), name: "T1".to_string(), description: "".to_string(), status: TaskStatus::Success, assigned_worker: None },

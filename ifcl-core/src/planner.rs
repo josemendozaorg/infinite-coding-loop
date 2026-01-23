@@ -14,12 +14,13 @@ pub struct BasicPlanner;
 
 #[async_trait]
 impl Planner for BasicPlanner {
-    async fn generate_initial_missions(&self, goal: &str) -> Vec<Mission> {
+    async fn generate_initial_missions(&self, _goal: &str) -> Vec<Mission> {
         let mut missions = Vec::new();
 
         // Mission 1: Initial Setup
         missions.push(Mission {
             id: Uuid::new_v4(),
+            session_id: Uuid::nil(),
             name: "Phase 1: Setup".to_string(),
             tasks: vec![
                 Task {
@@ -110,6 +111,7 @@ mod tests {
         let planner = BasicPlanner;
         let mission = Mission {
             id: Uuid::new_v4(),
+            session_id: Uuid::nil(),
             name: "Test Mission".to_string(),
             tasks: vec![Task {
                 id: Uuid::new_v4(),

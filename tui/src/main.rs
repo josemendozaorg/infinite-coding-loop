@@ -115,6 +115,7 @@ async fn main() -> Result<()> {
 
         // Create initial mission
         let mission = orchestrator.create_mission(
+            Uuid::new_v4(), // New session ID for headless
             &goal,
             vec![
                 ("Initialize Project".to_string(), "Initialize workspace and create basic structure".to_string()),
@@ -1300,12 +1301,12 @@ async fn main() -> Result<()> {
                     if focus_mode == FocusMode::None || focus_mode == FocusMode::Terminal {
                         let area = middle_chunks[if focus_mode == FocusMode::Terminal { 0 } else { 4 }];
                         let mut ai_content = String::new();
-                        if let Some(latest) = s.ai_outputs.last() {
-                            ai_content = format!(" [{}] {}\n\n{}", 
-                                latest.timestamp.format("%H:%M:%S"),
-                                latest.worker_id,
-                                latest.content
-                            );
+                        for output in &s.ai_outputs {
+                            ai_content.push_str(&format!("[{}] {}>\n{}\n", 
+                                output.timestamp.format("%H:%M:%S"),
+                                output.worker_id,
+                                output.content
+                            ));
                         }
                         if ai_content.is_empty() {
                             ai_content = "Waiting for AI response...".to_string();
@@ -1450,6 +1451,7 @@ async fn main() -> Result<()> {
                                     tokio::spawn(async move {
                                         let mission = Mission {
                                             id: Uuid::new_v4(),
+                                            session_id: sid,
                                             name: goal,
                                             tasks: vec![
                                                 Task {

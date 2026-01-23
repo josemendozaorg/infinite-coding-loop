@@ -37,7 +37,7 @@ impl Worker for CliWorker {
         &self.profile
     }
 
-    async fn execute(&self, bus: Arc<dyn EventBus>, task: &Task, workspace_path: &str) -> anyhow::Result<String> {
+    async fn execute(&self, bus: Arc<dyn EventBus>, task: &Task, workspace_path: &str, session_id: Uuid) -> anyhow::Result<String> {
         tokio::fs::create_dir_all(workspace_path).await?;
         
         let (cmd, args) = match task.name.as_str() {
@@ -75,7 +75,7 @@ impl Worker for CliWorker {
                 out.push('\n');
                 let _ = bus_stdout.publish(Event {
                     id: Uuid::new_v4(),
-                    session_id: Uuid::nil(), // session_id is not passed yet, using nil
+                    session_id,
                     trace_id: Uuid::new_v4(),
                     timestamp: Utc::now(),
                     worker_id: worker_id_stdout.clone(),
@@ -99,7 +99,7 @@ impl Worker for CliWorker {
                 out.push('\n');
                 let _ = bus_stderr.publish(Event {
                     id: Uuid::new_v4(),
-                    session_id: Uuid::nil(),
+                    session_id,
                     trace_id: Uuid::new_v4(),
                     timestamp: Utc::now(),
                     worker_id: worker_id_stderr.clone(),
@@ -148,7 +148,7 @@ mod tests {
             assigned_worker: None,
         };
 
-        let result = worker.execute(bus, &task, workspace.path().to_str().unwrap()).await.unwrap();
+        let result = worker.execute(bus, &task, workspace.path().to_str().unwrap(), Uuid::new_v4()).await.unwrap();
         assert!(result.contains("Initialized empty Git repository"));
         assert!(workspace.path().join(".git").exists());
     }
