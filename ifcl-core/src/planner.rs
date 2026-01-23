@@ -17,40 +17,10 @@ impl Planner for BasicPlanner {
     async fn generate_initial_missions(&self, goal: &str) -> Vec<Mission> {
         let mut missions = Vec::new();
 
-        // Mission 1: Analysis & Design
+        // Mission 1: Initial Setup
         missions.push(Mission {
             id: Uuid::new_v4(),
-            name: format!("Phase 1: Analysis - {}", goal),
-            tasks: vec![
-                Task {
-                    id: Uuid::new_v4(),
-                    name: "Deconstruct Goal".to_string(),
-                    description: format!("Identify core requirements for: {}", goal),
-                    status: TaskStatus::Pending,
-                    assigned_worker: Some("Architect".to_string()),
-                },
-                Task {
-                    id: Uuid::new_v4(),
-                    name: "Consult Gemini".to_string(),
-                    description: "Get advice from LLM on technical approach.".to_string(),
-                    status: TaskStatus::Pending,
-                    assigned_worker: Some("Architect".to_string()),
-                },
-                Task {
-                    id: Uuid::new_v4(),
-                    name: "Sketch Architecture".to_string(),
-                    description: "Define module boundaries and data flow.".to_string(),
-                    status: TaskStatus::Pending,
-                    assigned_worker: Some("Architect".to_string()),
-                },
-            ],
-            workspace_path: None,
-        });
-
-        // Mission 2: Initial Setup
-        missions.push(Mission {
-            id: Uuid::new_v4(),
-            name: "Phase 2: Setup".to_string(),
+            name: "Phase 1: Setup".to_string(),
             tasks: vec![
                 Task {
                     id: Uuid::new_v4(),
@@ -130,10 +100,9 @@ mod tests {
         let planner = BasicPlanner;
         let missions = planner.generate_initial_missions("Build a Rust CLI").await;
         
-        assert!(missions.len() >= 2);
-        assert!(missions[0].name.contains("Build a Rust CLI"));
-        assert_eq!(missions[0].tasks.len(), 3);
-        assert_eq!(missions[1].tasks.len(), 1);
+        assert!(missions.len() >= 1);
+        assert!(missions[0].name.contains("Setup"));
+        assert_eq!(missions[0].tasks.len(), 1);
     }
 
     #[tokio::test]

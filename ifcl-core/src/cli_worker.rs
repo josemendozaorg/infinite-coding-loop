@@ -42,7 +42,9 @@ impl Worker for CliWorker {
         
         let (cmd, args) = match task.name.as_str() {
             "Initialize Project" | "Init Repo" => ("git", vec!["init"]),
-            _ => ("sh", vec!["-c", &task.description]),
+            _ => {
+                anyhow::bail!("CliWorker: Unknown task type '{}'. Strict execution mode enabled.", task.name);
+            }
         };
 
         let mut child = Command::new(cmd)
@@ -151,21 +153,5 @@ mod tests {
         assert!(workspace.path().join(".git").exists());
     }
 
-    #[tokio::test]
-    async fn test_cli_worker_shell_exec() {
-        let worker = CliWorker::new("Coder", WorkerRole::Coder);
-        let workspace = tempdir().unwrap();
-        let bus = Arc::new(InMemoryEventBus::new(10));
-        let task = Task {
-            id: Uuid::new_v4(),
-            name: "Create Readme".to_string(),
-            description: "echo '# Hello' > README.md".to_string(),
-            status: TaskStatus::Pending,
-            assigned_worker: None,
-        };
 
-        worker.execute(bus, &task, workspace.path().to_str().unwrap()).await.unwrap();
-        let readme_content = std::fs::read_to_string(workspace.path().join("README.md")).unwrap();
-        assert_eq!(readme_content.trim(), "# Hello");
-    }
 }
