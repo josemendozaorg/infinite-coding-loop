@@ -112,7 +112,7 @@ async fn main() -> Result<()> {
             &goal,
             vec![
                 ("Initialize Project".to_string(), "Initialize workspace and create basic structure".to_string()),
-                ("Create Readme".to_string(), "echo '# Infinite Coding Loop Benchmark' > README.md".to_string())
+                ("Run Command".to_string(), "echo '# Infinite Coding Loop Benchmark' > README.md".to_string())
             ],
             workspace.clone()
         ).await?;
