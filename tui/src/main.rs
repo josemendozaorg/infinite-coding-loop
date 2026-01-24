@@ -15,10 +15,10 @@ use ifcl_core::{
     Event, EventStore, InMemoryEventBus, Mission, TaskStatus, 
     Bank, LoopStatus, SqliteEventStore, WorkerProfile, WorkerRole, LoopConfig,
     MarketplaceLoader, AppMode, MenuAction, MenuState, SetupWizard, WizardStep, LogPayload, ThoughtPayload,
-    WorkerOutputPayload, CliWorker,
+    WorkerOutputPayload, CliWorker, AiProvider, CliExecutor, AiGenericWorker,
     groups::WorkerGroup, orchestrator::WorkerRequest,
     learning::{LearningManager, BasicLearningManager, Insight, Optimization, MissionOutcome},
-    planner::{Planner, BasicPlanner},
+    planner::{Planner, BasicPlanner, LLMPlanner},
 };
 use ratatui::{
     backend::CrosstermBackend,
@@ -562,9 +562,19 @@ async fn main() -> Result<()> {
                 // Execute task with the assigned worker
                 let bus_exec = Arc::clone(&bus_runner);
                 let orch_exec = Arc::clone(&orch_runner);
-                let worker = CliWorker::new(&worker_name, WorkerRole::Coder);
                 
-                let _ = orch_exec.execute_task(bus_exec.clone(), mid, tid, &worker).await;
+                let worker_name_lower = worker_name.to_lowercase();
+                let worker: Box<dyn ifcl_core::Worker> = if worker_name_lower.contains("gemini") {
+                    Box::new(AiGenericWorker::new(worker_name.clone(), WorkerRole::Coder, "gemini".to_string(), None))
+                } else if worker_name_lower.contains("claude") {
+                    Box::new(AiGenericWorker::new(worker_name.clone(), WorkerRole::Coder, "claude".to_string(), None))
+                } else if worker_name_lower.contains("opencode") {
+                    Box::new(AiGenericWorker::new(worker_name.clone(), WorkerRole::Coder, "opencode".to_string(), None))
+                } else {
+                    Box::new(CliWorker::new(&worker_name, WorkerRole::Coder))
+                };
+                
+                let _ = orch_exec.execute_task(bus_exec.clone(), mid, tid, worker.as_ref()).await;
                 
                 // Check for goal completion after task execution
                 let all_done = {
@@ -698,17 +708,18 @@ async fn main() -> Result<()> {
                         )
                         .split(f.size());
 
-                    let (step, goal, stack, workspace, team, budget, avail_groups, sel_grp_idx) = if let Ok(s) = state.lock() {
-                        (s.wizard.current_step.clone(), s.wizard.goal.clone(), s.wizard.stack.clone(), s.wizard.workspace_path.clone(), s.wizard.team_size, s.wizard.budget_coins, s.available_groups.clone(), s.wizard.selected_group_index)
-                    } else { (WizardStep::Goal, String::new(), String::new(), String::new(), 0, 0, Vec::new(), 0) };
+                    let (step, goal, stack, workspace, provider, team, budget, avail_groups, sel_grp_idx): (WizardStep, String, String, String, AiProvider, usize, u64, Vec<WorkerGroup>, usize) = if let Ok(s) = state.lock() {
+                        (s.wizard.current_step.clone(), s.wizard.goal.clone(), s.wizard.stack.clone(), s.wizard.workspace_path.clone(), s.wizard.provider.clone(), s.wizard.team_size, s.wizard.budget_coins, s.available_groups.clone(), s.wizard.selected_group_index)
+                    } else { (WizardStep::Goal, String::new(), String::new(), String::new(), AiProvider::Basic, 0, 0, Vec::new(), 0) };
 
                     let step_text = match step {
-                        WizardStep::Goal => "Step 1/6: Define Objective",
-                        WizardStep::Stack => "Step 2/6: Technology Stack",
-                        WizardStep::Workspace => "Step 3/6: Project Workspace",
-                        WizardStep::Team => "Step 4/6: Squad Size",
-                        WizardStep::Budget => "Step 5/6: Resource Credits",
-                        WizardStep::Summary => "Step 6/6: Final Review",
+                        WizardStep::Goal => "Step 1/7: Define Objective",
+                        WizardStep::Stack => "Step 2/7: Technology Stack",
+                        WizardStep::Workspace => "Step 3/7: Project Workspace",
+                        WizardStep::Provider => "Step 4/7: AI Intelligence",
+                        WizardStep::Team => "Step 5/7: Squad Assembly",
+                        WizardStep::Budget => "Step 6/7: Resource Credits",
+                        WizardStep::Summary => "Step 7/7: Final Review",
                     };
 
                     f.render_widget(
@@ -722,6 +733,20 @@ async fn main() -> Result<()> {
                         WizardStep::Goal => format!("Define your mission goal:\n\n> {}", goal),
                         WizardStep::Stack => format!("Selected Technology:\n\n [ {} ]", stack),
                         WizardStep::Workspace => format!("Project output directory:\n (Where files will be built)\n\n> {}", workspace),
+                        WizardStep::Provider => {
+                            let mut s = String::from("Select Primary Architect (AI Provider):\n(Use UP/DOWN keys)\n\n");
+                            let providers = vec![
+                                (AiProvider::Gemini, "Gemini (Google) - Uses 'gemini' CLI"),
+                                (AiProvider::Claude, "Claude (Anthropic) - Uses 'claude' CLI"),
+                                (AiProvider::OpenCode, "OpenCode (OpenAI) - Uses 'opencode' CLI"),
+                                (AiProvider::Basic, "Basic (Rule-based) - No AI, just templates"),
+                            ];
+                            for (p, label) in providers {
+                                let checkbox = if provider == p { "[x]" } else { "[ ]" };
+                                s.push_str(&format!(" {} {}\n", checkbox, label));
+                            }
+                            s
+                        },
                         WizardStep::Team => {
                             let mut s = String::from("Select a Worker Team:\n\n");
                             for (i, grp) in avail_groups.iter().enumerate() {
@@ -742,8 +767,8 @@ async fn main() -> Result<()> {
                         },
                         WizardStep::Budget => format!("Initial Credit Allotment:\n\n [ {} ] Coins", budget),
                         WizardStep::Summary => format!(
-                            "Mission: {}\nStack: {}\nWorkspace: {}\nTeam: {} Workers\nBudget: {} Coins\n\n[ PRESS ENTER TO START ]",
-                            goal, stack, workspace, team, budget
+                            "Mission: {}\nStack: {}\nWorkspace: {}\nArchitect: {:?}\nTeam: {} Workers\nBudget: {} Coins\n\n[ PRESS ENTER TO START ]",
+                            goal, stack, workspace, provider, team, budget
                         ),
                     };
 
@@ -1184,10 +1209,16 @@ async fn main() -> Result<()> {
                                     let orch_m = Arc::clone(&orchestrator);
                                     let goal = s.wizard.goal.clone();
                                     let workspace = if s.wizard.workspace_path.is_empty() { None } else { Some(s.wizard.workspace_path.clone()) };
+                                    let provider = s.wizard.provider.clone();
                                     
                                     tokio::spawn(async move {
                                         // Use planner to dynamically generate missions
-                                        let planner = BasicPlanner;
+                                        let planner: Arc<dyn Planner> = match provider {
+                                            AiProvider::Basic => Arc::new(BasicPlanner),
+                                            AiProvider::Gemini => Arc::new(LLMPlanner { executor: CliExecutor::new("gemini".to_string()) }),
+                                            AiProvider::Claude => Arc::new(LLMPlanner { executor: CliExecutor::new("claude".to_string()) }),
+                                            AiProvider::OpenCode => Arc::new(LLMPlanner { executor: CliExecutor::new("opencode".to_string()) }),
+                                        };
                                         let mut missions = planner.generate_initial_missions(&goal).await;
                                         
                                         // Set session_id and workspace on all generated missions
@@ -1230,11 +1261,25 @@ async fn main() -> Result<()> {
                             KeyCode::Up => {
                                 if s.wizard.current_step == WizardStep::Team && s.wizard.selected_group_index > 0 {
                                     s.wizard.selected_group_index -= 1;
+                                } else if s.wizard.current_step == WizardStep::Provider {
+                                    s.wizard.provider = match s.wizard.provider {
+                                        AiProvider::Gemini => AiProvider::Basic, // Loop back to bottom
+                                        AiProvider::Claude => AiProvider::Gemini,
+                                        AiProvider::OpenCode => AiProvider::Claude,
+                                        AiProvider::Basic => AiProvider::OpenCode,
+                                    };
                                 }
                             }
                             KeyCode::Down => {
                                 if s.wizard.current_step == WizardStep::Team && s.wizard.selected_group_index < s.available_groups.len().saturating_sub(1) {
                                     s.wizard.selected_group_index += 1;
+                                } else if s.wizard.current_step == WizardStep::Provider {
+                                    s.wizard.provider = match s.wizard.provider {
+                                        AiProvider::Gemini => AiProvider::Claude,
+                                        AiProvider::Claude => AiProvider::OpenCode,
+                                        AiProvider::OpenCode => AiProvider::Basic,
+                                        AiProvider::Basic => AiProvider::Gemini, // Loop back to top
+                                    };
                                 }
                             }
                             KeyCode::Left => {

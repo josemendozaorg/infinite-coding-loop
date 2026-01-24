@@ -23,7 +23,7 @@ pub mod context;
 pub mod planner;
 
 pub use ui_state::{AppMode, MenuAction, MenuState};
-pub use wizard::{SetupWizard, WizardStep};
+pub use wizard::{SetupWizard, WizardStep, AiProvider};
 pub use session::Session;
 pub use groups::WorkerGroup;
 pub use marketplace::MarketplaceLoader;
@@ -36,10 +36,12 @@ pub mod memory;
 pub mod progress;
 pub mod workspace;
 pub mod cli_worker;
+pub mod ai_worker;
 
 pub use progress::{ProgressStats, ProgressManager, BasicProgressManager};
 pub use workspace::*;
 pub use cli_worker::*;
+pub use ai_worker::*;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct LoopConfig {
