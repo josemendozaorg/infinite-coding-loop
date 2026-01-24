@@ -7,13 +7,13 @@ use chrono::{Utc, DateTime};
 use serde::{Serialize, Deserialize};
 use clap::Parser;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event as CEvent, KeyCode},
+    event::{self, Event as CEvent, KeyCode},
     execute,
     terminal::{enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use ifcl_core::{
-    Event, EventStore, InMemoryEventBus, Mission, Task, TaskStatus, 
-    CliExecutor, Bank, LoopStatus, SqliteEventStore, WorkerProfile, WorkerRole, LoopConfig,
+    Event, EventStore, InMemoryEventBus, Mission, TaskStatus, 
+    Bank, LoopStatus, SqliteEventStore, WorkerProfile, WorkerRole, LoopConfig,
     MarketplaceLoader, AppMode, MenuAction, MenuState, SetupWizard, WizardStep, LogPayload, ThoughtPayload,
     WorkerOutputPayload, CliWorker,
     groups::WorkerGroup, orchestrator::WorkerRequest,
@@ -79,6 +79,7 @@ struct AppState {
     selected_event_index: Option<usize>,
     show_event_details: bool,
     focus_mode: FocusMode,
+    frame_count: u64,
 }
 
 
@@ -90,7 +91,7 @@ async fn main() -> Result<()> {
     let bus: Arc<dyn ifcl_core::EventBus> = Arc::new(InMemoryEventBus::new(200));
     let store = Arc::new(SqliteEventStore::new("sqlite://ifcl.db?mode=rwc").await?);
     let learning_manager = Arc::new(BasicLearningManager::new());
-    let memory_store: Arc<dyn ifcl_core::MemoryStore> = Arc::new(ifcl_core::memory::InMemoryMemoryStore::new());
+    let _memory_store: Arc<dyn ifcl_core::MemoryStore> = Arc::new(ifcl_core::memory::InMemoryMemoryStore::new());
     let orchestrator: Arc<dyn ifcl_core::Orchestrator> = Arc::new(ifcl_core::BasicOrchestrator::new());
 
     // 2. Check for Headless Mode
@@ -177,7 +178,7 @@ async fn main() -> Result<()> {
     // 3. Setup Terminal (GUI Mode)
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
     
@@ -225,6 +226,7 @@ async fn main() -> Result<()> {
         selected_event_index: None,
         show_event_details: false,
         focus_mode: FocusMode::None,
+        frame_count: 0,
     }));
 
     // Replay history will be handled later
@@ -759,7 +761,13 @@ async fn main() -> Result<()> {
                         String::new()
                     };
 
-                    let pulse_indicator = if s.pulse { "󰐊" } else { "  " };
+                    let pulse_indicator = if s.status == LoopStatus::Running {
+                        // Animated braille spinner when running
+                        const SPINNER_FRAMES: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+                        SPINNER_FRAMES[(s.frame_count as usize) % SPINNER_FRAMES.len()]
+                    } else {
+                        "⏸"  // Paused indicator
+                    };
                     let last_activity_secs = (Utc::now() - s.last_event_at).num_seconds();
                     let activity_timer = format!(" ({}s ago)", last_activity_secs);
 
@@ -810,9 +818,31 @@ async fn main() -> Result<()> {
                     // 1. ROSTER
                     if focus_mode == FocusMode::None || focus_mode == FocusMode::Roster {
                         let area = middle_chunks[0];
+                        // Find workers assigned to running tasks
+                        let active_workers: std::collections::HashSet<String> = s.missions.iter()
+                            .flat_map(|m| m.tasks.iter())
+                            .filter(|t| t.status == TaskStatus::Running)
+                            .filter_map(|t| t.assigned_worker.clone())
+                            .collect();
+                        
+                        const WORKER_SPINNER: [&str; 4] = ["⣾", "⣽", "⣻", "⢿"];
+                        let worker_spinner = WORKER_SPINNER[(s.frame_count as usize) % WORKER_SPINNER.len()];
+                        
                         let worker_items: Vec<_> = s.workers.iter().map(|w| {
                             let symbol = match w.role { WorkerRole::Git => "󰊢", WorkerRole::Coder => "󰅩", WorkerRole::Architect => "󰉪", _ => "󰚩" };
-                            ListItem::new(format!(" {} {}", symbol, w.name)).style(Style::default().fg(Color::Yellow))
+                            let is_active = active_workers.contains(&w.name);
+                            let activity_indicator = if is_active { format!(" {}", worker_spinner) } else { String::new() };
+                            let style = if is_active {
+                                let blink_phase = (s.frame_count / 5) % 2 == 0;
+                                if blink_phase {
+                                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                                } else {
+                                    Style::default().fg(Color::LightCyan).add_modifier(Modifier::BOLD)
+                                }
+                            } else {
+                                Style::default().fg(Color::Yellow)
+                            };
+                            ListItem::new(format!(" {} {}{}", symbol, w.name, activity_indicator)).style(style)
                         }).collect();
                         f.render_widget(List::new(worker_items).block(Block::default().title(" BARRACKS [1] ").borders(Borders::ALL).border_style(if focus_mode == FocusMode::Roster { Style::default().fg(Color::Cyan) } else { Style::default().fg(Color::DarkGray) })), area);
                     }
@@ -821,21 +851,43 @@ async fn main() -> Result<()> {
                     if focus_mode == FocusMode::None || focus_mode == FocusMode::MissionControl {
                         let area = middle_chunks[if focus_mode == FocusMode::MissionControl { 0 } else { 1 }];
                         let mut rows = Vec::new();
+                        // Spinner frames for running tasks
+                        const TASK_SPINNER: [&str; 4] = ["◐", "◓", "◑", "◒"];
+                        let spinner_frame = TASK_SPINNER[(s.frame_count as usize) % TASK_SPINNER.len()];
+                        let blink_phase = (s.frame_count / 5) % 2 == 0; // Alternate every 5 frames
+                        
                         for mission in &s.missions {
                             for task in &mission.tasks {
                                 let status_text = match task.status {
-                                    TaskStatus::Running => "Running (Thinking...)".to_string(),
+                                    TaskStatus::Running => format!("{} EXECUTING...", spinner_frame),
                                     _ => format!("{:?}", task.status),
                                 };
                                 let status_style = match task.status {
                                     TaskStatus::Pending => Style::default().fg(Color::DarkGray),
-                                    TaskStatus::Running => Style::default().fg(Color::Cyan).bg(Color::DarkGray).add_modifier(Modifier::BOLD),
+                                    TaskStatus::Running => {
+                                        // High contrast blinking - very visible alternation
+                                        if blink_phase {
+                                            Style::default().fg(Color::Black).bg(Color::Yellow).add_modifier(Modifier::BOLD)
+                                        } else {
+                                            Style::default().fg(Color::Yellow).bg(Color::Black).add_modifier(Modifier::BOLD)
+                                        }
+                                    }
                                     TaskStatus::Success => Style::default().fg(Color::Green),
                                     TaskStatus::Failure => Style::default().fg(Color::Red),
                                 };
+                                let task_name_style = if task.status == TaskStatus::Running {
+                                    // Blink the task name too with high contrast
+                                    if blink_phase {
+                                        Style::default().fg(Color::Yellow).bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+                                    } else {
+                                        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                                    }
+                                } else {
+                                    Style::default().add_modifier(Modifier::BOLD)
+                                };
                                 rows.push(Row::new(vec![
                                     Cell::from(mission.name.clone()).style(Style::default().fg(Color::DarkGray)),
-                                    Cell::from(task.name.clone()).style(if task.status == TaskStatus::Running { Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD) } else { Style::default().add_modifier(Modifier::BOLD) }),
+                                    Cell::from(task.name.clone()).style(task_name_style),
                                     Cell::from(status_text).style(status_style),
                                     Cell::from(task.assigned_worker.clone().unwrap_or_default()).style(Style::default().fg(Color::Yellow)),
                                 ]));
@@ -965,14 +1017,39 @@ async fn main() -> Result<()> {
                     }
 
                     // --- Activity Bar ---
+                    let has_running_task = s.missions.iter()
+                        .flat_map(|m| m.tasks.iter())
+                        .any(|t| t.status == TaskStatus::Running);
                     let current_task_name = s.missions.iter()
                         .flat_map(|m| m.tasks.iter())
                         .find(|t| t.status == TaskStatus::Running)
                         .map(|t| t.name.clone())
                         .unwrap_or_else(|| "Idle".to_string());
-                    let last_activity_text = format!(" [ACTIVITY] Task: {} | Last Event: {} ({}s ago)", current_task_name, s.last_event_type, last_activity_secs);
+                    
+                    // Pulsing activity indicator for running tasks
+                    let activity_prefix = if has_running_task {
+                        const ACTIVITY_FRAMES: [&str; 4] = ["●", "◔", "◑", "◕"];
+                        format!(" {} ", ACTIVITY_FRAMES[(s.frame_count as usize) % ACTIVITY_FRAMES.len()])
+                    } else {
+                        " ○ ".to_string()
+                    };
+                    
+                    let last_activity_text = format!("{}[ACTIVITY] Task: {} | Last Event: {} ({}s ago)", activity_prefix, current_task_name, s.last_event_type, last_activity_secs);
+                    
+                    // Pulsing color when actively processing
+                    let activity_color = if has_running_task {
+                        let blink_phase = (s.frame_count / 5) % 2 == 0;
+                        if blink_phase { Color::Cyan } else { Color::LightCyan }
+                    } else if last_activity_secs > 30 { 
+                        Color::Red 
+                    } else if last_activity_secs > 10 { 
+                        Color::Yellow 
+                    } else { 
+                        Color::Green 
+                    };
+                    
                     let activity_bar = Paragraph::new(last_activity_text)
-                        .style(Style::default().fg(if last_activity_secs > 30 { Color::Red } else if last_activity_secs > 10 { Color::Yellow } else { Color::Green }))
+                        .style(Style::default().fg(activity_color).add_modifier(if has_running_task { Modifier::BOLD } else { Modifier::empty() }))
                         .alignment(Alignment::Left);
                     f.render_widget(activity_bar, main_layout[3]);
 
@@ -1011,6 +1088,11 @@ async fn main() -> Result<()> {
                 _ => {}
             }
         })?;
+
+        // Increment frame counter for animations
+        if let Ok(mut s) = state.lock() {
+            s.frame_count = s.frame_count.wrapping_add(1);
+        }
 
         if event::poll(std::time::Duration::from_millis(50))? {
             if let CEvent::Key(key) = event::read()? {
@@ -1070,36 +1152,38 @@ async fn main() -> Result<()> {
                                     s.mode = AppMode::Running;
                                     s.status = LoopStatus::Running;
                                     
-                                    // Publish real mission creation event
+                                    // Create mission via orchestrator (registers mission for execution)
+                                    let orch_m = Arc::clone(&orchestrator);
                                     let bus_m = Arc::clone(&bus);
                                     let goal = s.wizard.goal.clone();
                                     let workspace = if s.wizard.workspace_path.is_empty() { None } else { Some(s.wizard.workspace_path.clone()) };
                                     
                                     tokio::spawn(async move {
-                                        let mission = Mission {
-                                            id: Uuid::new_v4(),
-                                            session_id: sid,
-                                            name: goal,
-                                            tasks: vec![
-                                                Task {
-                                                    id: Uuid::new_v4(),
-                                                    name: "Initialize Project".to_string(),
-                                                    description: "Initialize workspace and create basic structure".to_string(),
-                                                    status: TaskStatus::Pending,
-                                                    assigned_worker: None,
-                                                }
+                                        // Use orchestrator to create mission (so it's registered for execution)
+                                        match orch_m.create_mission(
+                                            sid,
+                                            &goal,
+                                            vec![
+                                                ("Initialize Project".to_string(), "Initialize workspace and create basic structure".to_string())
                                             ],
-                                            workspace_path: workspace,
-                                        };
-                                        let _ = bus_m.publish(Event {
-                                            id: Uuid::new_v4(),
-                                            session_id: sid,
-                                            trace_id: Uuid::new_v4(),
-                                            timestamp: Utc::now(),
-                                            worker_id: "system".to_string(),
-                                            event_type: "MissionCreated".to_string(),
-                                            payload: serde_json::to_string(&mission).unwrap(),
-                                        }).await;
+                                            workspace,
+                                        ).await {
+                                            Ok(mission) => {
+                                                // Publish event so TUI state updates
+                                                let _ = bus_m.publish(Event {
+                                                    id: Uuid::new_v4(),
+                                                    session_id: sid,
+                                                    trace_id: Uuid::new_v4(),
+                                                    timestamp: Utc::now(),
+                                                    worker_id: "system".to_string(),
+                                                    event_type: "MissionCreated".to_string(),
+                                                    payload: serde_json::to_string(&mission).unwrap(),
+                                                }).await;
+                                            }
+                                            Err(e) => {
+                                                eprintln!("Failed to create mission: {}", e);
+                                            }
+                                        }
                                     });
 
                                 } else {
@@ -1352,14 +1436,16 @@ async fn main() -> Result<()> {
             }
         }
     }
-    // 3. Setup Terminal (GUI Mode)
-    enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
+    
+    // Cleanup: Restore terminal to normal state
+    crossterm::terminal::disable_raw_mode()?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        crossterm::style::ResetColor
+    )?;
     terminal.show_cursor()?;
+    
     Ok(())
 }
 
