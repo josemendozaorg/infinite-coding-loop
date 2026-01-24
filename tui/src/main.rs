@@ -546,7 +546,9 @@ async fn main() -> Result<()> {
                     for mission in &s.missions {
                         for task in &mission.tasks {
                             if task.status == TaskStatus::Pending {
-                                found = Some((mission.id, task.id));
+                                // Capture assigned_worker for worker selection
+                                let worker_name = task.assigned_worker.clone().unwrap_or_else(|| "Loop-Bot".to_string());
+                                found = Some((mission.id, task.id, worker_name));
                                 break;
                             }
                         }
@@ -556,13 +558,37 @@ async fn main() -> Result<()> {
                 }
             };
 
-            if let Some((mid, tid)) = target {
-                // Execute task immediately
+            if let Some((mid, tid, worker_name)) = target {
+                // Execute task with the assigned worker
                 let bus_exec = Arc::clone(&bus_runner);
                 let orch_exec = Arc::clone(&orch_runner);
-                let worker = CliWorker::new("Loop-Bot", WorkerRole::Coder);
+                let worker = CliWorker::new(&worker_name, WorkerRole::Coder);
                 
-                let _ = orch_exec.execute_task(bus_exec, mid, tid, &worker).await;
+                let _ = orch_exec.execute_task(bus_exec.clone(), mid, tid, &worker).await;
+                
+                // Check for goal completion after task execution
+                let all_done = {
+                    let s = state_runner.lock().unwrap();
+                    !s.missions.is_empty() && s.missions.iter().all(|m| 
+                        m.tasks.iter().all(|t| t.status == TaskStatus::Success || t.status == TaskStatus::Failure)
+                    )
+                };
+                
+                if all_done {
+                    // Get session_id for the event
+                    let session_id = {
+                        state_runner.lock().unwrap().current_session_id.unwrap_or_default()
+                    };
+                    let _ = bus_exec.publish(Event {
+                        id: Uuid::new_v4(),
+                        session_id,
+                        trace_id: Uuid::new_v4(),
+                        timestamp: Utc::now(),
+                        worker_id: "system".to_string(),
+                        event_type: "GoalCompleted".to_string(),
+                        payload: "All missions completed".to_string(),
+                    }).await;
+                }
             } else {
                 // Idle: short poll
                 tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
