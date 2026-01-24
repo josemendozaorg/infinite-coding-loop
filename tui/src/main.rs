@@ -17,7 +17,8 @@ use ifcl_core::{
     MarketplaceLoader, AppMode, MenuAction, MenuState, SetupWizard, WizardStep, LogPayload, ThoughtPayload,
     WorkerOutputPayload, CliWorker,
     groups::WorkerGroup, orchestrator::WorkerRequest,
-    learning::{LearningManager, BasicLearningManager, Insight, Optimization, MissionOutcome}
+    learning::{LearningManager, BasicLearningManager, Insight, Optimization, MissionOutcome},
+    planner::{Planner, BasicPlanner},
 };
 use ratatui::{
     backend::CrosstermBackend,
@@ -833,7 +834,7 @@ async fn main() -> Result<()> {
                             let is_active = active_workers.contains(&w.name);
                             let activity_indicator = if is_active { format!(" {}", worker_spinner) } else { String::new() };
                             let style = if is_active {
-                                let blink_phase = (s.frame_count / 5) % 2 == 0;
+                                let blink_phase = (s.frame_count / 5).is_multiple_of(2);
                                 if blink_phase {
                                     Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
                                 } else {
@@ -854,7 +855,7 @@ async fn main() -> Result<()> {
                         // Spinner frames for running tasks
                         const TASK_SPINNER: [&str; 4] = ["◐", "◓", "◑", "◒"];
                         let spinner_frame = TASK_SPINNER[(s.frame_count as usize) % TASK_SPINNER.len()];
-                        let blink_phase = (s.frame_count / 5) % 2 == 0; // Alternate every 5 frames
+                        let blink_phase = (s.frame_count / 5).is_multiple_of(2); // Alternate every 5 frames
                         
                         for mission in &s.missions {
                             for task in &mission.tasks {
@@ -1038,7 +1039,7 @@ async fn main() -> Result<()> {
                     
                     // Pulsing color when actively processing
                     let activity_color = if has_running_task {
-                        let blink_phase = (s.frame_count / 5) % 2 == 0;
+                        let blink_phase = (s.frame_count / 5).is_multiple_of(2);
                         if blink_phase { Color::Cyan } else { Color::LightCyan }
                     } else if last_activity_secs > 30 { 
                         Color::Red 
@@ -1152,37 +1153,38 @@ async fn main() -> Result<()> {
                                     s.mode = AppMode::Running;
                                     s.status = LoopStatus::Running;
                                     
-                                    // Create mission via orchestrator (registers mission for execution)
-                                    let orch_m = Arc::clone(&orchestrator);
+                                    // Use planner to generate missions based on the goal
                                     let bus_m = Arc::clone(&bus);
+                                    let orch_m = Arc::clone(&orchestrator);
                                     let goal = s.wizard.goal.clone();
                                     let workspace = if s.wizard.workspace_path.is_empty() { None } else { Some(s.wizard.workspace_path.clone()) };
                                     
                                     tokio::spawn(async move {
-                                        // Use orchestrator to create mission (so it's registered for execution)
-                                        match orch_m.create_mission(
-                                            sid,
-                                            &goal,
-                                            vec![
-                                                ("Initialize Project".to_string(), "Initialize workspace and create basic structure".to_string())
-                                            ],
-                                            workspace,
-                                        ).await {
-                                            Ok(mission) => {
-                                                // Publish event so TUI state updates
-                                                let _ = bus_m.publish(Event {
-                                                    id: Uuid::new_v4(),
-                                                    session_id: sid,
-                                                    trace_id: Uuid::new_v4(),
-                                                    timestamp: Utc::now(),
-                                                    worker_id: "system".to_string(),
-                                                    event_type: "MissionCreated".to_string(),
-                                                    payload: serde_json::to_string(&mission).unwrap(),
-                                                }).await;
-                                            }
-                                            Err(e) => {
-                                                eprintln!("Failed to create mission: {}", e);
-                                            }
+                                        // Use planner to dynamically generate missions
+                                        let planner = BasicPlanner;
+                                        let mut missions = planner.generate_initial_missions(&goal).await;
+                                        
+                                        // Set session_id and workspace on all generated missions
+                                        for mission in &mut missions {
+                                            mission.session_id = sid;
+                                            mission.workspace_path = workspace.clone();
+                                        }
+                                        
+                                        // Add to orchestrator and publish each mission
+                                        for mission in missions {
+                                            // Add to orchestrator so background loop can execute
+                                            let _ = orch_m.add_mission(mission.clone()).await;
+                                            
+                                            // Publish event so TUI state updates
+                                            let _ = bus_m.publish(Event {
+                                                id: Uuid::new_v4(),
+                                                session_id: sid,
+                                                trace_id: Uuid::new_v4(),
+                                                timestamp: Utc::now(),
+                                                worker_id: "system".to_string(),
+                                                event_type: "MissionCreated".to_string(),
+                                                payload: serde_json::to_string(&mission).unwrap(),
+                                            }).await;
                                         }
                                     });
 

@@ -11,6 +11,7 @@ pub struct WorkerRequest {
 #[async_trait::async_trait]
 pub trait Orchestrator: Send + Sync {
     async fn create_mission(&self, session_id: Uuid, name: &str, tasks: Vec<(String, String)>, workspace_path: Option<String>) -> anyhow::Result<Mission>;
+    async fn add_mission(&self, mission: Mission) -> anyhow::Result<()>;
     async fn update_task_status(&self, mission_id: Uuid, task_id: Uuid, status: TaskStatus) -> anyhow::Result<()>;
     async fn execute_task(&self, bus: std::sync::Arc<dyn crate::EventBus>, mission_id: Uuid, task_id: Uuid, worker: &dyn crate::Worker) -> anyhow::Result<String>;
     async fn get_missions(&self) -> anyhow::Result<Vec<Mission>>;
@@ -57,6 +58,12 @@ impl Orchestrator for BasicOrchestrator {
         let mut missions = self.missions.write().await;
         missions.push(mission.clone());
         Ok(mission)
+    }
+
+    async fn add_mission(&self, mission: Mission) -> anyhow::Result<()> {
+        let mut missions = self.missions.write().await;
+        missions.push(mission);
+        Ok(())
     }
 
     async fn update_task_status(&self, mission_id: Uuid, task_id: Uuid, status: TaskStatus) -> anyhow::Result<()> {

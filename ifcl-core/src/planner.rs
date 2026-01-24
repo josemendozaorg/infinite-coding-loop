@@ -15,26 +15,23 @@ pub struct BasicPlanner;
 #[async_trait]
 impl Planner for BasicPlanner {
     async fn generate_initial_missions(&self, _goal: &str) -> Vec<Mission> {
-        let mut missions = Vec::new();
-
-        // Mission 1: Initial Setup
-        missions.push(Mission {
-            id: Uuid::new_v4(),
-            session_id: Uuid::nil(),
-            name: "Phase 1: Setup".to_string(),
-            tasks: vec![
-                Task {
-                    id: Uuid::new_v4(),
-                    name: "Init Repo".to_string(),
-                    description: "Setup git and base file structure.".to_string(),
-                    status: TaskStatus::Pending,
-                    assigned_worker: Some("Git-Bot".to_string()),
-                },
-            ],
-            workspace_path: None,
-        });
-
-        missions
+        vec![
+            Mission {
+                id: Uuid::new_v4(),
+                session_id: Uuid::nil(),
+                name: "Phase 1: Setup".to_string(),
+                tasks: vec![
+                    Task {
+                        id: Uuid::new_v4(),
+                        name: "Init Repo".to_string(),
+                        description: "Setup git and base file structure.".to_string(),
+                        status: TaskStatus::Pending,
+                        assigned_worker: Some("Git-Bot".to_string()),
+                    },
+                ],
+                workspace_path: None,
+            },
+        ]
     }
 
     async fn replan_on_failure(&self, _goal: &str, mission: &Mission, _failed_task_id: Uuid) -> Vec<Mission> {

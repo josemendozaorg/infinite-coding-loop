@@ -8,10 +8,17 @@
     - [x] Create `CliWorker` struct
     - [x] Implement async command execution
     - [x] Handle stdio piping
+- [x] **Expanded Task Handlers** (NEW)
+    - [x] Git operations: init, add, status, commit
+    - [x] File operations: mkdir, touch
+    - [x] Build tools: cargo build/test/check, npm install/build
+    - [x] Generic shell command: "Run Command" task type
 - [x] **Orchestration Integration**
     - [x] Update `Orchestrator` to support execution
     - [x] Connect `CliWorker` to event bus
+    - [x] Add `add_mission()` for planner-generated missions
 - [x] **TUI Integration**
     - [x] Stream `WorkerOutput` events to AI Terminal
 - [x] **Verification**
     - [x] Full end-to-end test with complex mission (Headless Benchmark Verified)
+    - [x] Unit tests for all new task handlers (6 tests)
