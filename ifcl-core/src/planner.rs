@@ -56,14 +56,25 @@ pub struct LLMPlanner {
 #[async_trait]
 impl Planner for LLMPlanner {
     async fn generate_initial_missions(&self, goal: &str) -> Vec<Mission> {
-        let prompt = format!("Decompose the goal into a JSON list of missions with tasks: {}", goal);
+        let prompt = format!("Decompose the goal '{}' into a JSON list of missions with tasks. \
+        IMPORTANT: For tasks that require generating code or text using AI, set 'assigned_worker' to 'Gemini-Bot'. \
+        For shell commands, git operations, or file system ops, set 'assigned_worker' to 'Git-Bot'. \
+        Output must be valid JSON matching the Mission struct.", goal);
+        
         match self.executor.execute(&prompt).await {
             Ok(result) => {
-                // In a real system, we'd parse JSON. For now, if it fails or returns junk, we fallback.
-                if let Ok(missions) = serde_json::from_str::<Vec<Mission>>(&result.stdout) {
+                // Try to clean output: find first [ and last ]
+                let clean_json = if let Some(start) = result.stdout.find('[') {
+                    if let Some(end) = result.stdout.rfind(']') {
+                        if start <= end {
+                            &result.stdout[start..=end]
+                        } else { &result.stdout }
+                    } else { &result.stdout }
+                } else { &result.stdout };
+
+                if let Ok(missions) = serde_json::from_str::<Vec<Mission>>(clean_json) {
                     missions
                 } else {
-                    // Fallback to basic behavior if LLM output is not parseable
                     BasicPlanner.generate_initial_missions(goal).await
                 }
             }
@@ -98,7 +109,7 @@ mod tests {
         let planner = BasicPlanner;
         let missions = planner.generate_initial_missions("Build a Rust CLI").await;
         
-        assert!(missions.len() >= 1);
+        assert!(!missions.is_empty());
         assert!(missions[0].name.contains("Setup"));
         assert_eq!(missions[0].tasks.len(), 1);
     }

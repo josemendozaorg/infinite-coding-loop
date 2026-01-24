@@ -21,6 +21,7 @@ pub enum WizardStep {
     Summary,
 }
 
+#[derive(Debug, Clone)]
 pub struct SetupWizard {
     pub current_step: WizardStep,
     pub goal: String,

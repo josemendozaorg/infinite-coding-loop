@@ -1,33 +1,33 @@
 use uuid::Uuid;
 use std::sync::Arc;
-use tokio::fs;
-use tokio::process::Command;
-use tokio::io::{BufReader, AsyncBufReadExt};
-use std::process::Stdio;
 use async_trait::async_trait;
 use crate::{Worker, WorkerRole, Task, EventBus, Event, WorkerOutputPayload, WorkerProfile};
 use chrono::Utc;
 use serde_json;
 use regex::Regex;
 use std::path::Path;
-
 #[derive(Debug, Clone)]
 pub struct AiGenericWorker {
     pub profile: WorkerProfile,
-    pub binary: String,
-    pub model_flag: Option<String>,
+    // We wrap Agent in Arc/Mutex or just Arc because Worker must be Send+Sync+Clone
+    // Box<dyn Agent> is not Clone by default.
+    // Worker trait requires Clone? No, Worker logic in main.rs clones it?
+    // main.rs: check usage. Worker trait doesn't require Clone, but we clone it?
+    // main.rs logic: Box::new(AiGenericWorker...).
+    // struct AiGenericWorker has #[derive(Clone)].
+    // We need Arc<dyn Agent> to support Clone.
+    pub agent: std::sync::Arc<dyn crate::Agent>,
 }
 
 impl AiGenericWorker {
-    pub fn new(name: String, role: WorkerRole, binary: String, model_flag: Option<String>) -> Self {
+    pub fn new(name: String, role: WorkerRole, agent: Box<dyn crate::Agent>) -> Self {
         Self {
             profile: WorkerProfile {
                 name,
                 role,
-                model: model_flag.clone(),
+                model: Some("agent-based".to_string()), 
             },
-            binary,
-            model_flag,
+            agent: std::sync::Arc::from(agent),
         }
     }
 }
@@ -39,7 +39,7 @@ impl Worker for AiGenericWorker {
     }
     
     fn role(&self) -> WorkerRole {
-        self.profile.role.clone()
+        self.profile.role
     }
 
     fn metadata(&self) -> &WorkerProfile {
@@ -53,77 +53,44 @@ impl Worker for AiGenericWorker {
             task.name, task.description
         );
         
-        let mut args = vec![prompt];
-        if let Some(model) = &self.model_flag {
-            args.insert(0, model.clone());
-            args.insert(0, "--model".to_string());
-        }
+        // Stream Output via Agent
+        // Agent execute returns result directly in current impl, but we want streaming?
+        // Our updated Agent trait supports streaming via mpsc.
+        
+        let (tx, mut rx) = tokio::sync::mpsc::channel(100);
+        
+        let bus_clone = bus.clone();
+        let session_id_clone = session_id;
+        let worker_id_clone = self.profile.name.clone();
 
-        let mut child = Command::new(&self.binary)
-            .args(&args)
-            .current_dir(workspace_path)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
-
-        let stdout = child.stdout.take().unwrap();
-        let stderr = child.stderr.take().unwrap();
-        let mut stdout_reader = BufReader::new(stdout).lines();
-        let mut stderr_reader = BufReader::new(stderr).lines();
-
-        let worker_id = self.profile.name.clone();
-        let bus_out = bus.clone();
-        let bus_err = bus.clone();
-
-        // Stream Output
-        let h_out = tokio::spawn(async move {
-             let mut full = String::new();
-             while let Ok(Some(line)) = stdout_reader.next_line().await {
-                 full.push_str(&line);
-                 full.push('\n');
-                 let _ = bus_out.publish(Event {
+        // Spawn output forwarder
+        tokio::spawn(async move {
+            while let Some((line, is_stderr)) = rx.recv().await {
+                 let _ = bus_clone.publish(Event {
                      id: Uuid::new_v4(),
-                     session_id,
+                     session_id: session_id_clone,
                      trace_id: Uuid::new_v4(),
                      timestamp: Utc::now(),
-                     worker_id: worker_id.clone(),
+                     worker_id: worker_id_clone.clone(),
                      event_type: "WorkerOutput".to_string(),
                      payload: serde_json::to_string(&WorkerOutputPayload {
                          content: line,
-                         is_stderr: false, 
+                         is_stderr, 
                      }).unwrap_or_default(),
                  }).await;
-             }
-             full
+            }
         });
 
-        let worker_id_2 = self.profile.name.clone();
-        let h_err = tokio::spawn(async move {
-             let mut full = String::new();
-             while let Ok(Some(line)) = stderr_reader.next_line().await {
-                 full.push_str(&line);
-                 full.push('\n');
-                 let _ = bus_err.publish(Event {
-                    id: Uuid::new_v4(),
-                     session_id,
-                     trace_id: Uuid::new_v4(),
-                     timestamp: Utc::now(),
-                     worker_id: worker_id_2.clone(),
-                     event_type: "WorkerOutput".to_string(),
-                     payload: serde_json::to_string(&WorkerOutputPayload {
-                         content: line,
-                         is_stderr: true, 
-                     }).unwrap_or_default(),
-                 }).await;
-             }
-             full
-        });
+        // Execute Agent
+        let out_str = self.agent.execute(&prompt, workspace_path, Some(tx)).await?;
+        
+        // Code Concierge Logic (Regex Parse)
+        // ... (Keep existing logic)
+        let status_success = true; // Agent executes throws error if failed? 
+        // Agent execute logic returns Output if status success, or Error if fail.
+        // So if we are here, success.
 
-        let status = child.wait().await?;
-        let out_str = h_out.await?;
-        let err_str = h_err.await?;
-
-        if status.success() {
+        if status_success {
             // Code Concierge: Parse and Write Files
             // Regex to find ```lang:path\ncontent```
             // Matches: ```rust:src/main.rs\ncode\n```
@@ -167,7 +134,8 @@ impl Worker for AiGenericWorker {
             
             Ok(out_str)
         } else {
-            anyhow::bail!("AI Worker Failed: {}", err_str)
+            // Unreachable if agent.execute returns Err on failure
+            anyhow::bail!("AI Worker Failed")
         }
     }
 }
@@ -177,15 +145,17 @@ mod tests {
     use super::*;
     use crate::InMemoryEventBus;
     use crate::TaskStatus;
+    use crate::AiCliAgent;
+    use crate::agent::MockAgent;
 
     #[tokio::test]
     async fn test_ai_generic_worker_echo() {
         // Use 'echo' as a mock AI binary
+        let agent = Box::new(AiCliAgent::new("echo".to_string(), None));
         let worker = AiGenericWorker::new(
             "Echo-Bot".to_string(),
             WorkerRole::Coder,
-            "echo".to_string(),
-            None,
+            agent,
         );
 
         let bus = Arc::new(InMemoryEventBus::new(10));
@@ -210,11 +180,11 @@ mod tests {
     #[tokio::test]
     async fn test_ai_generic_worker_with_model() {
         // Use 'echo' again. If model flag is passed, echo receives it as first arg.
+        let agent = Box::new(AiCliAgent::new("echo".to_string(), Some("gpt-4".to_string())));
         let worker = AiGenericWorker::new(
             "Echo-Bot-Pro".to_string(),
             WorkerRole::Coder,
-            "echo".to_string(),
-            Some("gpt-4".to_string()),
+            agent,
         );
 
         let bus = Arc::new(InMemoryEventBus::new(10));
@@ -238,15 +208,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_ai_parse_and_write() {
-        // Mock output with a markdown block
-        // echo will print the prompt, so we simulate the prompt CONTAINING the output we want to parse.
-        // We put the code block in the DESCRIPTION so it ends up in the prompt argument.
-        
+        let agent = Box::new(AiCliAgent::new("echo".to_string(), None));
         let worker = AiGenericWorker::new(
             "Writer-Bot".to_string(),
             WorkerRole::Coder,
-            "echo".to_string(),
-            None,
+            agent,
         );
 
         let bus = Arc::new(InMemoryEventBus::new(10));
@@ -287,5 +253,33 @@ mod tests {
         assert_eq!(content.trim(), code_content);
         
         std::fs::remove_dir_all(temp_dir).unwrap();
+    }
+    
+    #[tokio::test]
+    async fn test_ai_worker_with_mock_agent() {
+        let mock_agent = MockAgent {
+            id: "mock".to_string(),
+            output_sequence: vec!["Mock Success".to_string()],
+        };
+        
+        let worker = AiGenericWorker::new(
+            "Test-Worker".to_string(),
+            WorkerRole::Coder,
+            Box::new(mock_agent),
+        );
+        
+        let bus = Arc::new(InMemoryEventBus::new(10));
+        let task = Task {
+            id: Uuid::new_v4(),
+            name: "Mock Task".to_string(),
+            description: "Desc".to_string(),
+            status: TaskStatus::Pending,
+            assigned_worker: None,
+        };
+        let workspace = std::env::temp_dir();
+        
+        let result = worker.execute(bus, &task, workspace.to_str().unwrap(), Uuid::new_v4()).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Mock Success");
     }
 }

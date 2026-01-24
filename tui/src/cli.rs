@@ -14,6 +14,9 @@ pub struct CliArgs {
 
     #[arg(long)]
     pub headless: bool,
+
+    #[arg(long)]
+    pub provider: Option<String>,
 }
 
 impl CliArgs {

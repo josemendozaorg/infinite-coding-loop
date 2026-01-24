@@ -21,12 +21,14 @@ pub mod marketplace;
 pub mod orchestrator;
 pub mod context;
 pub mod planner;
+pub mod agent;
 
 pub use ui_state::{AppMode, MenuAction, MenuState};
 pub use wizard::{SetupWizard, WizardStep, AiProvider};
 pub use session::Session;
 pub use groups::WorkerGroup;
 pub use marketplace::MarketplaceLoader;
+pub use agent::{Agent, AiCliAgent};
 pub use orchestrator::{Orchestrator, BasicOrchestrator, WorkerRequest};
 pub use context::*;
 pub use planner::*;

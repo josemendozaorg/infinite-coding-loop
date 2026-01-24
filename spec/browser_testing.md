@@ -11,9 +11,20 @@ Since the application is a Terminal User Interface (TUI), standard browser testi
 A pre-compiled `ttyd` binary is included in the repository root for convenience. This eliminates the need to install `ttyd` separately on your system.
 
 ### Using the Local Binary
+> [!IMPORTANT]
+> **Always kill existing `ttyd` processes before starting a new one** to avoid port binding errors.
+> To find active processes:
+> ```bash
+> pgrep -af ttyd
+> ```
+> To kill them:
+> ```bash
+> pkill -9 ttyd
+> ```
+
 ```bash
 # From the repository root
-./ttyd -p 7682 cargo run --bin tui
+./ttyd -W -p 7682 cargo run --bin tui
 ```
 
 ### Binary Details
@@ -31,10 +42,10 @@ A pre-compiled `ttyd` binary is included in the repository root for convenience.
 The TUI is launched through `ttyd`, mapping the terminal session to a web port:
 ```bash
 # Using system-installed ttyd
-ttyd -p 7682 cargo run --bin tui
+ttyd -W -p 7682 cargo run --bin tui
 
 # Or using the local binary
-./ttyd -p 7682 cargo run --bin tui
+./ttyd -W -p 7682 cargo run --bin tui
 ```
 
 ### 2. Browser Access
