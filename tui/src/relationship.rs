@@ -1,5 +1,4 @@
-
-use petgraph::graph::{NodeIndex, DiGraph};
+use petgraph::graph::{DiGraph, NodeIndex};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -31,7 +30,7 @@ impl MentalMap {
     pub fn add_task(&mut self, mission_id: Uuid, task_id: Uuid, name: &str) {
         let node = self.graph.add_node(NodeType::Task(name.to_string()));
         self.nodes.insert(task_id.to_string(), node);
-        
+
         if let Some(&m_node) = self.nodes.get(&mission_id.to_string()) {
             self.graph.add_edge(m_node, node, ());
         }
@@ -42,7 +41,9 @@ impl MentalMap {
         let w_node = if let Some(&node) = self.nodes.get(&w_id) {
             node
         } else {
-            let node = self.graph.add_node(NodeType::Worker(worker_name.to_string()));
+            let node = self
+                .graph
+                .add_node(NodeType::Worker(worker_name.to_string()));
             self.nodes.insert(w_id, node);
             node
         };
@@ -51,7 +52,6 @@ impl MentalMap {
             self.graph.add_edge(t_node, w_node, ());
         }
     }
-
 }
 
 #[cfg(test)]

@@ -1,5 +1,5 @@
-use uuid::Uuid;
 use crate::{Mission, Task, TaskStatus};
+use uuid::Uuid;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
 pub struct WorkerRequest {
@@ -10,12 +10,30 @@ pub struct WorkerRequest {
 
 #[async_trait::async_trait]
 pub trait Orchestrator: Send + Sync {
-    async fn create_mission(&self, session_id: Uuid, name: &str, tasks: Vec<(String, String)>, workspace_path: Option<String>) -> anyhow::Result<Mission>;
+    async fn create_mission(
+        &self,
+        session_id: Uuid,
+        name: &str,
+        tasks: Vec<(String, String)>,
+        workspace_path: Option<String>,
+    ) -> anyhow::Result<Mission>;
     async fn add_mission(&self, mission: Mission) -> anyhow::Result<()>;
-    async fn update_task_status(&self, mission_id: Uuid, task_id: Uuid, status: TaskStatus) -> anyhow::Result<()>;
-    async fn execute_task(&self, bus: std::sync::Arc<dyn crate::EventBus>, mission_id: Uuid, task_id: Uuid, worker: &dyn crate::Worker) -> anyhow::Result<String>;
+    async fn update_task_status(
+        &self,
+        mission_id: Uuid,
+        task_id: Uuid,
+        status: TaskStatus,
+    ) -> anyhow::Result<()>;
+    async fn execute_task(
+        &self,
+        bus: std::sync::Arc<dyn crate::EventBus>,
+        mission_id: Uuid,
+        task_id: Uuid,
+        worker: &dyn crate::Worker,
+    ) -> anyhow::Result<String>;
     async fn get_missions(&self) -> anyhow::Result<Vec<Mission>>;
     async fn handle_worker_request(&self, request: WorkerRequest) -> anyhow::Result<()>;
+    async fn increment_retry_count(&self, mission_id: Uuid, task_id: Uuid) -> anyhow::Result<u32>;
 }
 
 pub struct BasicOrchestrator {
@@ -38,14 +56,24 @@ impl Default for BasicOrchestrator {
 
 #[async_trait::async_trait]
 impl Orchestrator for BasicOrchestrator {
-    async fn create_mission(&self, session_id: Uuid, name: &str, tasks: Vec<(String, String)>, workspace_path: Option<String>) -> anyhow::Result<Mission> {
-        let task_list = tasks.into_iter().map(|(n, d)| Task {
-            id: Uuid::new_v4(),
-            name: n,
-            description: d,
-            status: TaskStatus::Pending,
-            assigned_worker: None,
-        }).collect();
+    async fn create_mission(
+        &self,
+        session_id: Uuid,
+        name: &str,
+        tasks: Vec<(String, String)>,
+        workspace_path: Option<String>,
+    ) -> anyhow::Result<Mission> {
+        let task_list = tasks
+            .into_iter()
+            .map(|(n, d)| Task {
+                id: Uuid::new_v4(),
+                name: n,
+                description: d,
+                status: TaskStatus::Pending,
+                assigned_worker: None,
+                retry_count: 0,
+            })
+            .collect();
 
         let mission = Mission {
             id: Uuid::new_v4(),
@@ -66,7 +94,12 @@ impl Orchestrator for BasicOrchestrator {
         Ok(())
     }
 
-    async fn update_task_status(&self, mission_id: Uuid, task_id: Uuid, status: TaskStatus) -> anyhow::Result<()> {
+    async fn update_task_status(
+        &self,
+        mission_id: Uuid,
+        task_id: Uuid,
+        status: TaskStatus,
+    ) -> anyhow::Result<()> {
         let mut missions = self.missions.write().await;
         if let Some(mission) = missions.iter_mut().find(|m| m.id == mission_id) {
             if let Some(task) = mission.tasks.iter_mut().find(|t| t.id == task_id) {
@@ -82,62 +115,94 @@ impl Orchestrator for BasicOrchestrator {
         Ok(missions.clone())
     }
 
-    async fn execute_task(&self, bus: std::sync::Arc<dyn crate::EventBus>, mission_id: Uuid, task_id: Uuid, worker: &dyn crate::Worker) -> anyhow::Result<String> {
+    async fn execute_task(
+        &self,
+        bus: std::sync::Arc<dyn crate::EventBus>,
+        mission_id: Uuid,
+        task_id: Uuid,
+        worker: &dyn crate::Worker,
+    ) -> anyhow::Result<String> {
         let (task, workspace, session_id) = {
             let missions = self.missions.read().await;
-            let mission = missions.iter().find(|m| m.id == mission_id).ok_or_else(|| anyhow::anyhow!("Mission not found"))?;
-            let task = mission.tasks.iter().find(|t| t.id == task_id).ok_or_else(|| anyhow::anyhow!("Task not found"))?;
-            (task.clone(), mission.workspace_path.clone(), mission.session_id)
+            let mission = missions
+                .iter()
+                .find(|m| m.id == mission_id)
+                .ok_or_else(|| anyhow::anyhow!("Mission not found"))?;
+            let task = mission
+                .tasks
+                .iter()
+                .find(|t| t.id == task_id)
+                .ok_or_else(|| anyhow::anyhow!("Task not found"))?;
+            (
+                task.clone(),
+                mission.workspace_path.clone(),
+                mission.session_id,
+            )
         };
 
         let workspace_path = workspace.unwrap_or_else(|| ".".to_string());
-        
-        self.update_task_status(mission_id, task_id, TaskStatus::Running).await?;
-        
-        let _ = bus.publish(crate::Event {
-            id: Uuid::new_v4(),
-            session_id,
-            trace_id: Uuid::new_v4(),
-            timestamp: chrono::Utc::now(),
-            worker_id: "system".to_string(),
-            event_type: "Log".to_string(),
-            payload: serde_json::to_string(&crate::LogPayload {
-                level: "INFO".to_string(),
-                message: format!("▶ Starting Task: {}", task.name),
-            }).unwrap(),
-        }).await;
 
-        match worker.execute(bus.clone(), &task, &workspace_path, session_id).await {
+        self.update_task_status(mission_id, task_id, TaskStatus::Running)
+            .await?;
+
+        let _ = bus
+            .publish(crate::Event {
+                id: Uuid::new_v4(),
+                session_id,
+                trace_id: Uuid::new_v4(),
+                timestamp: chrono::Utc::now(),
+                worker_id: "system".to_string(),
+                event_type: "Log".to_string(),
+                payload: serde_json::to_string(&crate::LogPayload {
+                    level: "INFO".to_string(),
+                    message: format!("▶ Starting Task: {}", task.name),
+                })
+                .unwrap(),
+            })
+            .await;
+
+        match worker
+            .execute(bus.clone(), &task, &workspace_path, session_id)
+            .await
+        {
             Ok(output) => {
-                self.update_task_status(mission_id, task_id, TaskStatus::Success).await?;
-                let _ = bus.publish(crate::Event {
-                    id: Uuid::new_v4(),
-                    session_id,
-                    trace_id: Uuid::new_v4(),
-                    timestamp: chrono::Utc::now(),
-                    worker_id: "system".to_string(),
-                    event_type: "Log".to_string(),
-                    payload: serde_json::to_string(&crate::LogPayload {
-                        level: "SUCCESS".to_string(),
-                        message: format!("✅ Task Completed: {}", task.name),
-                    }).unwrap(),
-                }).await;
+                self.update_task_status(mission_id, task_id, TaskStatus::Success)
+                    .await?;
+                let _ = bus
+                    .publish(crate::Event {
+                        id: Uuid::new_v4(),
+                        session_id,
+                        trace_id: Uuid::new_v4(),
+                        timestamp: chrono::Utc::now(),
+                        worker_id: "system".to_string(),
+                        event_type: "Log".to_string(),
+                        payload: serde_json::to_string(&crate::LogPayload {
+                            level: "SUCCESS".to_string(),
+                            message: format!("✅ Task Completed: {}", task.name),
+                        })
+                        .unwrap(),
+                    })
+                    .await;
                 Ok(output)
             }
             Err(e) => {
-                self.update_task_status(mission_id, task_id, TaskStatus::Failure).await?;
-                let _ = bus.publish(crate::Event {
-                    id: Uuid::new_v4(),
-                    session_id,
-                    trace_id: Uuid::new_v4(),
-                    timestamp: chrono::Utc::now(),
-                    worker_id: "system".to_string(),
-                    event_type: "Log".to_string(),
-                    payload: serde_json::to_string(&crate::LogPayload {
-                        level: "ERROR".to_string(),
-                        message: format!("❌ Task Failed: {}: {}", task.name, e),
-                    }).unwrap(),
-                }).await;
+                self.update_task_status(mission_id, task_id, TaskStatus::Failure)
+                    .await?;
+                let _ = bus
+                    .publish(crate::Event {
+                        id: Uuid::new_v4(),
+                        session_id,
+                        trace_id: Uuid::new_v4(),
+                        timestamp: chrono::Utc::now(),
+                        worker_id: "system".to_string(),
+                        event_type: "Log".to_string(),
+                        payload: serde_json::to_string(&crate::LogPayload {
+                            level: "ERROR".to_string(),
+                            message: format!("❌ Task Failed: {}: {}", task.name, e),
+                        })
+                        .unwrap(),
+                    })
+                    .await;
                 Err(e)
             }
         }
@@ -146,5 +211,16 @@ impl Orchestrator for BasicOrchestrator {
     async fn handle_worker_request(&self, _request: WorkerRequest) -> anyhow::Result<()> {
         // Placeholder for future logic
         Ok(())
+    }
+
+    async fn increment_retry_count(&self, mission_id: Uuid, task_id: Uuid) -> anyhow::Result<u32> {
+        let mut missions = self.missions.write().await;
+        if let Some(mission) = missions.iter_mut().find(|m| m.id == mission_id) {
+            if let Some(task) = mission.tasks.iter_mut().find(|t| t.id == task_id) {
+                task.retry_count += 1;
+                return Ok(task.retry_count);
+            }
+        }
+        anyhow::bail!("Mission or Task not found")
     }
 }

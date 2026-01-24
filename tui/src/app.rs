@@ -1,16 +1,15 @@
-use std::sync::{Arc, Mutex};
-use crossterm::event::KeyCode;
-use uuid::Uuid;
+use crate::state::{AiOutput, AppState, FocusMode};
 use chrono::Utc;
+use crossterm::event::KeyCode;
 use ifcl_core::{
-    Event, EventBus, EventStore, Mission, TaskStatus, LoopStatus,
-    AppMode, MenuAction, SetupWizard, WizardStep, LogPayload,
-    WorkerOutputPayload, WorkerProfile, AiProvider, CliExecutor,
-    orchestrator::Orchestrator,
     learning::{LearningManager, MissionOutcome},
-    planner::{Planner, BasicPlanner, LLMPlanner},
+    orchestrator::Orchestrator,
+    planner::{BasicPlanner, LLMPlanner, Planner},
+    AiProvider, AppMode, CliExecutor, Event, EventBus, EventStore, LogPayload, LoopStatus,
+    MenuAction, Mission, SetupWizard, TaskStatus, WizardStep, WorkerOutputPayload, WorkerProfile,
 };
-use crate::state::{AppState, FocusMode, AiOutput};
+use std::sync::{Arc, Mutex};
+use uuid::Uuid;
 
 pub struct App {
     pub state: Arc<Mutex<AppState>>,
@@ -39,7 +38,7 @@ impl App {
 
     pub async fn process_event(&self, event: Event) {
         let _ = self.store.append(event.clone()).await;
-        
+
         let bus_c = Arc::clone(&self.bus);
         let learning_c = Arc::clone(&self.learning_manager);
         let state_c = Arc::clone(&self.state);
@@ -73,31 +72,37 @@ impl App {
                     }
                 }
                 "TaskUpdated" => {
-                     #[derive(serde::Deserialize)]
-                     struct TaskUpdate { mission_id: Uuid, task_id: Uuid, status: TaskStatus }
-                     if let Ok(update) = serde_json::from_str::<TaskUpdate>(&event.payload) {
-                         if let Some(m) = s.missions.iter_mut().find(|m| m.id == update.mission_id) {
-                             if let Some(t) = m.tasks.iter_mut().find(|t| t.id == update.task_id) {
-                                 t.status = update.status;
-                                 if update.status == TaskStatus::Success {
-                                     let m_bus: Arc<dyn ifcl_core::EventBus> = Arc::clone(&self.bus);
-                                     let sid = event.session_id;
-                                     let tid = event.trace_id;
-                                     tokio::spawn(async move {
-                                         let _ = m_bus.publish(Event {
-                                             id: Uuid::new_v4(),
-                                             session_id: sid,
-                                             trace_id: tid,
-                                             timestamp: Utc::now(), 
-                                             worker_id: "system".to_string(),
-                                             event_type: "RewardEarned".to_string(),
-                                             payload: r#"{"xp":25,"coins":10}"#.to_string(),
-                                         }).await;
-                                     });
-                                 }
-                             }
-                         }
-                     }
+                    #[derive(serde::Deserialize)]
+                    struct TaskUpdate {
+                        mission_id: Uuid,
+                        task_id: Uuid,
+                        status: TaskStatus,
+                    }
+                    if let Ok(update) = serde_json::from_str::<TaskUpdate>(&event.payload) {
+                        if let Some(m) = s.missions.iter_mut().find(|m| m.id == update.mission_id) {
+                            if let Some(t) = m.tasks.iter_mut().find(|t| t.id == update.task_id) {
+                                t.status = update.status;
+                                if update.status == TaskStatus::Success {
+                                    let m_bus: Arc<dyn ifcl_core::EventBus> = Arc::clone(&self.bus);
+                                    let sid = event.session_id;
+                                    let tid = event.trace_id;
+                                    tokio::spawn(async move {
+                                        let _ = m_bus
+                                            .publish(Event {
+                                                id: Uuid::new_v4(),
+                                                session_id: sid,
+                                                trace_id: tid,
+                                                timestamp: Utc::now(),
+                                                worker_id: "system".to_string(),
+                                                event_type: "RewardEarned".to_string(),
+                                                payload: r#"{"xp":25,"coins":10}"#.to_string(),
+                                            })
+                                            .await;
+                                    });
+                                }
+                            }
+                        }
+                    }
                 }
                 "RewardEarned" => {
                     if let Ok(reward) = serde_json::from_str::<serde_json::Value>(&event.payload) {
@@ -117,7 +122,8 @@ impl App {
                     }
                 }
                 "WorkerOutput" => {
-                    if let Ok(payload) = serde_json::from_str::<WorkerOutputPayload>(&event.payload) {
+                    if let Ok(payload) = serde_json::from_str::<WorkerOutputPayload>(&event.payload)
+                    {
                         if let Some(latest) = s.ai_outputs.last_mut() {
                             if latest.worker_id == event.worker_id {
                                 latest.content.push_str(&payload.content);
@@ -151,22 +157,26 @@ impl App {
                     if cmd == "force success" {
                         for m in &mut s.missions {
                             for t in &mut m.tasks {
-                                if t.status == TaskStatus::Running || t.status == TaskStatus::Pending {
+                                if t.status == TaskStatus::Running
+                                    || t.status == TaskStatus::Pending
+                                {
                                     t.status = TaskStatus::Success;
-                                     let b_rew = Arc::clone(&bus_c);
-                                     let sid = event.session_id;
-                                     let tid = event.trace_id;
-                                     tokio::spawn(async move {
-                                         let _ = b_rew.publish(Event {
-                                             id: Uuid::new_v4(),
-                                             session_id: sid,
-                                             trace_id: tid,
-                                             timestamp: Utc::now(), 
-                                             worker_id: "system".to_string(),
-                                             event_type: "RewardEarned".to_string(),
-                                             payload: r#"{"xp":50,"coins":20}"#.to_string(),
-                                         }).await;
-                                     });
+                                    let b_rew = Arc::clone(&bus_c);
+                                    let sid = event.session_id;
+                                    let tid = event.trace_id;
+                                    tokio::spawn(async move {
+                                        let _ = b_rew
+                                            .publish(Event {
+                                                id: Uuid::new_v4(),
+                                                session_id: sid,
+                                                trace_id: tid,
+                                                timestamp: Utc::now(),
+                                                worker_id: "system".to_string(),
+                                                event_type: "RewardEarned".to_string(),
+                                                payload: r#"{"xp":50,"coins":20}"#.to_string(),
+                                            })
+                                            .await;
+                                    });
                                     break;
                                 }
                             }
@@ -174,23 +184,34 @@ impl App {
                     } else if cmd == "force failure" {
                         for m in &mut s.missions {
                             for t in &mut m.tasks {
-                                if t.status == TaskStatus::Running || t.status == TaskStatus::Pending {
+                                if t.status == TaskStatus::Running
+                                    || t.status == TaskStatus::Pending
+                                {
                                     t.status = TaskStatus::Failure;
-                                     let bus_f = Arc::clone(&bus_c);
-                                     let sid = event.session_id;
-                                     let tid = event.trace_id;
-                                     let name_cloned = t.name.clone();
-                                     tokio::spawn(async move {
-                                         let _ = bus_f.publish(Event {
-                                             id: Uuid::new_v4(),
-                                             session_id: sid,
-                                             trace_id: tid,
-                                             timestamp: Utc::now(), 
-                                             worker_id: "system".to_string(),
-                                             event_type: "Log".to_string(),
-                                             payload: serde_json::to_string(&LogPayload { level: "ERROR".to_string(), message: format!("GOD MODE: Forced failure on task '{}'", name_cloned) }).unwrap(),
-                                         }).await;
-                                     });
+                                    let bus_f = Arc::clone(&bus_c);
+                                    let sid = event.session_id;
+                                    let tid = event.trace_id;
+                                    let name_cloned = t.name.clone();
+                                    tokio::spawn(async move {
+                                        let _ = bus_f
+                                            .publish(Event {
+                                                id: Uuid::new_v4(),
+                                                session_id: sid,
+                                                trace_id: tid,
+                                                timestamp: Utc::now(),
+                                                worker_id: "system".to_string(),
+                                                event_type: "Log".to_string(),
+                                                payload: serde_json::to_string(&LogPayload {
+                                                    level: "ERROR".to_string(),
+                                                    message: format!(
+                                                        "GOD MODE: Forced failure on task '{}'",
+                                                        name_cloned
+                                                    ),
+                                                })
+                                                .unwrap(),
+                                            })
+                                            .await;
+                                    });
                                     break;
                                 }
                             }
@@ -198,15 +219,20 @@ impl App {
                     }
                 }
                 "Log" => {
-                     if let Ok(payload) = serde_json::from_str::<LogPayload>(&event.payload) {
-                         s.last_event_type = format!("{}: {}", payload.level, payload.message).chars().take(40).collect();
-                         s.ai_outputs.push(AiOutput {
-                             timestamp: event.timestamp,
-                             worker_id: event.worker_id.clone(),
-                             content: format!("LOG [{}]: {}", payload.level, payload.message),
-                         });
-                         if s.ai_outputs.len() > 50 { s.ai_outputs.remove(0); }
-                     }
+                    if let Ok(payload) = serde_json::from_str::<LogPayload>(&event.payload) {
+                        s.last_event_type = format!("{}: {}", payload.level, payload.message)
+                            .chars()
+                            .take(40)
+                            .collect();
+                        s.ai_outputs.push(AiOutput {
+                            timestamp: event.timestamp,
+                            worker_id: event.worker_id.clone(),
+                            content: format!("LOG [{}]: {}", payload.level, payload.message),
+                        });
+                        if s.ai_outputs.len() > 50 {
+                            s.ai_outputs.remove(0);
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -218,15 +244,20 @@ impl App {
 
             let mut just_completed = Vec::new();
             for m in &s.missions {
-                if !s.recorded_missions.contains(&m.id) && !m.tasks.is_empty() && m.tasks.iter().all(|t| t.status == TaskStatus::Success || t.status == TaskStatus::Failure) {
+                if !s.recorded_missions.contains(&m.id)
+                    && !m.tasks.is_empty()
+                    && m.tasks
+                        .iter()
+                        .all(|t| t.status == TaskStatus::Success || t.status == TaskStatus::Failure)
+                {
                     just_completed.push(m.clone());
                 }
             }
-            
+
             if !just_completed.is_empty() {
                 let l_c = Arc::clone(&learning_c);
                 let s_cc = Arc::clone(&state_c);
-                
+
                 for m in &just_completed {
                     s.recorded_missions.insert(m.id);
                 }
@@ -234,11 +265,13 @@ impl App {
                 tokio::spawn(async move {
                     for m in just_completed {
                         let success = m.tasks.iter().all(|t| t.status == TaskStatus::Success);
-                        let errors: Vec<String> = m.tasks.iter()
+                        let errors: Vec<String> = m
+                            .tasks
+                            .iter()
                             .filter(|t| t.status == TaskStatus::Failure)
                             .map(|t| format!("{}: General Failure", t.name))
                             .collect();
-                        
+
                         let outcome = MissionOutcome {
                             mission_id: m.id,
                             success,
@@ -299,45 +332,58 @@ impl App {
                                 });
                             }
                             MenuAction::Quit => return true,
-                            _ => {} 
+                            _ => {}
                         }
                     }
                     _ => {}
                 }
             }
-            AppMode::Setup => {
-                match key {
-                    KeyCode::Esc => s.mode = AppMode::MainMenu,
-                    KeyCode::Enter => {
-                        if s.wizard.current_step == WizardStep::Summary {
-                            let sid = Uuid::new_v4();
-                            s.current_session_id = Some(sid);
-                            s.mode = AppMode::Running;
-                            s.status = LoopStatus::Running;
-                            
-                            let bus_m = Arc::clone(&self.bus);
-                            let orch_m = Arc::clone(&self.orchestrator);
-                            let goal = s.wizard.goal.clone();
-                            let workspace = if s.wizard.workspace_path.is_empty() { None } else { Some(s.wizard.workspace_path.clone()) };
-                            let provider = s.wizard.provider.clone();
-                            
-                            tokio::spawn(async move {
-                                let planner: Arc<dyn Planner> = match provider {
-                                    AiProvider::Basic => Arc::new(BasicPlanner),
-                                    AiProvider::Gemini => Arc::new(LLMPlanner { executor: CliExecutor::new("gemini".to_string()) }),
-                                    AiProvider::Claude => Arc::new(LLMPlanner { executor: CliExecutor::new("claude".to_string()) }),
-                                    AiProvider::OpenCode => Arc::new(LLMPlanner { executor: CliExecutor::new("opencode".to_string()) }),
-                                };
-                                let mut missions = planner.generate_initial_missions(&goal).await;
-                                
-                                for mission in &mut missions {
-                                    mission.session_id = sid;
-                                    mission.workspace_path = workspace.clone();
-                                }
-                                
-                                for mission in missions {
-                                    let _ = orch_m.add_mission(mission.clone()).await;
-                                    let _ = bus_m.publish(Event {
+            AppMode::Setup => match key {
+                KeyCode::Esc => s.mode = AppMode::MainMenu,
+                KeyCode::Enter => {
+                    if s.wizard.current_step == WizardStep::Summary {
+                        let sid = Uuid::new_v4();
+                        s.current_session_id = Some(sid);
+                        s.mode = AppMode::Running;
+                        s.status = LoopStatus::Running;
+
+                        let bus_m = Arc::clone(&self.bus);
+                        let orch_m = Arc::clone(&self.orchestrator);
+                        let goal = s.wizard.goal.clone();
+                        let workspace = if s.wizard.workspace_path.is_empty() {
+                            None
+                        } else {
+                            Some(s.wizard.workspace_path.clone())
+                        };
+                        let provider = s.wizard.provider.clone();
+
+                        tokio::spawn(async move {
+                            let planner: Arc<dyn Planner> = match provider {
+                                AiProvider::Basic => Arc::new(BasicPlanner),
+                                AiProvider::Gemini => Arc::new(LLMPlanner {
+                                    executor: CliExecutor::new(
+                                        "gemini".to_string(),
+                                        vec!["--yolo".to_string(), "--allowed-tools".to_string(), "run_shell_command".to_string()],
+                                    ),
+                                }),
+                                AiProvider::Claude => Arc::new(LLMPlanner {
+                                    executor: CliExecutor::new("claude".to_string(), vec![]),
+                                }),
+                                AiProvider::OpenCode => Arc::new(LLMPlanner {
+                                    executor: CliExecutor::new("opencode".to_string(), vec![]),
+                                }),
+                            };
+                            let mut missions = planner.generate_initial_missions(&goal).await;
+
+                            for mission in &mut missions {
+                                mission.session_id = sid;
+                                mission.workspace_path = workspace.clone();
+                            }
+
+                            for mission in missions {
+                                let _ = orch_m.add_mission(mission.clone()).await;
+                                let _ = bus_m
+                                    .publish(Event {
                                         id: Uuid::new_v4(),
                                         session_id: sid,
                                         trace_id: Uuid::new_v4(),
@@ -345,68 +391,78 @@ impl App {
                                         worker_id: "system".to_string(),
                                         event_type: "MissionCreated".to_string(),
                                         payload: serde_json::to_string(&mission).unwrap(),
-                                    }).await;
-                                }
-                            });
-                        } else {
-                            let _ = s.wizard.next();
-                        }
+                                    })
+                                    .await;
+                            }
+                        });
+                    } else {
+                        let _ = s.wizard.next();
                     }
-                    KeyCode::Backspace => {
-                        if s.wizard.current_step == WizardStep::Goal {
-                            s.wizard.goal.pop();
-                        } else if s.wizard.current_step == WizardStep::Workspace {
-                            s.wizard.workspace_path.pop();
-                        } else {
-                            s.wizard.prev();
-                        }
-                    }
-                    KeyCode::Up => {
-                        if s.wizard.current_step == WizardStep::Team && s.wizard.selected_group_index > 0 {
-                            s.wizard.selected_group_index -= 1;
-                        } else if s.wizard.current_step == WizardStep::Provider {
-                            s.wizard.provider = match s.wizard.provider {
-                                AiProvider::Gemini => AiProvider::Basic,
-                                AiProvider::Claude => AiProvider::Gemini,
-                                AiProvider::OpenCode => AiProvider::Claude,
-                                AiProvider::Basic => AiProvider::OpenCode,
-                            };
-                        }
-                    }
-                    KeyCode::Down => {
-                        if s.wizard.current_step == WizardStep::Team && s.wizard.selected_group_index < s.available_groups.len().saturating_sub(1) {
-                            s.wizard.selected_group_index += 1;
-                        } else if s.wizard.current_step == WizardStep::Provider {
-                            s.wizard.provider = match s.wizard.provider {
-                                AiProvider::Gemini => AiProvider::Claude,
-                                AiProvider::Claude => AiProvider::OpenCode,
-                                AiProvider::OpenCode => AiProvider::Basic,
-                                AiProvider::Basic => AiProvider::Gemini,
-                            };
-                        }
-                    }
-                    KeyCode::Left => {
+                }
+                KeyCode::Backspace => {
+                    if s.wizard.current_step == WizardStep::Goal {
+                        s.wizard.goal.pop();
+                    } else if s.wizard.current_step == WizardStep::Workspace {
+                        s.wizard.workspace_path.pop();
+                    } else {
                         s.wizard.prev();
                     }
-                    KeyCode::Char(c) => {
-                        if s.wizard.current_step == WizardStep::Goal {
-                            s.wizard.goal.push(c);
-                        } else if s.wizard.current_step == WizardStep::Workspace {
-                            s.wizard.workspace_path.push(c);
-                        }
-                    }
-                    _ => {}
                 }
-            }
+                KeyCode::Up => {
+                    if s.wizard.current_step == WizardStep::Team
+                        && s.wizard.selected_group_index > 0
+                    {
+                        s.wizard.selected_group_index -= 1;
+                    } else if s.wizard.current_step == WizardStep::Provider {
+                        s.wizard.provider = match s.wizard.provider {
+                            AiProvider::Gemini => AiProvider::Basic,
+                            AiProvider::Claude => AiProvider::Gemini,
+                            AiProvider::OpenCode => AiProvider::Claude,
+                            AiProvider::Basic => AiProvider::OpenCode,
+                        };
+                    }
+                }
+                KeyCode::Down => {
+                    if s.wizard.current_step == WizardStep::Team
+                        && s.wizard.selected_group_index
+                            < s.available_groups.len().saturating_sub(1)
+                    {
+                        s.wizard.selected_group_index += 1;
+                    } else if s.wizard.current_step == WizardStep::Provider {
+                        s.wizard.provider = match s.wizard.provider {
+                            AiProvider::Gemini => AiProvider::Claude,
+                            AiProvider::Claude => AiProvider::OpenCode,
+                            AiProvider::OpenCode => AiProvider::Basic,
+                            AiProvider::Basic => AiProvider::Gemini,
+                        };
+                    }
+                }
+                KeyCode::Left => {
+                    s.wizard.prev();
+                }
+                KeyCode::Char(c) => {
+                    if s.wizard.current_step == WizardStep::Goal {
+                        s.wizard.goal.push(c);
+                    } else if s.wizard.current_step == WizardStep::Workspace {
+                        s.wizard.workspace_path.push(c);
+                    }
+                }
+                _ => {}
+            },
             AppMode::Running => {
                 if s.show_event_details {
                     match key {
-                        KeyCode::Esc | KeyCode::Enter => { s.show_event_details = false; }
+                        KeyCode::Esc | KeyCode::Enter => {
+                            s.show_event_details = false;
+                        }
                         _ => {}
                     }
                 } else if s.is_intervening {
                     match key {
-                        KeyCode::Esc => { s.is_intervening = false; s.input_buffer.clear(); }
+                        KeyCode::Esc => {
+                            s.is_intervening = false;
+                            s.input_buffer.clear();
+                        }
                         KeyCode::Enter => {
                             let cmd = s.input_buffer.clone();
                             s.is_intervening = false;
@@ -414,27 +470,36 @@ impl App {
                             let bus_g = Arc::clone(&self.bus);
                             let sid = s.current_session_id.unwrap_or_default();
                             tokio::spawn(async move {
-                                let _ = bus_g.publish(Event {
-                                    id: Uuid::new_v4(),
-                                    session_id: sid,
-                                    trace_id: Uuid::new_v4(),
-                                    timestamp: Utc::now(),
-                                    worker_id: "god".to_string(),
-                                    event_type: "ManualCommandInjected".to_string(),
-                                    payload: cmd,
-                                }).await;
+                                let _ = bus_g
+                                    .publish(Event {
+                                        id: Uuid::new_v4(),
+                                        session_id: sid,
+                                        trace_id: Uuid::new_v4(),
+                                        timestamp: Utc::now(),
+                                        worker_id: "god".to_string(),
+                                        event_type: "ManualCommandInjected".to_string(),
+                                        payload: cmd,
+                                    })
+                                    .await;
                             });
                         }
-                        KeyCode::Char(c) => { s.input_buffer.push(c); }
-                        KeyCode::Backspace => { s.input_buffer.pop(); }
+                        KeyCode::Char(c) => {
+                            s.input_buffer.push(c);
+                        }
+                        KeyCode::Backspace => {
+                            s.input_buffer.pop();
+                        }
                         _ => {}
                     }
                 } else {
                     match key {
                         KeyCode::Char('q') => {
-                            s.mode = AppMode::MainMenu; 
-                        },
-                        KeyCode::Char('i') => { s.is_intervening = true; s.input_buffer.clear(); }
+                            s.mode = AppMode::MainMenu;
+                        }
+                        KeyCode::Char('i') => {
+                            s.is_intervening = true;
+                            s.input_buffer.clear();
+                        }
                         KeyCode::Char(' ') => {
                             let new_status = match s.status {
                                 LoopStatus::Running => LoopStatus::Paused,
@@ -443,22 +508,30 @@ impl App {
                             let bus_p = Arc::clone(&self.bus);
                             let sid = s.current_session_id.unwrap_or_default();
                             tokio::spawn(async move {
-                                let _ = bus_p.publish(Event {
-                                    id: Uuid::new_v4(),
-                                    session_id: sid,
-                                    trace_id: Uuid::new_v4(),
-                                    timestamp: Utc::now(),
-                                    worker_id: "user".to_string(),
-                                    event_type: "LoopStatusChanged".to_string(),
-                                    payload: serde_json::to_string(&new_status).unwrap(),
-                                }).await;
+                                let _ = bus_p
+                                    .publish(Event {
+                                        id: Uuid::new_v4(),
+                                        session_id: sid,
+                                        trace_id: Uuid::new_v4(),
+                                        timestamp: Utc::now(),
+                                        worker_id: "user".to_string(),
+                                        event_type: "LoopStatusChanged".to_string(),
+                                        payload: serde_json::to_string(&new_status).unwrap(),
+                                    })
+                                    .await;
                             });
                         }
                         KeyCode::Up | KeyCode::Char('k') => {
                             let count = s.events.len();
                             if count > 0 {
                                 let i = match s.feed_state.selected() {
-                                    Some(i) => if i == 0 { count - 1 } else { i - 1 },
+                                    Some(i) => {
+                                        if i == 0 {
+                                            count - 1
+                                        } else {
+                                            i - 1
+                                        }
+                                    }
                                     None => count - 1,
                                 };
                                 s.feed_state.select(Some(i));
@@ -469,7 +542,13 @@ impl App {
                             let count = s.events.len();
                             if count > 0 {
                                 let i = match s.feed_state.selected() {
-                                    Some(i) => if i >= count - 1 { 0 } else { i + 1 },
+                                    Some(i) => {
+                                        if i >= count - 1 {
+                                            0
+                                        } else {
+                                            i + 1
+                                        }
+                                    }
                                     None => 0,
                                 };
                                 s.feed_state.select(Some(i));
@@ -485,13 +564,51 @@ impl App {
                             s.selected_event_index = None;
                             s.feed_state.select(None);
                         }
-                        KeyCode::Char('1') => { s.focus_mode = if s.focus_mode == FocusMode::Roster { FocusMode::None } else { FocusMode::Roster }; }
-                        KeyCode::Char('2') => { s.focus_mode = if s.focus_mode == FocusMode::MissionControl { FocusMode::None } else { FocusMode::MissionControl }; }
-                        KeyCode::Char('3') => { s.focus_mode = if s.focus_mode == FocusMode::MentalMap { FocusMode::None } else { FocusMode::MentalMap }; }
-                        KeyCode::Char('4') => { s.focus_mode = if s.focus_mode == FocusMode::Feed { FocusMode::None } else { FocusMode::Feed }; }
-                        KeyCode::Char('5') => { s.focus_mode = if s.focus_mode == FocusMode::Terminal { FocusMode::None } else { FocusMode::Terminal }; }
-                        KeyCode::Char('6') => { s.focus_mode = if s.focus_mode == FocusMode::Learnings { FocusMode::None } else { FocusMode::Learnings }; }
-                        KeyCode::Char('0') => { s.focus_mode = FocusMode::None; }
+                        KeyCode::Char('1') => {
+                            s.focus_mode = if s.focus_mode == FocusMode::Roster {
+                                FocusMode::None
+                            } else {
+                                FocusMode::Roster
+                            };
+                        }
+                        KeyCode::Char('2') => {
+                            s.focus_mode = if s.focus_mode == FocusMode::MissionControl {
+                                FocusMode::None
+                            } else {
+                                FocusMode::MissionControl
+                            };
+                        }
+                        KeyCode::Char('3') => {
+                            s.focus_mode = if s.focus_mode == FocusMode::MentalMap {
+                                FocusMode::None
+                            } else {
+                                FocusMode::MentalMap
+                            };
+                        }
+                        KeyCode::Char('4') => {
+                            s.focus_mode = if s.focus_mode == FocusMode::Feed {
+                                FocusMode::None
+                            } else {
+                                FocusMode::Feed
+                            };
+                        }
+                        KeyCode::Char('5') => {
+                            s.focus_mode = if s.focus_mode == FocusMode::Terminal {
+                                FocusMode::None
+                            } else {
+                                FocusMode::Terminal
+                            };
+                        }
+                        KeyCode::Char('6') => {
+                            s.focus_mode = if s.focus_mode == FocusMode::Learnings {
+                                FocusMode::None
+                            } else {
+                                FocusMode::Learnings
+                            };
+                        }
+                        KeyCode::Char('0') => {
+                            s.focus_mode = FocusMode::None;
+                        }
                         _ => {}
                     }
                 }
@@ -510,7 +627,9 @@ impl App {
                         }
                     }
                     KeyCode::Enter => {
-                        if let Some(sid) = s.available_sessions.get(s.selected_session_index).cloned() {
+                        if let Some(sid) =
+                            s.available_sessions.get(s.selected_session_index).cloned()
+                        {
                             s.current_session_id = Some(sid);
                             // Session loading logic would go here
                         }

@@ -1,6 +1,6 @@
-use crate::{WorkerProfile, Mission, WorkerGroup};
-use std::path::Path;
+use crate::{Mission, WorkerGroup, WorkerProfile};
 use std::fs;
+use std::path::Path;
 
 #[derive(Debug)]
 pub struct MarketplaceLoader;
@@ -37,7 +37,7 @@ impl MarketplaceLoader {
     pub fn load_groups<P: AsRef<Path>>(path: P) -> Vec<WorkerGroup> {
         let mut groups = Vec::new();
         if let Ok(entries) = fs::read_dir(path) {
-             for entry in entries.flatten() {
+            for entry in entries.flatten() {
                 if let Ok(content) = fs::read_to_string(entry.path()) {
                     if let Ok(group) = serde_json::from_str::<WorkerGroup>(&content) {
                         groups.push(group);

@@ -1,15 +1,15 @@
-# Progress: 38_planner_worker
+# Feature Progress: 38_planner_worker
 
 ## Status
-- [x] DONE
+- [DONE] Implementation Complete
+- [DONE] Verification Complete
 
 ## Checklist
-
-### Core Logic
-- [x] Define `Planner` trait. (`ifcl-core/planner.rs`)
-- [x] Implement `BasicPlanner` (Rule-based stub). (`ifcl-core/planner.rs`)
-- [x] Implement `LLMPlanner` (Real AI planning).
-
-### Integration
-- [x] Wire Planner into Mission Start loop (`main.rs`).
-- [x] Implement Replanning on failure.
+- [x] [SPEC] UI, BusinessLogic, DataModel defined
+- [x] [PLAN] Implementation Plan created
+- [x] [CODE] Create `PlannerWorker` struct
+- [x] [CODE] wired `PlannerWorker` into `lib.rs`
+- [x] [CODE] Update `main.rs` to use `PlannerWorker` for replanning
+- [x] [TEST] Unit tests for `PlannerWorker`
+- [x] [VERIFY] Crash Test with Worker-based recovery
+- [x] [GIT] Commit and Push

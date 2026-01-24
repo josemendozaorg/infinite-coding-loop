@@ -1,11 +1,11 @@
-use crate::{Worker, WorkerRole, WorkerProfile, Task, Event, WorkerOutputPayload, EventBus};
-use tokio::process::Command;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use crate::{Event, EventBus, Task, Worker, WorkerOutputPayload, WorkerProfile, WorkerRole};
 use async_trait::async_trait;
-use std::sync::Arc;
-use uuid::Uuid;
 use chrono::Utc;
 use std::process::Stdio;
+use std::sync::Arc;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
+use uuid::Uuid;
 
 pub struct CliWorker {
     pub profile: WorkerProfile,
@@ -37,41 +37,51 @@ impl Worker for CliWorker {
         &self.profile
     }
 
-    async fn execute(&self, bus: Arc<dyn EventBus>, task: &Task, workspace_path: &str, session_id: Uuid) -> anyhow::Result<String> {
+    async fn execute(
+        &self,
+        bus: Arc<dyn EventBus>,
+        task: &Task,
+        workspace_path: &str,
+        session_id: Uuid,
+    ) -> anyhow::Result<String> {
         tokio::fs::create_dir_all(workspace_path).await?;
-        
+
         let (cmd, args): (&str, Vec<String>) = match task.name.as_str() {
             // Git operations
-            "Initialize Project" | "Init Repo" => ("git", vec!["init".to_string()]),
+            "Initialize Project" | "Init Repo" | "Git Init" => ("git", vec!["init".to_string()]),
             "Git Add" => ("git", vec!["add".to_string(), ".".to_string()]),
             "Git Status" => ("git", vec!["status".to_string()]),
-            "Git Commit" => ("git", vec!["commit".to_string(), "-m".to_string(), task.description.clone()]),
-            
+            "Git Commit" => (
+                "git",
+                vec![
+                    "commit".to_string(),
+                    "-m".to_string(),
+                    task.description.clone(),
+                ],
+            ),
+
             // File operations
             "Create Directory" => ("mkdir", vec!["-p".to_string(), task.description.clone()]),
             "Create File" => ("touch", vec![task.description.clone()]),
-            
+
             // Build tools
             "Cargo Build" | "Build Project" => ("cargo", vec!["build".to_string()]),
             "Cargo Test" | "Run Tests" => ("cargo", vec!["test".to_string()]),
             "Cargo Check" => ("cargo", vec!["check".to_string()]),
             "NPM Install" => ("npm", vec!["install".to_string()]),
             "NPM Build" => ("npm", vec!["run".to_string(), "build".to_string()]),
-            
+
             // Generic shell command (description contains the command)
             "Run Command" | "Shell" => {
-                let parts: Vec<String> = task.description.split_whitespace().map(|s| s.to_string()).collect();
-                if parts.is_empty() {
-                    anyhow::bail!("Empty command in Run Command task");
-                }
-                let cmd = parts[0].clone();
-                let args = parts[1..].to_vec();
-                // Return early with a different tuple structure
-                return self.execute_command(&cmd, args, workspace_path, bus, session_id).await;
+                 // Use sh -c to allow chaining and shell builtins
+                 ("sh", vec!["-c".to_string(), task.description.clone()])
             }
-            
+
             _ => {
-                anyhow::bail!("CliWorker: Unknown task type '{}'. Strict execution mode enabled.", task.name);
+                anyhow::bail!(
+                    "CliWorker: Unknown task type '{}'. Strict execution mode enabled.",
+                    task.name
+                );
             }
         };
 
@@ -90,7 +100,7 @@ impl Worker for CliWorker {
 
         let bus_c = Arc::clone(&bus);
         let worker_id = self.id().to_string();
-        
+
         let mut full_output = String::new();
 
         // Stream stdout
@@ -101,18 +111,21 @@ impl Worker for CliWorker {
             while let Ok(Some(line)) = stdout_reader.next_line().await {
                 out.push_str(&line);
                 out.push('\n');
-                let _ = bus_stdout.publish(Event {
-                    id: Uuid::new_v4(),
-                    session_id,
-                    trace_id: Uuid::new_v4(),
-                    timestamp: Utc::now(),
-                    worker_id: worker_id_stdout.clone(),
-                    event_type: "WorkerOutput".to_string(),
-                    payload: serde_json::to_string(&WorkerOutputPayload {
-                        content: line,
-                        is_stderr: false,
-                    }).unwrap(),
-                }).await;
+                let _ = bus_stdout
+                    .publish(Event {
+                        id: Uuid::new_v4(),
+                        session_id,
+                        trace_id: Uuid::new_v4(),
+                        timestamp: Utc::now(),
+                        worker_id: worker_id_stdout.clone(),
+                        event_type: "WorkerOutput".to_string(),
+                        payload: serde_json::to_string(&WorkerOutputPayload {
+                            content: line,
+                            is_stderr: false,
+                        })
+                        .unwrap(),
+                    })
+                    .await;
             }
             out
         });
@@ -125,18 +138,21 @@ impl Worker for CliWorker {
             while let Ok(Some(line)) = stderr_reader.next_line().await {
                 out.push_str(&line);
                 out.push('\n');
-                let _ = bus_stderr.publish(Event {
-                    id: Uuid::new_v4(),
-                    session_id,
-                    trace_id: Uuid::new_v4(),
-                    timestamp: Utc::now(),
-                    worker_id: worker_id_stderr.clone(),
-                    event_type: "WorkerOutput".to_string(),
-                    payload: serde_json::to_string(&WorkerOutputPayload {
-                        content: line,
-                        is_stderr: true,
-                    }).unwrap(),
-                }).await;
+                let _ = bus_stderr
+                    .publish(Event {
+                        id: Uuid::new_v4(),
+                        session_id,
+                        trace_id: Uuid::new_v4(),
+                        timestamp: Utc::now(),
+                        worker_id: worker_id_stderr.clone(),
+                        event_type: "WorkerOutput".to_string(),
+                        payload: serde_json::to_string(&WorkerOutputPayload {
+                            content: line,
+                            is_stderr: true,
+                        })
+                        .unwrap(),
+                    })
+                    .await;
             }
             out
         });
@@ -190,18 +206,21 @@ impl CliWorker {
             while let Ok(Some(line)) = stdout_reader.next_line().await {
                 out.push_str(&line);
                 out.push('\n');
-                let _ = bus_stdout.publish(Event {
-                    id: Uuid::new_v4(),
-                    session_id,
-                    trace_id: Uuid::new_v4(),
-                    timestamp: Utc::now(),
-                    worker_id: worker_id_stdout.clone(),
-                    event_type: "WorkerOutput".to_string(),
-                    payload: serde_json::to_string(&WorkerOutputPayload {
-                        content: line,
-                        is_stderr: false,
-                    }).unwrap(),
-                }).await;
+                let _ = bus_stdout
+                    .publish(Event {
+                        id: Uuid::new_v4(),
+                        session_id,
+                        trace_id: Uuid::new_v4(),
+                        timestamp: Utc::now(),
+                        worker_id: worker_id_stdout.clone(),
+                        event_type: "WorkerOutput".to_string(),
+                        payload: serde_json::to_string(&WorkerOutputPayload {
+                            content: line,
+                            is_stderr: false,
+                        })
+                        .unwrap(),
+                    })
+                    .await;
             }
             out
         });
@@ -214,18 +233,21 @@ impl CliWorker {
             while let Ok(Some(line)) = stderr_reader.next_line().await {
                 out.push_str(&line);
                 out.push('\n');
-                let _ = bus_stderr.publish(Event {
-                    id: Uuid::new_v4(),
-                    session_id,
-                    trace_id: Uuid::new_v4(),
-                    timestamp: Utc::now(),
-                    worker_id: worker_id_stderr.clone(),
-                    event_type: "WorkerOutput".to_string(),
-                    payload: serde_json::to_string(&WorkerOutputPayload {
-                        content: line,
-                        is_stderr: true,
-                    }).unwrap(),
-                }).await;
+                let _ = bus_stderr
+                    .publish(Event {
+                        id: Uuid::new_v4(),
+                        session_id,
+                        trace_id: Uuid::new_v4(),
+                        timestamp: Utc::now(),
+                        worker_id: worker_id_stderr.clone(),
+                        event_type: "WorkerOutput".to_string(),
+                        payload: serde_json::to_string(&WorkerOutputPayload {
+                            content: line,
+                            is_stderr: true,
+                        })
+                        .unwrap(),
+                    })
+                    .await;
             }
             out
         });
@@ -249,8 +271,8 @@ impl CliWorker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{InMemoryEventBus, TaskStatus};
     use tempfile::tempdir;
-    use crate::{TaskStatus, InMemoryEventBus};
     use uuid::Uuid;
 
     #[tokio::test]
@@ -264,9 +286,18 @@ mod tests {
             description: "Setup git".to_string(),
             status: TaskStatus::Pending,
             assigned_worker: None,
+            retry_count: 0,
         };
 
-        let result = worker.execute(bus, &task, workspace.path().to_str().unwrap(), Uuid::new_v4()).await.unwrap();
+        let result = worker
+            .execute(
+                bus,
+                &task,
+                workspace.path().to_str().unwrap(),
+                Uuid::new_v4(),
+            )
+            .await
+            .unwrap();
         assert!(result.contains("Initialized empty Git repository"));
         assert!(workspace.path().join(".git").exists());
     }
@@ -275,7 +306,7 @@ mod tests {
     async fn test_cli_worker_cargo_build() {
         let worker = CliWorker::new("BuildBot", WorkerRole::Coder);
         let workspace = tempdir().unwrap();
-        
+
         // Create a minimal Cargo.toml
         std::fs::write(
             workspace.path().join("Cargo.toml"),
@@ -284,7 +315,8 @@ name = "test_project"
 version = "0.1.0"
 edition = "2021"
 "#,
-        ).unwrap();
+        )
+        .unwrap();
         std::fs::create_dir(workspace.path().join("src")).unwrap();
         std::fs::write(workspace.path().join("src/main.rs"), "fn main() {}").unwrap();
 
@@ -295,9 +327,17 @@ edition = "2021"
             description: "Build the project".to_string(),
             status: TaskStatus::Pending,
             assigned_worker: None,
+            retry_count: 0,
         };
 
-        let result = worker.execute(bus, &task, workspace.path().to_str().unwrap(), Uuid::new_v4()).await;
+        let result = worker
+            .execute(
+                bus,
+                &task,
+                workspace.path().to_str().unwrap(),
+                Uuid::new_v4(),
+            )
+            .await;
         assert!(result.is_ok(), "Cargo build should succeed: {:?}", result);
     }
 
@@ -306,18 +346,33 @@ edition = "2021"
         let worker = CliWorker::new("FileBot", WorkerRole::Coder);
         let workspace = tempdir().unwrap();
         let bus = Arc::new(InMemoryEventBus::new(10));
-        
+
         let task = Task {
             id: Uuid::new_v4(),
             name: "Create Directory".to_string(),
             description: "src/components".to_string(),
             status: TaskStatus::Pending,
             assigned_worker: None,
+            retry_count: 0,
         };
 
-        let result = worker.execute(bus, &task, workspace.path().to_str().unwrap(), Uuid::new_v4()).await;
-        assert!(result.is_ok(), "Create directory should succeed: {:?}", result);
-        assert!(workspace.path().join("src/components").exists(), "Directory should be created");
+        let result = worker
+            .execute(
+                bus,
+                &task,
+                workspace.path().to_str().unwrap(),
+                Uuid::new_v4(),
+            )
+            .await;
+        assert!(
+            result.is_ok(),
+            "Create directory should succeed: {:?}",
+            result
+        );
+        assert!(
+            workspace.path().join("src/components").exists(),
+            "Directory should be created"
+        );
     }
 
     #[tokio::test]
@@ -332,7 +387,7 @@ edition = "2021"
             .current_dir(workspace.path())
             .output()
             .unwrap();
-        
+
         // Create a file to add
         std::fs::write(workspace.path().join("test.txt"), "hello").unwrap();
 
@@ -342,9 +397,17 @@ edition = "2021"
             description: "Stage all files".to_string(),
             status: TaskStatus::Pending,
             assigned_worker: None,
+            retry_count: 0,
         };
 
-        let result = worker.execute(bus, &task, workspace.path().to_str().unwrap(), Uuid::new_v4()).await;
+        let result = worker
+            .execute(
+                bus,
+                &task,
+                workspace.path().to_str().unwrap(),
+                Uuid::new_v4(),
+            )
+            .await;
         assert!(result.is_ok(), "Git add should succeed: {:?}", result);
     }
 
@@ -360,11 +423,22 @@ edition = "2021"
             description: "echo hello_world".to_string(),
             status: TaskStatus::Pending,
             assigned_worker: None,
+            retry_count: 0,
         };
 
-        let result = worker.execute(bus, &task, workspace.path().to_str().unwrap(), Uuid::new_v4()).await;
+        let result = worker
+            .execute(
+                bus,
+                &task,
+                workspace.path().to_str().unwrap(),
+                Uuid::new_v4(),
+            )
+            .await;
         assert!(result.is_ok(), "Shell command should succeed: {:?}", result);
-        assert!(result.unwrap().contains("hello_world"), "Output should contain echo result");
+        assert!(
+            result.unwrap().contains("hello_world"),
+            "Output should contain echo result"
+        );
     }
 
     #[tokio::test]
@@ -379,11 +453,17 @@ edition = "2021"
             description: "This should fail".to_string(),
             status: TaskStatus::Pending,
             assigned_worker: None,
+            retry_count: 0,
         };
 
-        let result = worker.execute(bus, &task, workspace.path().to_str().unwrap(), Uuid::new_v4()).await;
+        let result = worker
+            .execute(
+                bus,
+                &task,
+                workspace.path().to_str().unwrap(),
+                Uuid::new_v4(),
+            )
+            .await;
         assert!(result.is_err(), "Unknown task should fail with strict mode");
     }
-
-
 }

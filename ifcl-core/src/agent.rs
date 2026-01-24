@@ -1,8 +1,8 @@
 use async_trait::async_trait;
-use tokio::process::Command;
+use serde::{Deserialize, Serialize};
 use std::process::Stdio;
-use tokio::io::{BufReader, AsyncBufReadExt};
-use serde::{Serialize, Deserialize};
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
 
 use tokio::sync::mpsc::Sender;
 
@@ -14,7 +14,12 @@ pub trait Agent: Send + Sync + std::fmt::Debug {
 
     /// Execute the input (prompt or command args) and return the raw output.
     /// If `stream_tx` is provided, output lines are sent to it (content, is_stderr).
-    async fn execute(&self, input: &str, current_dir: &str, stream_tx: Option<Sender<(String, bool)>>) -> anyhow::Result<String>;
+    async fn execute(
+        &self,
+        input: &str,
+        current_dir: &str,
+        stream_tx: Option<Sender<(String, bool)>>,
+    ) -> anyhow::Result<String>;
 }
 
 /// An Agent that wraps an AI CLI tool (e.g., gemini, claude, opencode)
@@ -22,11 +27,12 @@ pub trait Agent: Send + Sync + std::fmt::Debug {
 pub struct AiCliAgent {
     pub binary: String,
     pub model_flag: Option<String>,
+    pub additional_flags: Vec<String>,
 }
 
 impl AiCliAgent {
-    pub fn new(binary: String, model_flag: Option<String>) -> Self {
-        Self { binary, model_flag }
+    pub fn new(binary: String, model_flag: Option<String>, additional_flags: Vec<String>) -> Self {
+        Self { binary, model_flag, additional_flags }
     }
 }
 
@@ -36,12 +42,22 @@ impl Agent for AiCliAgent {
         &self.binary
     }
 
-    async fn execute(&self, input: &str, current_dir: &str, stream_tx: Option<Sender<(String, bool)>>) -> anyhow::Result<String> {
-        let mut args = vec![input.to_string()];
+    async fn execute(
+        &self,
+        input: &str,
+        current_dir: &str,
+        stream_tx: Option<Sender<(String, bool)>>,
+    ) -> anyhow::Result<String> {
+        let mut args = Vec::new();
+
         if let Some(model) = &self.model_flag {
-            args.insert(0, model.clone());
-            args.insert(0, "--model".to_string());
+            args.push("--model".to_string());
+            args.push(model.clone());
         }
+
+        args.extend(self.additional_flags.clone());
+
+        args.push(input.to_string());
 
         let mut child = Command::new(&self.binary)
             .args(&args)
@@ -55,11 +71,11 @@ impl Agent for AiCliAgent {
         let mut stdout_reader = BufReader::new(stdout).lines();
         let mut stderr_reader = BufReader::new(stderr).lines();
         // We accumulate errors but typically don't fail just because of stderr unless status fails
-        let mut _err_str = String::new(); 
+        let mut _err_str = String::new();
 
         // We can't use select! easily with two streams if we want to drain both fully.
         // We spawn distinct tasks for stdout and stderr to ensure we don't deadlock or block
-        
+
         let tx_out = stream_tx.clone();
         let tx_err = stream_tx.clone();
 
@@ -112,7 +128,12 @@ impl Agent for MockAgent {
         &self.id
     }
 
-    async fn execute(&self, _input: &str, _current_dir: &str, stream_tx: Option<Sender<(String, bool)>>) -> anyhow::Result<String> {
+    async fn execute(
+        &self,
+        _input: &str,
+        _current_dir: &str,
+        stream_tx: Option<Sender<(String, bool)>>,
+    ) -> anyhow::Result<String> {
         let response = if let Some(first) = self.output_sequence.first() {
             first.clone()
         } else {
@@ -125,7 +146,7 @@ impl Agent for MockAgent {
                 let _ = tx.send((line.to_string(), false)).await;
             }
         }
-        
+
         Ok(response)
     }
 }

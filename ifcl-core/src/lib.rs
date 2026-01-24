@@ -1,7 +1,6 @@
-
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct Event {
@@ -13,37 +12,42 @@ pub struct Event {
     pub event_type: String,
     pub payload: String,
 }
-pub mod ui_state;
-pub mod wizard;
-pub mod session;
+pub mod agent;
+pub mod context;
 pub mod groups;
 pub mod marketplace;
 pub mod orchestrator;
-pub mod context;
 pub mod planner;
-pub mod agent;
+pub mod session;
+pub mod ui_state;
+pub mod wizard;
 
-pub use ui_state::{AppMode, MenuAction, MenuState};
-pub use wizard::{SetupWizard, WizardStep, AiProvider};
-pub use session::Session;
+pub use agent::{Agent, AiCliAgent};
+pub use context::*;
 pub use groups::WorkerGroup;
 pub use marketplace::MarketplaceLoader;
-pub use agent::{Agent, AiCliAgent};
-pub use orchestrator::{Orchestrator, BasicOrchestrator, WorkerRequest};
-pub use context::*;
-pub use planner::*;
 pub use memory::*;
+pub use orchestrator::{BasicOrchestrator, Orchestrator, WorkerRequest};
+pub use planner::*;
+pub use session::Session;
+pub use ui_state::{AppMode, MenuAction, MenuState};
+pub use wizard::{AiProvider, SetupWizard, WizardStep};
 
+pub mod ai_worker;
+pub mod cli_worker;
 pub mod memory;
 pub mod progress;
 pub mod workspace;
-pub mod cli_worker;
-pub mod ai_worker;
 
-pub use progress::{ProgressStats, ProgressManager, BasicProgressManager};
-pub use workspace::*;
-pub use cli_worker::*;
 pub use ai_worker::*;
+pub use cli_worker::*;
+pub use enricher::*;
+pub use planner_worker::*;
+pub use progress::{BasicProgressManager, ProgressManager, ProgressStats};
+pub use workspace::*;
+
+pub mod enricher;
+pub mod planner_worker;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct LoopConfig {
@@ -90,6 +94,8 @@ pub struct Task {
     pub description: String,
     pub status: TaskStatus,
     pub assigned_worker: Option<String>,
+    #[serde(default)]
+    pub retry_count: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Copy, Default)]
@@ -126,7 +132,13 @@ pub trait Worker: Send + Sync {
     fn id(&self) -> &str;
     fn role(&self) -> WorkerRole;
     fn metadata(&self) -> &WorkerProfile;
-    async fn execute(&self, bus: std::sync::Arc<dyn EventBus>, task: &Task, workspace_path: &str, session_id: Uuid) -> anyhow::Result<String>;
+    async fn execute(
+        &self,
+        bus: std::sync::Arc<dyn EventBus>,
+        task: &Task,
+        workspace_path: &str,
+        session_id: Uuid,
+    ) -> anyhow::Result<String>;
 }
 
 #[async_trait::async_trait]
@@ -193,7 +205,11 @@ impl EventStore for InMemoryEventStore {
 
     async fn list(&self, session_id: Uuid) -> anyhow::Result<Vec<Event>> {
         let events = self.events.read().await;
-        Ok(events.iter().filter(|e| e.session_id == session_id).cloned().collect())
+        Ok(events
+            .iter()
+            .filter(|e| e.session_id == session_id)
+            .cloned()
+            .collect())
     }
 
     async fn list_all_sessions(&self) -> anyhow::Result<Vec<Uuid>> {
@@ -228,31 +244,34 @@ pub struct CliResult {
 
 pub struct CliExecutor {
     pub binary: String,
+    pub additional_flags: Vec<String>,
 }
 
 impl CliExecutor {
-    pub fn new(binary: String) -> Self {
-        Self { binary }
+    pub fn new(binary: String, additional_flags: Vec<String>) -> Self {
+        Self { binary, additional_flags }
     }
 
     pub async fn execute(&self, prompt: &str) -> anyhow::Result<CliResult> {
+        let mut args = Vec::new();
+        args.extend(self.additional_flags.clone());
+        args.push(prompt.to_string());
+
         let child = tokio::process::Command::new(&self.binary)
-            .arg(prompt)
+            .args(&args)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()?;
 
         let timeout = tokio::time::Duration::from_secs(60);
-        
+
         match tokio::time::timeout(timeout, child.wait_with_output()).await {
-            Ok(Ok(output)) => {
-                Ok(CliResult {
-                    stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
-                    stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
-                    status: output.status,
-                })
-            }
+            Ok(Ok(output)) => Ok(CliResult {
+                stdout: String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
+                status: output.status,
+            }),
             Ok(Err(e)) => anyhow::bail!("Execution failed: {}", e),
             Err(_) => anyhow::bail!("CLI execution timed out after 60s"),
         }
@@ -365,9 +384,15 @@ mod tests {
     #[tokio::test]
     async fn test_orchestrator_mission_creation() {
         let orch = BasicOrchestrator::new();
-        let mission = orch.create_mission(Uuid::new_v4(), "Initial Setup", vec![
-            ("Init Repo".to_string(), "Set up git repository".to_string()),
-        ], None).await.unwrap();
+        let mission = orch
+            .create_mission(
+                Uuid::new_v4(),
+                "Initial Setup",
+                vec![("Init Repo".to_string(), "Set up git repository".to_string())],
+                None,
+            )
+            .await
+            .unwrap();
 
         assert_eq!(mission.tasks.len(), 1);
         assert_eq!(mission.tasks[0].status, TaskStatus::Pending);
@@ -376,12 +401,20 @@ mod tests {
     #[tokio::test]
     async fn test_orchestrator_task_updates() {
         let orch = BasicOrchestrator::new();
-        let mission = orch.create_mission(Uuid::new_v4(), "Alpha", vec![
-            ("Task 1".to_string(), "Desc 1".to_string()),
-        ], None).await.unwrap();
+        let mission = orch
+            .create_mission(
+                Uuid::new_v4(),
+                "Alpha",
+                vec![("Task 1".to_string(), "Desc 1".to_string())],
+                None,
+            )
+            .await
+            .unwrap();
 
         let task_id = mission.tasks[0].id;
-        orch.update_task_status(mission.id, task_id, TaskStatus::Running).await.unwrap();
+        orch.update_task_status(mission.id, task_id, TaskStatus::Running)
+            .await
+            .unwrap();
 
         let missions = orch.get_missions().await.unwrap();
         assert_eq!(missions[0].tasks[0].status, TaskStatus::Running);
@@ -389,14 +422,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_cli_executor_echo() {
-        let executor = CliExecutor::new("echo".to_string());
+        let executor = CliExecutor::new("echo".to_string(), vec![]);
         let result = executor.execute("hello world").await.unwrap();
         assert_eq!(result.stdout, "hello world");
     }
 
     #[tokio::test]
     async fn test_cli_executor_error() {
-        let executor = CliExecutor::new("false".to_string());
+        let executor = CliExecutor::new("false".to_string(), vec![]);
         let result = executor.execute("").await.unwrap();
         assert!(!result.status.success());
     }
@@ -407,7 +440,7 @@ mod tests {
         bank.deposit(100, 50);
         assert_eq!(bank.xp, 100);
         assert_eq!(bank.coins, 50);
-        
+
         bank.deposit(50, 25);
         assert_eq!(bank.xp, 150);
         assert_eq!(bank.coins, 75);
@@ -480,15 +513,19 @@ impl SqliteEventStore {
                 worker_id TEXT NOT NULL,
                 event_type TEXT NOT NULL,
                 payload TEXT NOT NULL
-            )"
+            )",
         )
         .execute(&pool)
         .await?;
-        
+
         sqlx::query("ALTER TABLE events ADD COLUMN session_id TEXT NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'").execute(&pool).await.ok();
         sqlx::query("ALTER TABLE events ADD COLUMN trace_id TEXT NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'").execute(&pool).await.ok();
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id)").execute(&pool).await?;
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_events_trace ON events(trace_id)").execute(&pool).await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id)")
+            .execute(&pool)
+            .await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_events_trace ON events(trace_id)")
+            .execute(&pool)
+            .await?;
 
         Ok(Self { pool })
     }
@@ -537,11 +574,9 @@ impl EventStore for SqliteEventStore {
     }
 
     async fn list_all_sessions(&self) -> anyhow::Result<Vec<Uuid>> {
-        let rows = sqlx::query_as::<_, (String,)>(
-            "SELECT DISTINCT session_id FROM events"
-        )
-        .fetch_all(&self.pool)
-        .await?;
+        let rows = sqlx::query_as::<_, (String,)>("SELECT DISTINCT session_id FROM events")
+            .fetch_all(&self.pool)
+            .await?;
 
         let mut sessions = Vec::new();
         for row in rows {
@@ -579,3 +614,4 @@ mod sql_tests {
 pub mod learning;
 #[cfg(test)]
 mod session_replay_tests;
+mod task_test_driver;

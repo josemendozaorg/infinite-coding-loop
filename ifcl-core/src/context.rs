@@ -1,6 +1,6 @@
 use crate::{Event, MemoryStore};
-use serde::{Deserialize, Serialize};
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 /// Basic trait for counting tokens in a string or list of events.
@@ -36,7 +36,12 @@ pub struct ManagedContext {
 /// Trait for pruning context history to fit within a limit.
 #[async_trait]
 pub trait ContextPruner: Send + Sync {
-    async fn prune(&self, events: &[Event], max_tokens: usize, counter: &dyn TokenCounter) -> ManagedContext;
+    async fn prune(
+        &self,
+        events: &[Event],
+        max_tokens: usize,
+        counter: &dyn TokenCounter,
+    ) -> ManagedContext;
 }
 
 /// A pruner that uses a sliding window (removes oldest events first).
@@ -44,7 +49,12 @@ pub struct SlidingWindowPruner;
 
 #[async_trait]
 impl ContextPruner for SlidingWindowPruner {
-    async fn prune(&self, events: &[Event], max_tokens: usize, counter: &dyn TokenCounter) -> ManagedContext {
+    async fn prune(
+        &self,
+        events: &[Event],
+        max_tokens: usize,
+        counter: &dyn TokenCounter,
+    ) -> ManagedContext {
         let mut selected = Vec::new();
         let mut current_tokens = 0;
         let mut pruned = 0;
@@ -78,13 +88,18 @@ pub struct VectorPruner {
 
 #[async_trait]
 impl ContextPruner for VectorPruner {
-    async fn prune(&self, events: &[Event], max_tokens: usize, counter: &dyn TokenCounter) -> ManagedContext {
+    async fn prune(
+        &self,
+        events: &[Event],
+        max_tokens: usize,
+        counter: &dyn TokenCounter,
+    ) -> ManagedContext {
         // Simple heuristic: Take the last event as the query for relevance
         let query = events.last().map(|e| e.payload.as_str()).unwrap_or("");
-        
+
         // Search memory for relevant snippets
         let memories = self.store.search(query, 5).await.unwrap_or_default();
-        
+
         let mut selected = Vec::new();
         let mut current_tokens = 0;
         let mut pruned = 0;
@@ -141,9 +156,9 @@ impl ContextPruner for VectorPruner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uuid::Uuid;
-    use chrono::Utc;
     use crate::InMemoryMemoryStore;
+    use chrono::Utc;
+    use uuid::Uuid;
 
     fn create_mock_event(payload: &str) -> Event {
         Event {
@@ -162,7 +177,7 @@ mod tests {
         let counter = SimpleTokenCounter;
         let text = "Hello world"; // 11 chars -> ~2 tokens
         assert!(counter.count_tokens(text) >= 2);
-        
+
         let event = create_mock_event("Large payload with some data...");
         let tokens = counter.estimate_event_tokens(&event);
         assert!(tokens > 8);
@@ -172,7 +187,7 @@ mod tests {
     async fn test_sliding_window_pruning() {
         let counter = SimpleTokenCounter;
         let pruner = SlidingWindowPruner;
-        
+
         let events = vec![
             create_mock_event("Old event"),
             create_mock_event("Middle event"),
@@ -180,7 +195,7 @@ mod tests {
         ];
 
         let managed = pruner.prune(&events, 25, &counter).await;
-        
+
         assert_eq!(managed.events.len(), 2);
         assert_eq!(managed.pruned_count, 1);
         assert_eq!(managed.events[0].payload, "Middle event");
@@ -191,10 +206,12 @@ mod tests {
     async fn test_vector_pruning() {
         let counter = SimpleTokenCounter;
         let store = Arc::new(InMemoryMemoryStore::new());
-        let _ = store.store("Important info".to_string(), serde_json::json!({})).await;
-        
+        let _ = store
+            .store("Important info".to_string(), serde_json::json!({}))
+            .await;
+
         let pruner = VectorPruner { store };
-        
+
         let events = vec![
             create_mock_event("Old irrelevant event"),
             create_mock_event("Important info"),
@@ -203,9 +220,12 @@ mod tests {
         ];
 
         let managed = pruner.prune(&events, 40, &counter).await;
-        
+
         // Should include "Important info" even if it's older, and the recent ones
         assert!(managed.events.iter().any(|e| e.payload == "Important info"));
-        assert!(managed.events.iter().any(|e| e.payload == "Current query content"));
+        assert!(managed
+            .events
+            .iter()
+            .any(|e| e.payload == "Current query content"));
     }
 }

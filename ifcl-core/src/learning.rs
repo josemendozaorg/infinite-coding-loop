@@ -1,8 +1,7 @@
-
+use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use anyhow::Result;
 
 // --- Data Structures (To be implemented) ---
 
@@ -81,7 +80,7 @@ impl LearningManager for BasicLearningManager {
                 }
             }
         }
-        
+
         Ok(insights)
     }
 
@@ -108,7 +107,7 @@ mod tests {
     #[tokio::test]
     async fn test_record_and_analyze() {
         let manager = BasicLearningManager::new();
-        
+
         let outcome = MissionOutcome {
             mission_id: Uuid::new_v4(),
             success: false,
@@ -124,14 +123,20 @@ mod tests {
         // We expect an insight about failure
         let insights = manager.analyze_history().await.unwrap();
         // Force failure: We expect at least one insight if we recorded a failure
-        assert!(!insights.is_empty(), "TDD: Expected insights to be generated from history");
-        assert!(insights[0].description.contains("compilation"), "TDD: Expected insight about compilation");
+        assert!(
+            !insights.is_empty(),
+            "TDD: Expected insights to be generated from history"
+        );
+        assert!(
+            insights[0].description.contains("compilation"),
+            "TDD: Expected insight about compilation"
+        );
     }
 
     #[tokio::test]
     async fn test_propose_optimizations() {
         let manager = BasicLearningManager::new();
-        
+
         // Seed a failure
         let outcome = MissionOutcome {
             mission_id: Uuid::new_v4(),
@@ -143,6 +148,9 @@ mod tests {
 
         // 3. Propose optimizations
         let optimizations = manager.propose_optimizations().await.unwrap();
-        assert!(!optimizations.is_empty(), "TDD: Expected optimizations to be proposed");
+        assert!(
+            !optimizations.is_empty(),
+            "TDD: Expected optimizations to be proposed"
+        );
     }
 }

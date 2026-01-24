@@ -1,7 +1,7 @@
+use crate::LoopConfig;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
-use crate::LoopConfig;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 pub struct Session {

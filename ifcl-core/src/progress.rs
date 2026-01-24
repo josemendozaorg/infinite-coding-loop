@@ -1,6 +1,6 @@
 use crate::{Mission, TaskStatus};
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 /// Represents the progress of a mission.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -15,17 +15,29 @@ pub struct ProgressStats {
 /// Trait for calculating and managing mission progress.
 pub trait ProgressManager: Send + Sync {
     /// Calculates the progress stats for a given mission.
-    fn calculate_progress(&self, mission: &Mission, last_event_timestamp: DateTime<Utc>) -> ProgressStats;
+    fn calculate_progress(
+        &self,
+        mission: &Mission,
+        last_event_timestamp: DateTime<Utc>,
+    ) -> ProgressStats;
 }
 
 /// A basic implementation of the ProgressManager.
 pub struct BasicProgressManager;
 
 impl ProgressManager for BasicProgressManager {
-    fn calculate_progress(&self, mission: &Mission, last_event_timestamp: DateTime<Utc>) -> ProgressStats {
+    fn calculate_progress(
+        &self,
+        mission: &Mission,
+        last_event_timestamp: DateTime<Utc>,
+    ) -> ProgressStats {
         let total_tasks = mission.tasks.len();
-        let completed_tasks = mission.tasks.iter().filter(|t| t.status == TaskStatus::Success).count();
-        
+        let completed_tasks = mission
+            .tasks
+            .iter()
+            .filter(|t| t.status == TaskStatus::Success)
+            .count();
+
         let progress_percentage = if total_tasks == 0 {
             100.0
         } else {
@@ -35,7 +47,8 @@ impl ProgressManager for BasicProgressManager {
         // Determine if stalled: No progress update in the last 5 minutes
         let now = Utc::now();
         let duration_since_last_update = now.signed_duration_since(last_event_timestamp);
-        let is_stalled = duration_since_last_update.num_minutes() >= 5 && progress_percentage < 100.0;
+        let is_stalled =
+            duration_since_last_update.num_minutes() >= 5 && progress_percentage < 100.0;
 
         ProgressStats {
             total_tasks,
@@ -51,8 +64,8 @@ impl ProgressManager for BasicProgressManager {
 mod tests {
     use super::*;
     use crate::{Task, TaskStatus};
-    use uuid::Uuid;
     use chrono::{Duration, Utc};
+    use uuid::Uuid;
 
     #[test]
     fn test_calculate_progress_empty() {
@@ -77,8 +90,22 @@ mod tests {
             session_id: Uuid::nil(),
             name: "Partial Mission".to_string(),
             tasks: vec![
-                Task { id: Uuid::new_v4(), name: "T1".to_string(), description: "".to_string(), status: TaskStatus::Success, assigned_worker: None },
-                Task { id: Uuid::new_v4(), name: "T2".to_string(), description: "".to_string(), status: TaskStatus::Pending, assigned_worker: None },
+                Task {
+                    id: Uuid::new_v4(),
+                    name: "T1".to_string(),
+                    description: "".to_string(),
+                    status: TaskStatus::Success,
+                    assigned_worker: None,
+                    retry_count: 0,
+                },
+                Task {
+                    id: Uuid::new_v4(),
+                    name: "T2".to_string(),
+                    description: "".to_string(),
+                    status: TaskStatus::Pending,
+                    assigned_worker: None,
+                    retry_count: 0,
+                },
             ],
             workspace_path: None,
         };
@@ -95,16 +122,21 @@ mod tests {
             id: Uuid::new_v4(),
             session_id: Uuid::nil(),
             name: "Stalled Mission".to_string(),
-            tasks: vec![
-                Task { id: Uuid::new_v4(), name: "T1".to_string(), description: "".to_string(), status: TaskStatus::Pending, assigned_worker: None },
-            ],
+            tasks: vec![Task {
+                id: Uuid::new_v4(),
+                name: "T1".to_string(),
+                description: "".to_string(),
+                status: TaskStatus::Pending,
+                assigned_worker: None,
+                retry_count: 0,
+            }],
             workspace_path: None,
         };
-        
+
         // Mock a timestamp from 10 minutes ago
         let old_timestamp = Utc::now() - Duration::minutes(10);
         let stats = manager.calculate_progress(&mission, old_timestamp);
-        
+
         assert!(stats.is_stalled);
         assert_eq!(stats.progress_percentage, 0.0);
     }
@@ -116,15 +148,20 @@ mod tests {
             id: Uuid::new_v4(),
             session_id: Uuid::nil(),
             name: "Completed Mission".to_string(),
-            tasks: vec![
-                Task { id: Uuid::new_v4(), name: "T1".to_string(), description: "".to_string(), status: TaskStatus::Success, assigned_worker: None },
-            ],
+            tasks: vec![Task {
+                id: Uuid::new_v4(),
+                name: "T1".to_string(),
+                description: "".to_string(),
+                status: TaskStatus::Success,
+                assigned_worker: None,
+                retry_count: 0,
+            }],
             workspace_path: None,
         };
-        
+
         let old_timestamp = Utc::now() - Duration::minutes(10);
         let stats = manager.calculate_progress(&mission, old_timestamp);
-        
+
         assert!(!stats.is_stalled); // 100% complete should not be stalled
     }
 }

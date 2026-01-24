@@ -1,13 +1,13 @@
 #[cfg(test)]
 use crate::*;
-use uuid::Uuid;
 use chrono::Utc;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn test_session_state_parity_after_replay() {
     let store = SqliteEventStore::new("sqlite::memory:").await.unwrap();
     let session_id = Uuid::new_v4();
-    
+
     // 1. Create some events
     let events = vec![
         Event {
@@ -17,7 +17,11 @@ async fn test_session_state_parity_after_replay() {
             timestamp: Utc::now(),
             worker_id: "system".to_string(),
             event_type: "LoopStarted".to_string(),
-            payload: serde_json::to_string(&LoopConfig { goal: "Test Goal".to_string(), max_coins: Some(100) }).unwrap(),
+            payload: serde_json::to_string(&LoopConfig {
+                goal: "Test Goal".to_string(),
+                max_coins: Some(100),
+            })
+            .unwrap(),
         },
         Event {
             id: Uuid::new_v4(),
@@ -26,7 +30,12 @@ async fn test_session_state_parity_after_replay() {
             timestamp: Utc::now(),
             worker_id: "system".to_string(),
             event_type: "WorkerJoined".to_string(),
-            payload: serde_json::to_string(&WorkerProfile { name: "TestWorker".to_string(), role: WorkerRole::Coder, model: None }).unwrap(),
+            payload: serde_json::to_string(&WorkerProfile {
+                name: "TestWorker".to_string(),
+                role: WorkerRole::Coder,
+                model: None,
+            })
+            .unwrap(),
         },
     ];
 
@@ -36,7 +45,7 @@ async fn test_session_state_parity_after_replay() {
 
     // 2. Replay events into a "mock state" (simulating TUI replay)
     let replayed_events = store.list(session_id).await.unwrap();
-    
+
     let mut workers = Vec::new();
     let mut goal = String::new();
 

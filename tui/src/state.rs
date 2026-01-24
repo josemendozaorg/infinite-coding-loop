@@ -1,13 +1,13 @@
+use crate::relationship::MentalMap;
 use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
-use uuid::Uuid;
-use ratatui::widgets::ListState;
 use ifcl_core::{
-    Event, WorkerProfile, Mission, Bank, LoopStatus, AppMode, MenuState, SetupWizard,
     groups::WorkerGroup,
     learning::{Insight, Optimization},
+    AppMode, Bank, Event, LoopStatus, MenuState, Mission, SetupWizard, WorkerProfile,
 };
-use crate::relationship::MentalMap;
+use ratatui::widgets::ListState;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiOutput {

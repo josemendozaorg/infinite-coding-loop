@@ -1,6 +1,5 @@
-
-use serde::{Deserialize, Serialize};
 use crate::LoopConfig;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AiProvider {
@@ -38,7 +37,7 @@ impl SetupWizard {
         Self {
             current_step: WizardStep::Goal,
             goal: String::new(),
-            stack: "Rust".to_string(), 
+            stack: "Rust".to_string(),
             workspace_path: ".".to_string(),
             provider: AiProvider::Basic, // Default
             team_size: 2,
@@ -119,7 +118,7 @@ mod tests {
         assert_eq!(wizard.current_step, WizardStep::Workspace);
         wizard.workspace_path = "/tmp".to_string();
         wizard.next().unwrap();
-        
+
         // New Provider step
         assert_eq!(wizard.current_step, WizardStep::Provider);
         wizard.next().unwrap();
