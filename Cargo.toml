@@ -1,9 +1,6 @@
 [workspace]
 resolver = "2"
-members = [
-    "ifcl-core",
-    "tui",
-]
+members = ["crates/ifcl-core", "crates/tui"]
 
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }
