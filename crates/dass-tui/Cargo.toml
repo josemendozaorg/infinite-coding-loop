@@ -1,0 +1,11 @@
+[package]
+name = "dass-tui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+crossterm.workspace = true
+dass-engine = { version = "0.1.0", path = "../dass-engine" }
+ratatui.workspace = true
+tokio = { workspace = true, features = ["full"] }

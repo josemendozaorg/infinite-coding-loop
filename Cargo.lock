@@ -374,6 +374,13 @@ dependencies = [
 [[package]]
 name = "dass-tui"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "crossterm",
+ "dass-engine",
+ "ratatui",
+ "tokio",
+]
 
 [[package]]
 name = "der"
