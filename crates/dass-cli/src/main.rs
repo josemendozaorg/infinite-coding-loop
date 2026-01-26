@@ -1,18 +1,17 @@
 use clap::Parser;
-use dialoguer::{theme::ColorfulTheme, Confirm, Input, Select};
-use console::{style, Emoji};
+use dialoguer::{theme::ColorfulTheme, Confirm, Input};
+use console::style;
 use dass_engine::{
     agents::{
-        cli_client::ShellCliClient, product_manager::ProductManager, architect::Architect,
+        cli_client::{ShellCliClient, MockCliClient, AiCliClient}, 
+        product_manager::ProductManager, 
+        architect::Architect,
         planner::Planner,
     },
-    product::requirement::Requirement,
     spec::feature_spec::FeatureSpec,
-    plan::action::ImplementationPlan,
 };
-use std::fs;
 use anyhow::{Result, Context};
-use tokio::time::{sleep, Duration};
+use tokio::time::Duration;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -24,6 +23,13 @@ struct Args {
     /// Executable to use for AI calls (default: "gemini")
     #[arg(long, default_value = "gemini")]
     ai_cmd: String,
+
+    /// Run in Mock Mode (Simulated responses)
+    #[arg(long)]
+    mock: bool,
+
+    /// Feature idea (skips input prompt)
+    query: Option<String>,
 }
 
 #[tokio::main]
@@ -34,19 +40,69 @@ async fn main() -> Result<()> {
     println!("{}", style("   DASS SOFTWARE FACTORY   ").bold().on_blue().white());
     println!("{}", style("---------------------------").dim());
 
+    if args.mock {
+        println!("{}", style("Running in MOCK MODE").yellow());
+        let mut responses = Vec::new();
+        
+        // 1. Reqs Refinement (Failure then Success)
+        responses.push(r#"
+- id: 00000000-0000-0000-0000-000000000001
+  user_story: 'Make it fast'
+  acceptance_criteria: []
+"#.to_string()); // Ambiguous, should fail Gate
+
+        responses.push(r#"
+- id: 00000000-0000-0000-0000-000000000001
+  user_story: 'As a user I want to see a spinner'
+  acceptance_criteria: ['Spinner visible within 100ms']
+"#.to_string()); // Good
+
+        // 2. Spec Response
+        responses.push(serde_json::to_string(&FeatureSpec {
+            id: "new-feature".to_string(),
+            requirement_ids: vec![uuid::Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap()],
+            ui_spec: "Spinner".to_string(),
+            logic_spec: "Show spinner".to_string(),
+            data_spec: "None".to_string(),
+            verification_plan: "Test".to_string(),
+        }).unwrap());
+
+        // 3. Plan Response
+        responses.push(r#"
+{
+  "feature_id": "new-feature",
+  "steps": [
+     { "type": "RunCommand", "payload": { "command": "echo Hello", "cwd": null, "must_succeed": true } }
+  ]
+}
+"#.to_string());
+
+        let mock_client = MockCliClient::new(responses);
+        run_pipeline(mock_client, &args)?;
+    } else {
+        println!("{}", style("Running in LIVE MODE (calling AI CLI)").green());
+        let client = ShellCliClient::new(&args.ai_cmd);
+        run_pipeline(client, &args)?;
+    }
+
+    Ok(())
+}
+
+fn run_pipeline<C: AiCliClient + Clone>(client: C, args: &Args) -> Result<()> {
     // 1. Setup Agents
-    let client = ShellCliClient::new(&args.ai_cmd);
-    // Note: In real Rust ownership, we might need shared client or clones. 
-    // ShellCliClient is lightweight (just a String), so cloning is fine.
-    
-    let pm = ProductManager::new(ShellCliClient::new(&args.ai_cmd));
-    let architect = Architect::new(ShellCliClient::new(&args.ai_cmd));
-    let planner = Planner::new(ShellCliClient::new(&args.ai_cmd));
+    let pm = ProductManager::new(client.clone());
+    let architect = Architect::new(client.clone());
+    let planner = Planner::new(client.clone());
 
     // 2. User Input
-    let feature_idea: String = Input::with_theme(&ColorfulTheme::default())
+    let feature_idea = if let Some(q) = &args.query {
+        println!("Feature: {}", style(q).cyan());
+        q.clone()
+    } else {
+         Input::with_theme(&ColorfulTheme::default())
         .with_prompt("What feature do you want to build?")
-        .interact_text()?;
+        .interact_text()?
+    };
 
     // 3. Product Phase
     step_header("1. PRODUCT MANAGER: Analyzing Request...");
@@ -96,7 +152,7 @@ async fn main() -> Result<()> {
     step_header("4. CONSTRUCTION: Executing...");
     println!("{}", style("Plan Execution not yet fully wired to file system.").yellow());
     println!("{}", style("Success! Pipeline Complete.").bold().green());
-
+    
     Ok(())
 }
 

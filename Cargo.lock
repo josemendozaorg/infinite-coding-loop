@@ -384,6 +384,7 @@ dependencies = [
  "indicatif",
  "serde_json",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

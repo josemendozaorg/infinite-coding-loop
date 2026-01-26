@@ -8,6 +8,7 @@ pub trait AiCliClient {
 }
 
 /// A real implementation that calls a CLI command (default: gemini).
+#[derive(Clone)]
 pub struct ShellCliClient {
     pub executable: String,
 }
@@ -39,21 +40,20 @@ impl AiCliClient for ShellCliClient {
     }
 }
 
-#[cfg(test)]
+/// A Mock Client for testing/simulation.
+#[derive(Clone)]
 pub struct MockCliClient {
-    pub responses: std::cell::RefCell<std::collections::VecDeque<String>>,
+    pub responses: std::rc::Rc<std::cell::RefCell<std::collections::VecDeque<String>>>,
 }
 
-#[cfg(test)]
 impl MockCliClient {
     pub fn new(responses: Vec<String>) -> Self {
         Self {
-            responses: std::cell::RefCell::new(responses.into()),
+            responses: std::rc::Rc::new(std::cell::RefCell::new(responses.into())),
         }
     }
 }
 
-#[cfg(test)]
 impl AiCliClient for MockCliClient {
     fn prompt(&self, _prompt: &str) -> Result<String> {
         if let Some(res) = self.responses.borrow_mut().pop_front() {
