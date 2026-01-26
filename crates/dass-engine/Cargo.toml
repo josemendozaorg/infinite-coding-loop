@@ -1,0 +1,12 @@
+[package]
+name = "dass-engine"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+serde_yaml.workspace = true
+thiserror = "2.0.18"
+uuid = { workspace = true, features = ["v4", "serde"] }
