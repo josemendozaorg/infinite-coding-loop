@@ -29,6 +29,7 @@ pub enum Primitive {
         insight: String,
         context: String,
         severity: String,
+        tags: Vec<String>,
     },
 }
 

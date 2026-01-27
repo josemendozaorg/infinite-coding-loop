@@ -292,13 +292,14 @@ impl<C: AiCliClient + Clone> Orchestrator<C> {
                     insight: format!("Step {} failed with error: {}", action_ref, stderr),
                     context: "Plan execution failure".to_string(),
                     severity: "Error".to_string(),
+                    tags: vec!["execution".to_string(), "failure".to_string()],
                 };
                 ui.log_info(&format!("Recorded observation for {}", action_ref));
                 self.app.add_primitive(obs);
                 self.persist().await?;
             }
 
-            // TODO: Call Repair Agent with self.get_observations_summary()
+            // TODO: Call Repair Agent with self.get_observations_summary(&["execution"])
             ui.log_info("Observation recorded. Please repair the environment/code and resume.");
             return Ok(());
         }
@@ -309,13 +310,20 @@ impl<C: AiCliClient + Clone> Orchestrator<C> {
         Ok(())
     }
 
-    pub fn get_observations_summary(&self) -> String {
+    pub fn get_observations_summary(&self, filter_tags: Option<&[&str]>) -> String {
         let mut summary = String::from("Learnings from previous attempts:\n");
         let mut count = 0;
         for p in self.app.primitives.values() {
-            if let Primitive::Observation { insight, .. } = p {
-                summary.push_str(&format!("- {}\n", insight));
-                count += 1;
+            if let Primitive::Observation { insight, tags, .. } = p {
+                let include = match filter_tags {
+                    Some(filters) => filters.iter().any(|&f| tags.iter().any(|t| t == f)),
+                    None => true,
+                };
+
+                if include {
+                    summary.push_str(&format!("- {}\n", insight));
+                    count += 1;
+                }
             }
         }
         if count == 0 {
