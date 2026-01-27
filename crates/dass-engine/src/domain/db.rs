@@ -36,6 +36,11 @@ impl StateStore {
         .execute(&self.pool)
         .await?;
 
+        // Ensure work_dir column exists (SQLite doesnt support ADD COLUMN IF NOT EXISTS)
+        let _ = sqlx::query("ALTER TABLE applications ADD COLUMN work_dir TEXT")
+            .execute(&self.pool)
+            .await;
+
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS primitives (
                 id TEXT NOT NULL,
