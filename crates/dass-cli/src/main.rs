@@ -126,7 +126,10 @@ async fn main() -> Result<()> {
         } else {
             let mut items: Vec<String> = available
                 .iter()
-                .map(|(id, name)| format!("{} ({})", name, id))
+                .map(|(id, name, work_dir)| {
+                    let dir = work_dir.as_deref().unwrap_or("No path");
+                    format!("{} ({}) [{}]", name, id, style(dir).dim())
+                })
                 .collect();
             items.push(style("Create New Application").yellow().to_string());
 

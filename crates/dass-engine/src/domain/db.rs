@@ -76,9 +76,9 @@ impl StateStore {
         Ok(app)
     }
 
-    pub async fn list_applications(&self) -> Result<Vec<(String, String)>> {
-        let rows: Vec<(String, String)> =
-            sqlx::query_as("SELECT id, name FROM applications ORDER BY created_at DESC")
+    pub async fn list_applications(&self) -> Result<Vec<(String, String, Option<String>)>> {
+        let rows: Vec<(String, String, Option<String>)> =
+            sqlx::query_as("SELECT id, name, work_dir FROM applications ORDER BY created_at DESC")
                 .fetch_all(&self.pool)
                 .await?;
         Ok(rows)

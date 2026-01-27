@@ -20,7 +20,7 @@ pub struct Orchestrator<C: AiCliClient + Clone> {
 }
 
 impl<C: AiCliClient + Clone> Orchestrator<C> {
-    pub async fn list_available_apps() -> Result<Vec<(String, String)>> {
+    pub async fn list_available_apps() -> Result<Vec<(String, String, Option<String>)>> {
         let store = StateStore::new(".dass.db").await?;
         store.list_applications().await
     }
@@ -214,16 +214,80 @@ impl<C: AiCliClient + Clone> Orchestrator<C> {
 
         // 5. Execution Phase
         ui.start_step("CONSTRUCTION: Executing Plan...");
-        let primitives = crate::plan::executor::PlanExecutor::execute(&plan, &self.work_dir)?;
+        let (results, all_success) =
+            crate::plan::executor::PlanExecutor::execute(&plan, &self.work_dir)?;
 
-        for p in primitives {
+        // Find the failing step to record an observation later if needed
+        let failure_info = results.iter().find_map(|p| {
+            if let Primitive::ExecutionStep {
+                status,
+                action_ref,
+                stderr,
+                ..
+            } = p
+            {
+                if status == "Failure" {
+                    return Some((action_ref.clone(), stderr.clone()));
+                }
+            }
+            None
+        });
+
+        let mut successful_steps = 0;
+        for p in results {
+            if let Primitive::ExecutionStep { status, .. } = &p {
+                if status == "Success" {
+                    successful_steps += 1;
+                }
+            }
             self.app.add_primitive(p);
         }
+
+        // Update plan progress
+        if let Some(Primitive::Plan(p)) = self.app.primitives.get_mut(&plan.feature_id) {
+            p.completed_steps += successful_steps;
+        }
+
         self.persist().await?;
+
+        if !all_success {
+            ui.log_error("Execution failed. Initiating AI Self-Healing...");
+
+            if let Some((action_ref, stderr)) = failure_info {
+                let obs = Primitive::Observation {
+                    insight: format!("Step {} failed with error: {}", action_ref, stderr),
+                    context: "Plan execution failure".to_string(),
+                    severity: "Error".to_string(),
+                };
+                ui.log_info(&format!("Recorded observation for {}", action_ref));
+                self.app.add_primitive(obs);
+                self.persist().await?;
+            }
+
+            // TODO: Call Repair Agent with self.get_observations_summary()
+            ui.log_info("Observation recorded. Please repair the environment/code and resume.");
+            return Ok(());
+        }
 
         ui.end_step("Execution Complete");
         ui.log_info("Success! Pipeline Complete.");
 
         Ok(())
+    }
+
+    pub fn get_observations_summary(&self) -> String {
+        let mut summary = String::from("Learnings from previous attempts:\n");
+        let mut count = 0;
+        for p in self.app.primitives.values() {
+            if let Primitive::Observation { insight, .. } = p {
+                summary.push_str(&format!("- {}\n", insight));
+                count += 1;
+            }
+        }
+        if count == 0 {
+            "No previous observations.".to_string()
+        } else {
+            summary
+        }
     }
 }
