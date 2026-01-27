@@ -3,7 +3,7 @@ use dialoguer::{theme::ColorfulTheme, Confirm, Input};
 use console::style;
 use dass_engine::{
     agents::{
-        cli_client::{ShellCliClient, MockCliClient, AiCliClient}, 
+        cli_client::{ShellCliClient, AiCliClient}, 
         product_manager::ProductManager, 
         architect::Architect,
         planner::Planner,
@@ -25,10 +25,6 @@ struct Args {
     #[arg(long, default_value = "gemini")]
     ai_cmd: String,
 
-    /// Run in Mock Mode (Simulated responses)
-    #[arg(long)]
-    mock: bool,
-
     /// Feature idea (skips input prompt)
     query: Option<String>,
 }
@@ -41,50 +37,9 @@ async fn main() -> Result<()> {
     println!("{}", style("   DASS SOFTWARE FACTORY   ").bold().on_blue().white());
     println!("{}", style("---------------------------").dim());
 
-    if args.mock {
-        println!("{}", style("Running in MOCK MODE").yellow());
-        let mut responses = Vec::new();
-        
-        // 1. Reqs Refinement (Failure then Success)
-        responses.push(r#"
-- id: 00000000-0000-0000-0000-000000000001
-  user_story: 'Make it fast'
-  acceptance_criteria: []
-"#.to_string()); // Ambiguous, should fail Gate
-
-        responses.push(r#"
-- id: 00000000-0000-0000-0000-000000000001
-  user_story: 'As a user I want to see a spinner'
-  acceptance_criteria: ['Spinner visible within 100ms']
-"#.to_string()); // Good
-
-        // 2. Spec Response
-        responses.push(serde_json::to_string(&FeatureSpec {
-            id: "new-feature".to_string(),
-            requirement_ids: vec!["00000000-0000-0000-0000-000000000001".to_string()],
-            ui_spec: "Spinner".to_string(),
-            logic_spec: "Show spinner".to_string(),
-            data_spec: "None".to_string(),
-            verification_plan: "Test".to_string(),
-        }).unwrap());
-
-        // 3. Plan Response
-        responses.push(r#"
-{
-  "feature_id": "new-feature",
-  "steps": [
-     { "type": "RunCommand", "payload": { "command": "echo Hello", "cwd": null, "must_succeed": true } }
-  ]
-}
-"#.to_string());
-
-        let mock_client = MockCliClient::new(responses);
-        run_pipeline(mock_client, &args)?;
-    } else {
-        println!("{}", style("Running in LIVE MODE (calling AI CLI)").green());
-        let client = ShellCliClient::new(&args.ai_cmd);
-        run_pipeline(client, &args)?;
-    }
+    println!("{}", style("Running in LIVE MODE (calling AI CLI)").green());
+    let client = ShellCliClient::new(&args.ai_cmd);
+    run_pipeline(client, &args)?;
 
     Ok(())
 }
