@@ -15,6 +15,9 @@ pub trait UserInteraction {
     /// Ask for a boolean confirmation.
     async fn confirm(&self, prompt: &str) -> Result<bool>;
 
+    /// Ask the user to select an option from a list.
+    async fn select_option(&self, prompt: &str, options: &[String]) -> Result<usize>;
+
     /// Indicate that a long-running step is starting (e.g., show spinner).
     fn start_step(&self, name: &str);
 

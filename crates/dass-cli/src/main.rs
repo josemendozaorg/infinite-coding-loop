@@ -59,6 +59,15 @@ impl UserInteraction for CliInteraction {
         self.ask_user(prompt).await
     }
 
+    async fn select_option(&self, prompt: &str, options: &[String]) -> Result<usize> {
+        let selection = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt(prompt)
+            .items(options)
+            .default(0)
+            .interact()?;
+        Ok(selection)
+    }
+
     async fn confirm(&self, prompt: &str) -> Result<bool> {
         if self.args.yes {
             return Ok(true);

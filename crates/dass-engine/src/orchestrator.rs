@@ -103,26 +103,58 @@ impl<C: AiCliClient + Clone> Orchestrator<C> {
 
     pub async fn run(&mut self, ui: &impl crate::interaction::UserInteraction) -> Result<()> {
         // 1. Check for existing session or ask user
-        let has_requirements = self
+        let mut feature_idea = String::new();
+        let mut resume_session = self
             .app
             .primitives
             .values()
             .any(|p| matches!(p, Primitive::Requirement(_)));
 
-        let feature_idea = if has_requirements {
-            ui.log_info("Resuming existing session...");
-            String::new()
+        if resume_session {
+            let options = vec![
+                "Continue Current Plan / Progress".to_string(),
+                "Add New Feature (New Requirements)".to_string(),
+                "Discard and Redesign from scratch".to_string(),
+            ];
+            let choice = ui
+                .select_option(
+                    "Existing state detected. What would you like to do?",
+                    &options,
+                )
+                .await?;
+
+            match choice {
+                0 => {
+                    ui.log_info("Resuming existing session...");
+                }
+                1 => {
+                    resume_session = false;
+                    feature_idea = ui
+                        .ask_for_feature("What new feature do you want to build?")
+                        .await?;
+                }
+                2 => {
+                    ui.log_info("Discarding existing session state...");
+                    self.app.primitives.clear();
+                    resume_session = false;
+                    feature_idea = ui
+                        .ask_for_feature("What feature do you want to build?")
+                        .await?;
+                }
+                _ => return Ok(()),
+            }
         } else {
-            ui.ask_for_feature("What feature do you want to build?")
-                .await?
+            feature_idea = ui
+                .ask_for_feature("What feature do you want to build?")
+                .await?;
         };
 
-        if feature_idea.is_empty() && !has_requirements {
+        if feature_idea.is_empty() && !resume_session {
             return Ok(()); // User abort
         }
 
         // 2. Product Phase
-        let reqs = if has_requirements {
+        let reqs = if resume_session {
             self.app
                 .primitives
                 .values()
@@ -143,17 +175,18 @@ impl<C: AiCliClient + Clone> Orchestrator<C> {
 
         ui.render_requirements(&reqs);
 
-        if !has_requirements && !ui.confirm("Proceed with these requirements?").await? {
+        if !resume_session && !ui.confirm("Proceed with these requirements?").await? {
             ui.log_info("Aborted.");
             return Ok(());
         }
 
         // 3. Architect Phase
-        let has_spec = self
-            .app
-            .primitives
-            .values()
-            .any(|p| matches!(p, Primitive::Specification(_)));
+        let has_spec = resume_session
+            && self
+                .app
+                .primitives
+                .values()
+                .any(|p| matches!(p, Primitive::Specification(_)));
         let spec = if has_spec {
             self.app
                 .primitives
@@ -181,11 +214,12 @@ impl<C: AiCliClient + Clone> Orchestrator<C> {
         }
 
         // 4. Planner Phase
-        let has_plan = self
-            .app
-            .primitives
-            .values()
-            .any(|p| matches!(p, Primitive::Plan(_)));
+        let has_plan = resume_session
+            && self
+                .app
+                .primitives
+                .values()
+                .any(|p| matches!(p, Primitive::Plan(_)));
         let plan = if has_plan {
             self.app
                 .primitives
