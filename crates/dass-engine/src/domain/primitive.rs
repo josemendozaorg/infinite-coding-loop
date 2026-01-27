@@ -18,6 +18,18 @@ pub enum Primitive {
         success: bool,
         output: String,
     },
+    ExecutionStep {
+        action_ref: String,
+        status: String,
+        stdout: String,
+        stderr: String,
+        timestamp: u64,
+    },
+    Observation {
+        insight: String,
+        context: String,
+        severity: String,
+    },
 }
 
 impl Primitive {
@@ -28,6 +40,12 @@ impl Primitive {
             Primitive::Plan(p) => p.feature_id.clone(),
             Primitive::Code { path, .. } => path.clone(),
             Primitive::Verification { test_command, .. } => test_command.clone(),
+            Primitive::ExecutionStep {
+                action_ref,
+                timestamp,
+                ..
+            } => format!("{}:{}", action_ref, timestamp),
+            Primitive::Observation { insight, .. } => insight.chars().take(20).collect(),
         }
     }
 
@@ -38,6 +56,8 @@ impl Primitive {
             Primitive::Plan(_) => "PLAN",
             Primitive::Code { .. } => "CODE",
             Primitive::Verification { .. } => "VERIFY",
+            Primitive::ExecutionStep { .. } => "EXEC",
+            Primitive::Observation { .. } => "OBS",
         }
     }
 }

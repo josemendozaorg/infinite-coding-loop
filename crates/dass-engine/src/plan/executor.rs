@@ -8,9 +8,17 @@ use std::process::Command;
 pub struct PlanExecutor;
 
 impl PlanExecutor {
-    pub fn execute(plan: &ImplementationPlan, work_dir: &Path) -> Result<Vec<Primitive>> {
+    pub fn execute(plan: &ImplementationPlan, work_dir: &Path) -> Result<(Vec<Primitive>, bool)> {
         let mut primitives = Vec::new();
-        for step in &plan.steps {
+        let mut all_success = true;
+
+        for (i, step) in plan.steps.iter().enumerate().skip(plan.completed_steps) {
+            let action_ref = format!("{}:{}", plan.feature_id, i);
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+
             match step {
                 Action::CreateFile { path, content } => {
                     let target_path = work_dir.join(path);
@@ -18,9 +26,17 @@ impl PlanExecutor {
                         fs::create_dir_all(parent)?;
                     }
                     fs::write(&target_path, content)?;
+
                     primitives.push(Primitive::Code {
                         path: path.clone(),
                         content: content.clone(),
+                    });
+                    primitives.push(Primitive::ExecutionStep {
+                        action_ref,
+                        status: "Success".to_string(),
+                        stdout: format!("Created file: {}", path),
+                        stderr: String::new(),
+                        timestamp,
                     });
                 }
                 Action::ModifyFile { path, new_content } => {
@@ -29,9 +45,17 @@ impl PlanExecutor {
                         fs::create_dir_all(parent)?;
                     }
                     fs::write(&target_path, new_content)?;
+
                     primitives.push(Primitive::Code {
                         path: path.clone(),
                         content: new_content.clone(),
+                    });
+                    primitives.push(Primitive::ExecutionStep {
+                        action_ref,
+                        status: "Success".to_string(),
+                        stdout: format!("Modified file: {}", path),
+                        stderr: String::new(),
+                        timestamp,
                     });
                 }
                 Action::RunCommand {
@@ -54,12 +78,25 @@ impl PlanExecutor {
                     cmd.current_dir(target_cwd);
 
                     let output = cmd.output()?;
-                    if !output.status.success() && *must_succeed {
-                        return Err(anyhow::anyhow!(
-                            "Command '{}' failed: {}",
-                            command,
-                            String::from_utf8_lossy(&output.stderr)
-                        ));
+                    let success = output.status.success();
+                    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+                    primitives.push(Primitive::ExecutionStep {
+                        action_ref,
+                        status: if success {
+                            "Success".to_string()
+                        } else {
+                            "Failure".to_string()
+                        },
+                        stdout,
+                        stderr: stderr.clone(),
+                        timestamp,
+                    });
+
+                    if !success && *must_succeed {
+                        all_success = false;
+                        break;
                     }
                 }
                 Action::Verify { test_command } => {
@@ -68,20 +105,35 @@ impl PlanExecutor {
                     cmd.current_dir(work_dir);
 
                     let output = cmd.output()?;
+                    let success = output.status.success();
+                    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
                     primitives.push(Primitive::Verification {
                         test_command: test_command.clone(),
-                        success: output.status.success(),
-                        output: String::from_utf8_lossy(&output.stdout).to_string(),
+                        success,
+                        output: stdout.clone(),
                     });
-                    if !output.status.success() {
-                        return Err(anyhow::anyhow!(
-                            "Verification failed: {}",
-                            String::from_utf8_lossy(&output.stderr)
-                        ));
+
+                    primitives.push(Primitive::ExecutionStep {
+                        action_ref,
+                        status: if success {
+                            "Success".to_string()
+                        } else {
+                            "Failure".to_string()
+                        },
+                        stdout,
+                        stderr,
+                        timestamp,
+                    });
+
+                    if !success {
+                        all_success = false;
+                        break;
                     }
                 }
             }
         }
-        Ok(primitives)
+        Ok((primitives, all_success))
     }
 }

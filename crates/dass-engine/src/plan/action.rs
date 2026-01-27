@@ -39,6 +39,8 @@ pub struct ImplementationPlan {
     pub feature_id: String,
     /// Directed steps. For now, strictly sequential.
     pub steps: Vec<Action>,
+    #[serde(default)]
+    pub completed_steps: usize,
 }
 
 impl Verifiable for ImplementationPlan {
@@ -87,6 +89,7 @@ mod tests {
                 cwd: None,
                 must_succeed: true,
             }],
+            completed_steps: 0,
         };
         assert!(plan.verify().is_err());
     }
