@@ -30,7 +30,7 @@ impl SpecValidator {
         }
 
         // Reverse check: Does the spec claim to cover a req that doesn't exist?
-        let input_ids: Vec<Uuid> = reqs.iter().map(|r| r.id).collect();
+        let input_ids: Vec<String> = reqs.iter().map(|r| r.id.clone()).collect();
         for claimed_id in spec_req_ids {
             if !input_ids.contains(claimed_id) {
                  return Err(anyhow::anyhow!("Spec claims to cover unknown Requirement {}", claimed_id));

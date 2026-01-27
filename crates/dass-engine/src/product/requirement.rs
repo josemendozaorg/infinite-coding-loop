@@ -9,7 +9,7 @@ use anyhow::Result;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Requirement {
     /// Unique Identifier for the requirement.
-    pub id: Uuid,
+    pub id: String,
     /// The user story: "As a <role>, I want <feature> so that <benefit>".
     pub user_story: String,
     /// A list of verifiable boolean statements that define success.
@@ -21,7 +21,7 @@ impl Requirement {
     /// Creates a new Atomic Requirement.
     pub fn new(user_story: impl Into<String>, acceptance_criteria: Vec<String>) -> Self {
         Self {
-            id: Uuid::new_v4(),
+            id: Uuid::new_v4().to_string(), // Default to UUID, but allow String override via serialization
             user_story: user_story.into(),
             acceptance_criteria,
         }

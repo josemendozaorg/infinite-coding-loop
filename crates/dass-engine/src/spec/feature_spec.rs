@@ -11,7 +11,7 @@ pub struct FeatureSpec {
     /// Unique Identifier for the spec (usually matches the Feature Name/ID).
     pub id: String,
     /// Links to the Atomic Requirements this spec satisfies.
-    pub requirement_ids: Vec<Uuid>,
+    pub requirement_ids: Vec<String>,
     /// UI Specification (Markdown content).
     pub ui_spec: String,
     /// Business Logic Specification (Markdown content).
@@ -23,7 +23,7 @@ pub struct FeatureSpec {
 }
 
 impl FeatureSpec {
-    pub fn new(id: impl Into<String>, req_ids: Vec<Uuid>) -> Self {
+    pub fn new(id: impl Into<String>, req_ids: Vec<String>) -> Self {
         Self {
             id: id.into(),
             requirement_ids: req_ids,

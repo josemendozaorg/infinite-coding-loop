@@ -9,6 +9,7 @@ use dass_engine::{
         planner::Planner,
     },
     spec::feature_spec::FeatureSpec,
+    plan::action::{Action, ImplementationPlan},
 };
 use anyhow::{Result, Context};
 use tokio::time::Duration;
@@ -60,7 +61,7 @@ async fn main() -> Result<()> {
         // 2. Spec Response
         responses.push(serde_json::to_string(&FeatureSpec {
             id: "new-feature".to_string(),
-            requirement_ids: vec![uuid::Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap()],
+            requirement_ids: vec!["00000000-0000-0000-0000-000000000001".to_string()],
             ui_spec: "Spinner".to_string(),
             logic_spec: "Show spinner".to_string(),
             data_spec: "None".to_string(),
@@ -149,10 +150,52 @@ fn run_pipeline<C: AiCliClient + Clone>(client: C, args: &Args) -> Result<()> {
     }
 
     // 6. Execution (Mock for now, or real via PlanRunner)
+    // 6. Execution (Mock for now, or real via PlanRunner)
     step_header("4. CONSTRUCTION: Executing...");
-    println!("{}", style("Plan Execution not yet fully wired to file system.").yellow());
+    execute_plan(&plan)?;
     println!("{}", style("Success! Pipeline Complete.").bold().green());
     
+    Ok(())
+}
+
+fn execute_plan(plan: &ImplementationPlan) -> Result<()> {
+    for step in &plan.steps {
+        match step {
+            Action::CreateFile { path, content } => {
+                if let Some(parent) = std::path::Path::new(path).parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                std::fs::write(path, content)?;
+                println!("  {} Created {}", style("[FILE]").bold().cyan(), path);
+            },
+            Action::ModifyFile { path, new_content } => {
+                 std::fs::write(path, new_content)?;
+                 println!("  {} Modified {}", style("[FILE]").bold().yellow(), path);
+            },
+            Action::RunCommand { command, cwd, must_succeed } => {
+                let mut cmd = std::process::Command::new("sh");
+                cmd.arg("-c").arg(command);
+                if let Some(dir) = cwd {
+                    cmd.current_dir(dir);
+                }
+                let output = cmd.output()?;
+                if !output.status.success() && *must_succeed {
+                    return Err(anyhow::anyhow!("Command '{}' failed: {}", command, String::from_utf8_lossy(&output.stderr)));
+                }
+                println!("  {} Ran '{}'", style("[EXEC]").bold().magenta(), command);
+            },
+            Action::Verify { test_command } => {
+                let output = std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(test_command)
+                    .output()?;
+                 if !output.status.success() {
+                    return Err(anyhow::anyhow!("Verification failed: {}", String::from_utf8_lossy(&output.stderr)));
+                }
+                println!("  {} Verified '{}'", style("[TEST]").bold().green(), test_command);
+            }
+        }
+    }
     Ok(())
 }
 

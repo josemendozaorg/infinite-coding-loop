@@ -22,7 +22,9 @@ impl<C: AiCliClient> Architect<C> {
         let req_list_str = serde_yaml::to_string(reqs).unwrap_or_default();
         let mut current_context = format!(
             "Design a FeatureSpec for feature '{}' based on these requirements:\n{}\n \
-            Output valid JSON for the FeatureSpec struct.", 
+            Output valid JSON for the FeatureSpec struct with fields: \
+            id (string), requirement_ids (list of strings), ui_spec (markdown string), \
+            logic_spec (markdown string), data_spec (markdown string), verification_plan (markdown string).", 
             feature_id, req_list_str
         );
 
@@ -31,34 +33,40 @@ impl<C: AiCliClient> Architect<C> {
             let response = self.client.prompt(&current_context)?;
 
             // 1. Try to parse JSON
-            let mut spec: FeatureSpec = match serde_json::from_str(&response) {
+            // 1. Try to parse JSON (robustly)
+             let cleaned_response = if let Some(start) = response.find("```") {
+                let after_structure = &response[start+3..];
+                if let Some(end) = after_structure.find("```") {
+                     let content = &after_structure[..end].trim();
+                     // Strip optional 'json' or other tag from first line if present
+                     if let Some(idx) = content.find(char::is_whitespace) {
+                          if content[..idx].to_lowercase().contains("json") {
+                               &content[idx..]
+                          } else {
+                               content
+                          }
+                     } else {
+                          content
+                     }
+                } else {
+                    response.trim()
+                }
+            } else {
+                response.trim()
+            };
+
+            let mut spec: FeatureSpec = match serde_json::from_str(cleaned_response) {
                 Ok(s) => s,
                 Err(e) => {
-                    // Try to extract JSON block if wrapped in markdown
-                    if let Some(start) = response.find("```json") {
-                        if let Some(end) = response[start..].find("```") {
-                             let json_part = &response[start+7..start+end];
-                             if let Ok(s) = serde_json::from_str(json_part) {
-                                 s
-                             } else {
-                                  current_context = format!("Invalid JSON: {}. Please fix.", e);
-                                  continue;
-                             }
-                        } else {
-                            current_context = format!("Invalid JSON: {}. Please fix.", e);
-                            continue;
-                        }
-                    } else {
-                        current_context = format!("Invalid JSON: {}. Please fix.", e);
-                        continue;
-                    }
+                     current_context = format!("Invalid JSON: {}. Please fix. Input was: {}", e, cleaned_response);
+                     continue;
                 }
             };
             
             // Ensure ID matches
             spec.id = feature_id.to_string(); 
             // Ensure Req IDs are linked
-            spec.requirement_ids = reqs.iter().map(|r| r.id).collect();
+            spec.requirement_ids = reqs.iter().map(|r| r.id.clone()).collect();
 
             // 2. Gate Check: Completeness & Consistency
             if let Err(e) = SpecValidator::check_completeness(&spec) {

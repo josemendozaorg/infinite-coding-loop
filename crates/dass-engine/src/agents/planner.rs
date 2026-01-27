@@ -21,7 +21,12 @@ impl<C: AiCliClient> Planner<C> {
         let spec_json = serde_json::to_string(spec).unwrap_or_default();
         let mut current_context = format!(
             "Create an ImplementationPlan for this Spec:\n{}\n \
-            Output valid JSON for ImplementationPlan. Use 'type' and 'payload' in Actions.", 
+            Output valid JSON for ImplementationPlan with fields: feature_id (string), steps (list of Action). \
+            Action types: \
+            - CreateFile {{ path, content }} \
+            - ModifyFile {{ path, new_content }} \
+            - RunCommand {{ command, cwd (optional), must_succeed (bool) }} \
+            - Verify {{ test_command }}", 
             spec_json
         );
 
@@ -29,11 +34,32 @@ impl<C: AiCliClient> Planner<C> {
             attempts += 1;
             let response = self.client.prompt(&current_context)?;
 
-            let plan: ImplementationPlan = match serde_json::from_str(&response) {
+            let cleaned_response = if let Some(start) = response.find("```") {
+                let after_structure = &response[start+3..];
+                if let Some(end) = after_structure.find("```") {
+                     let content = &after_structure[..end].trim();
+                     // Strip optional 'json' tag header
+                     if let Some(idx) = content.find(char::is_whitespace) {
+                         if content[..idx].to_lowercase().contains("json") {
+                             &content[idx..]
+                         } else {
+                             content
+                         }
+                     } else {
+                         content
+                     }
+                } else {
+                    response.trim()
+                }
+            } else {
+                response.trim()
+            };
+
+            let plan: ImplementationPlan = match serde_json::from_str(cleaned_response) {
                 Ok(p) => p,
                 Err(e) => {
                      // Basic retry for JSON error (omitted complex extraction for brevity)
-                     current_context = format!("Invalid JSON for Plan: {}. Fix it.", e);
+                     current_context = format!("Invalid JSON for Plan: {}. Fix it. Input was: {}", e, cleaned_response);
                      continue;
                 }
             };

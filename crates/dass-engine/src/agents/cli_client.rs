@@ -36,7 +36,9 @@ impl AiCliClient for ShellCliClient {
             ));
         }
 
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        eprintln!("[DEBUG] Model Output: {}", stdout); // Log for user visibility
+        Ok(stdout)
     }
 }
 

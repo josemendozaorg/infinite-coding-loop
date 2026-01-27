@@ -18,7 +18,11 @@ impl<C: AiCliClient> ProductManager<C> {
         let max_attempts = 5;
         let mut current_context = format!(
             "Extract atomic requirements from this user request: '{}'. \
-            Output purely YAML format list of Requirement structs.", 
+            Output purely YAML format list of Requirement structs. \
+            Each struct MUST have exact fields: \
+            - id: string \
+            - user_story: string \
+            - acceptance_criteria: list of strings", 
             user_input
         );
 
@@ -26,14 +30,33 @@ impl<C: AiCliClient> ProductManager<C> {
             attempts += 1;
             let response = self.client.prompt(&current_context)?;
             
-            // 1. Try to parse
-            let reqs = match Requirement::load_many_from_yaml(&response) {
+            // 1. Try to parse (with markdown stripping support)
+            let cleaned_response = if let Some(start) = response.find("```yaml") {
+                let after_tag = &response[start+7..];
+                if let Some(end) = after_tag.find("```") {
+                     after_tag[..end].trim().to_string()
+                } else {
+                    response.clone()
+                }
+            } else if let Some(start) = response.find("```") {
+                 // Fallback for unspecified code block
+                 let after_tag = &response[start+3..];
+                 if let Some(end) = after_tag.find("```") {
+                     after_tag[..end].trim().to_string()
+                } else {
+                    response.clone()
+                }
+            } else {
+                response.clone()
+            };
+
+            let reqs = match Requirement::load_many_from_yaml(&cleaned_response) {
                 Ok(r) => r,
                 Err(e) => {
                     // Feedback loop for syntax error
                     current_context = format!(
                         "Your previous output was invalid YAML: {}. \
-                        Please fix properly. Input was: '{}'", 
+                        Please fix properly. Ensure you return a YAML list. Input was: '{}'", 
                         e, user_input
                     );
                     continue;
