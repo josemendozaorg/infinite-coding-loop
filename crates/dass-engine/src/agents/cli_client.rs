@@ -30,8 +30,8 @@ impl AiCliClient for ShellCliClient {
             .output()?;
 
         if !output.status.success() {
-             return Err(anyhow::anyhow!(
-                "AI CLI failed: {}", 
+            return Err(anyhow::anyhow!(
+                "AI CLI failed: {}",
                 String::from_utf8_lossy(&output.stderr)
             ));
         }
@@ -42,26 +42,34 @@ impl AiCliClient for ShellCliClient {
     }
 }
 
-/// A Mock Client for testing/simulation.
-#[derive(Clone)]
-pub struct MockCliClient {
-    pub responses: std::rc::Rc<std::cell::RefCell<std::collections::VecDeque<String>>>,
-}
+#[cfg(test)]
+pub mod mocks {
+    use super::*;
+    use std::cell::RefCell;
+    use std::collections::VecDeque;
+    use std::rc::Rc;
 
-impl MockCliClient {
-    pub fn new(responses: Vec<String>) -> Self {
-        Self {
-            responses: std::rc::Rc::new(std::cell::RefCell::new(responses.into())),
+    /// A Mock Client for testing/simulation.
+    #[derive(Clone)]
+    pub struct MockCliClient {
+        pub responses: Rc<RefCell<VecDeque<String>>>,
+    }
+
+    impl MockCliClient {
+        pub fn new(responses: Vec<String>) -> Self {
+            Self {
+                responses: Rc::new(RefCell::new(responses.into())),
+            }
         }
     }
-}
 
-impl AiCliClient for MockCliClient {
-    fn prompt(&self, _prompt: &str) -> Result<String> {
-        if let Some(res) = self.responses.borrow_mut().pop_front() {
-            Ok(res)
-        } else {
-            Ok("MOCK_RESPONSE".to_string())
+    impl AiCliClient for MockCliClient {
+        fn prompt(&self, _prompt: &str) -> Result<String> {
+            if let Some(res) = self.responses.borrow_mut().pop_front() {
+                Ok(res)
+            } else {
+                Ok("MOCK_RESPONSE".to_string())
+            }
         }
     }
 }

@@ -1,5 +1,7 @@
+use crate::clover::{ConsistencyCheck, Verifiable};
+use crate::product::requirement::Requirement;
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 /// Represents a Feature Specification (The Contract).
 /// defined in the "Design" phase of the DASS process.
@@ -41,5 +43,64 @@ impl FeatureSpec {
             && !self.logic_spec.is_empty()
             && !self.data_spec.is_empty()
             && !self.verification_plan.is_empty()
+    }
+}
+
+impl Verifiable for FeatureSpec {
+    fn verify(&self) -> Result<bool> {
+        if !self.is_complete() {
+            return Err(anyhow::anyhow!(
+                "Spec '{}' is incomplete. Missing sections.",
+                self.id
+            ));
+        }
+        Ok(true)
+    }
+}
+
+impl ConsistencyCheck<[Requirement]> for FeatureSpec {
+    fn check_consistency(&self, reqs: &[Requirement]) -> Result<()> {
+        let spec_req_ids = &self.requirement_ids;
+
+        for req in reqs {
+            if !spec_req_ids.contains(&req.id) {
+                return Err(anyhow::anyhow!(
+                    "Requirement {} not covered by Spec {}",
+                    req.id,
+                    self.id
+                ));
+            }
+        }
+
+        // Reverse check: Does the spec claim to cover a req that doesn't exist?
+        let input_ids: Vec<String> = reqs.iter().map(|r| r.id.clone()).collect();
+        for claimed_id in spec_req_ids {
+            if !input_ids.contains(claimed_id) {
+                return Err(anyhow::anyhow!(
+                    "Spec claims to cover unknown Requirement {}",
+                    claimed_id
+                ));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_clover_completeness() {
+        let spec = FeatureSpec::new("test", vec![]);
+        assert!(spec.verify().is_err());
+    }
+
+    #[test]
+    fn test_clover_coverage() {
+        let req = Requirement::new("story", vec![]);
+        let spec = FeatureSpec::new("test", vec![]);
+        assert!(spec.check_consistency(&vec![req]).is_err());
     }
 }

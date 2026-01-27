@@ -1,6 +1,7 @@
+use crate::clover::Verifiable;
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use anyhow::Result;
 
 /// Represents an Atomic Requirement (The Truth).
 /// defined in the "Product" phase of the DASS process.
@@ -27,10 +28,55 @@ impl Requirement {
         }
     }
 
-    /// Loads a list of requirements from a YAML string.
     pub fn load_many_from_yaml(yaml_content: &str) -> Result<Vec<Self>> {
         let reqs: Vec<Self> = serde_yaml::from_str(yaml_content)?;
         Ok(reqs)
+    }
+}
+
+impl Verifiable for Requirement {
+    fn verify(&self) -> Result<bool> {
+        let mut score = 100u8;
+        let mut notes = Vec::new();
+
+        // Heuristic 1: Length check
+        if self.user_story.len() < 10 {
+            score = score.saturating_sub(50);
+            notes.push("User story is suspiciously short.".to_string());
+        }
+
+        // Heuristic 2: Acceptance Criteria presence
+        if self.acceptance_criteria.is_empty() {
+            return Err(anyhow::anyhow!(
+                "Quality Gate Failed: No acceptance criteria provided for '{}'",
+                self.user_story
+            ));
+        }
+
+        // Heuristic 3: Ambiguous keywords
+        let ambiguous_words = ["fast", "user friendly", "modern", "better", "clean"];
+        for word in ambiguous_words {
+            if self.user_story.to_lowercase().contains(word) {
+                score = score.saturating_sub(20);
+                notes.push(format!("Contains subjective term: '{}'", word));
+            }
+            for criteria in &self.acceptance_criteria {
+                if criteria.to_lowercase().contains(word) {
+                    score = score.saturating_sub(25);
+                    notes.push(format!("Criteria contains subjective term: '{}'", word));
+                }
+            }
+        }
+
+        if score < 70 {
+            return Err(anyhow::anyhow!(
+                "Quality Gate Failed: Requirement is too ambiguous (Score {}/100). Issues: {:?}",
+                score,
+                notes
+            ));
+        }
+
+        Ok(true)
     }
 }
 

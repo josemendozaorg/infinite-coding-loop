@@ -1,7 +1,7 @@
-use anyhow::Result;
-use crate::product::requirement::Requirement;
-use crate::gates::ambiguity::AmbiguityChecker;
 use crate::agents::cli_client::AiCliClient;
+use crate::clover::Verifiable;
+use crate::product::requirement::Requirement;
+use anyhow::Result;
 
 pub struct ProductManager<C: AiCliClient> {
     client: C,
@@ -22,27 +22,27 @@ impl<C: AiCliClient> ProductManager<C> {
             Each struct MUST have exact fields: \
             - id: string \
             - user_story: string \
-            - acceptance_criteria: list of strings", 
+            - acceptance_criteria: list of strings",
             user_input
         );
 
         while attempts < max_attempts {
             attempts += 1;
             let response = self.client.prompt(&current_context)?;
-            
+
             // 1. Try to parse (with markdown stripping support)
             let cleaned_response = if let Some(start) = response.find("```yaml") {
-                let after_tag = &response[start+7..];
+                let after_tag = &response[start + 7..];
                 if let Some(end) = after_tag.find("```") {
-                     after_tag[..end].trim().to_string()
+                    after_tag[..end].trim().to_string()
                 } else {
                     response.clone()
                 }
             } else if let Some(start) = response.find("```") {
-                 // Fallback for unspecified code block
-                 let after_tag = &response[start+3..];
-                 if let Some(end) = after_tag.find("```") {
-                     after_tag[..end].trim().to_string()
+                // Fallback for unspecified code block
+                let after_tag = &response[start + 3..];
+                if let Some(end) = after_tag.find("```") {
+                    after_tag[..end].trim().to_string()
                 } else {
                     response.clone()
                 }
@@ -56,7 +56,7 @@ impl<C: AiCliClient> ProductManager<C> {
                     // Feedback loop for syntax error
                     current_context = format!(
                         "Your previous output was invalid YAML: {}. \
-                        Please fix properly. Ensure you return a YAML list. Input was: '{}'", 
+                        Please fix properly. Ensure you return a YAML list. Input was: '{}'",
                         e, user_input
                     );
                     continue;
@@ -68,13 +68,9 @@ impl<C: AiCliClient> ProductManager<C> {
             let mut feedback = String::new();
 
             for req in &reqs {
-                let check = AmbiguityChecker::check(req)?;
-                if check.score < AmbiguityChecker::MIN_ACCEPTABLE_SCORE {
+                if let Err(e) = req.verify() {
                     all_pass = false;
-                    feedback.push_str(&format!(
-                        "Requirement '{}' is ambiguous (Score {}/100). Issues: {:?}\n", 
-                        req.user_story, check.score, check.notes
-                    ));
+                    feedback.push_str(&format!("{}\n", e));
                 }
             }
 
@@ -92,14 +88,18 @@ impl<C: AiCliClient> ProductManager<C> {
             }
         }
 
-        Err(anyhow::anyhow!("ProductManager failed to generate valid requirements after {} attempts", max_attempts))
+        Err(anyhow::anyhow!(
+            "ProductManager failed to generate valid requirements after {} attempts",
+            max_attempts
+        ))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agents::cli_client::MockCliClient;
+
+    use crate::agents::cli_client::mocks::MockCliClient;
 
     #[test]
     fn test_pm_refinement_loop() {
