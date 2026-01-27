@@ -377,6 +377,7 @@ name = "dass-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "clap",
  "console",
  "dass-engine",
@@ -392,10 +393,13 @@ name = "dass-engine"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "serde",
  "serde_json",
  "serde_yaml",
+ "sqlx",
  "thiserror 2.0.18",
+ "tokio",
  "uuid",
 ]
 

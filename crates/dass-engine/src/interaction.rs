@@ -1,0 +1,38 @@
+use crate::plan::action::ImplementationPlan;
+use crate::product::requirement::Requirement;
+use crate::spec::feature_spec::FeatureSpec;
+use anyhow::Result;
+use async_trait::async_trait;
+
+#[async_trait]
+pub trait UserInteraction {
+    /// Ask the user for open-ended input.
+    async fn ask_user(&self, prompt: &str) -> Result<String>;
+
+    /// Ask the user specifically for a feature request (could be pre-seeded from args).
+    async fn ask_for_feature(&self, prompt: &str) -> Result<String>;
+
+    /// Ask for a boolean confirmation.
+    async fn confirm(&self, prompt: &str) -> Result<bool>;
+
+    /// Indicate that a long-running step is starting (e.g., show spinner).
+    fn start_step(&self, name: &str);
+
+    /// Indicate that a step has completed.
+    fn end_step(&self, name: &str);
+
+    /// Display the analyzed requirements.
+    fn render_requirements(&self, reqs: &[Requirement]);
+
+    /// Display the generated specification.
+    fn render_spec(&self, spec: &FeatureSpec);
+
+    /// Display the generated plan.
+    fn render_plan(&self, plan: &ImplementationPlan);
+
+    /// Log general information.
+    fn log_info(&self, msg: &str);
+
+    /// Log error information.
+    fn log_error(&self, msg: &str);
+}

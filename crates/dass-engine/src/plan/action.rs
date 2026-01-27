@@ -7,13 +7,21 @@ use serde::{Deserialize, Serialize};
 ///
 /// Each action must be reversible and atomic.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "type", content = "payload")]
+#[serde(tag = "type")]
 pub enum Action {
     /// Create a new file with content.
-    CreateFile { path: String, content: String },
+    CreateFile {
+        path: String,
+        #[serde(alias = "payload")]
+        content: String,
+    },
     /// Modify an existing file (replace content).
     /// For more granular edits, we might need a Diff/Patch struct later.
-    ModifyFile { path: String, new_content: String },
+    ModifyFile {
+        path: String,
+        #[serde(alias = "payload")]
+        new_content: String,
+    },
     /// Run a shell command.
     RunCommand {
         command: String,

@@ -10,3 +10,6 @@ serde_json.workspace = true
 serde_yaml.workspace = true
 thiserror = "2.0.18"
 uuid = { workspace = true, features = ["v4", "serde"] }
+sqlx = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true, features = ["fs"] }

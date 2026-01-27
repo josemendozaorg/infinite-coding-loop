@@ -1,20 +1,15 @@
+use anyhow::{Context, Result};
+use async_trait::async_trait;
 use clap::Parser;
-use dialoguer::{theme::ColorfulTheme, Confirm, Input};
 use console::style;
 use dass_engine::{
-    agents::{
-        cli_client::{ShellCliClient, AiCliClient}, 
-        product_manager::ProductManager, 
-        architect::Architect,
-        planner::Planner,
-    },
+    agents::cli_client::ShellCliClient, interaction::UserInteraction, orchestrator::Orchestrator,
+    plan::action::ImplementationPlan, product::requirement::Requirement,
     spec::feature_spec::FeatureSpec,
-    plan::action::{Action, ImplementationPlan},
 };
-use anyhow::{Result, Context};
-use tokio::time::Duration;
+use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None)]
 struct Args {
     /// Skip confirmation prompts (auto-accept)
@@ -27,156 +22,171 @@ struct Args {
 
     /// Feature idea (skips input prompt)
     query: Option<String>,
+
+    /// Application ID for persistence
+    #[arg(short, long)]
+    app_id: Option<String>,
+
+    /// Working directory for code generation
+    #[arg(short, long)]
+    work_dir: Option<String>,
+}
+
+struct CliInteraction {
+    args: Args,
+}
+
+impl CliInteraction {
+    fn new(args: Args) -> Self {
+        Self { args }
+    }
+}
+
+#[async_trait]
+impl UserInteraction for CliInteraction {
+    async fn ask_user(&self, prompt: &str) -> Result<String> {
+        let input = Input::with_theme(&ColorfulTheme::default())
+            .with_prompt(prompt)
+            .interact_text()?;
+        Ok(input)
+    }
+
+    async fn ask_for_feature(&self, prompt: &str) -> Result<String> {
+        if let Some(q) = &self.args.query {
+            println!("Feature: {}", style(q).cyan());
+            return Ok(q.clone());
+        }
+        self.ask_user(prompt).await
+    }
+
+    async fn confirm(&self, prompt: &str) -> Result<bool> {
+        if self.args.yes {
+            return Ok(true);
+        }
+        Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt(prompt)
+            .default(true)
+            .interact()
+            .context("Failed to read confirmation")
+    }
+
+    fn start_step(&self, name: &str) {
+        println!("\n{}", style(name).bold().cyan());
+    }
+
+    fn end_step(&self, _name: &str) {
+        // Could be used for timing or spinner cleanup if we managed global state
+    }
+
+    fn render_requirements(&self, reqs: &[Requirement]) {
+        println!("\n{}:", style("Requirements").bold().green());
+        for req in reqs {
+            println!("  • {}", req.user_story);
+        }
+    }
+
+    fn render_spec(&self, spec: &FeatureSpec) {
+        println!("\n{}:", style("Feature Spec").bold().green());
+        println!("  ID: {}", spec.id);
+        println!("  UI Logic: {} chars", spec.ui_spec.len());
+    }
+
+    fn render_plan(&self, plan: &ImplementationPlan) {
+        println!("\n{}:", style("Implementation Plan").bold().green());
+        for (i, step) in plan.steps.iter().enumerate() {
+            println!("  {}. {:?}", i + 1, step);
+        }
+    }
+
+    fn log_info(&self, msg: &str) {
+        println!("{}", style(msg).green());
+    }
+
+    fn log_error(&self, msg: &str) {
+        println!("{}", style(msg).red());
+    }
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let args = Args::parse();
-    
+    let mut args = Args::parse();
+
+    // 1. Resolve Application ID
+    let final_app_id = if let Some(id) = args.app_id.clone() {
+        id
+    } else {
+        let available = Orchestrator::<ShellCliClient>::list_available_apps()
+            .await
+            .unwrap_or_default();
+        if available.is_empty() {
+            Input::with_theme(&ColorfulTheme::default())
+                .with_prompt("Application ID (new)")
+                .default("default-app".into())
+                .interact_text()?
+        } else {
+            let mut items: Vec<String> = available
+                .iter()
+                .map(|(id, name)| format!("{} ({})", name, id))
+                .collect();
+            items.push(style("Create New Application").yellow().to_string());
+
+            let selection = Select::with_theme(&ColorfulTheme::default())
+                .with_prompt("Select an application")
+                .items(&items)
+                .default(0)
+                .interact()?;
+
+            if selection < available.len() {
+                available[selection].0.clone()
+            } else {
+                Input::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Application ID (new)")
+                    .interact_text()?
+            }
+        }
+    };
+    args.app_id = Some(final_app_id.clone());
+
+    // 2. Resolve Working Directory
+    let stored_work_dir = Orchestrator::<ShellCliClient>::get_app_work_dir(&final_app_id)
+        .await
+        .unwrap_or_default();
+
+    if args.work_dir.is_none() {
+        let default_dir = stored_work_dir.unwrap_or_else(|| ".".to_string());
+        let path: String = Input::with_theme(&ColorfulTheme::default())
+            .with_prompt("Output directory")
+            .default(default_dir)
+            .interact_text()?;
+        args.work_dir = Some(path);
+    }
+
+    let work_dir = std::path::PathBuf::from(args.work_dir.as_ref().unwrap());
+
     // Banner
-    println!("{}", style("   DASS SOFTWARE FACTORY   ").bold().on_blue().white());
+    println!(
+        "{}",
+        style("   DASS SOFTWARE FACTORY   ")
+            .bold()
+            .on_blue()
+            .white()
+    );
     println!("{}", style("---------------------------").dim());
 
     println!("{}", style("Running in LIVE MODE (calling AI CLI)").green());
     let client = ShellCliClient::new(&args.ai_cmd);
-    run_pipeline(client, &args)?;
+
+    let mut orchestrator = Orchestrator::new(
+        client,
+        final_app_id.clone(),
+        format!("App: {}", final_app_id),
+        work_dir,
+    )
+    .await?;
+
+    let ui = CliInteraction::new(args.clone());
+
+    orchestrator.run(&ui).await?;
 
     Ok(())
-}
-
-fn run_pipeline<C: AiCliClient + Clone>(client: C, args: &Args) -> Result<()> {
-    // 1. Setup Agents
-    let pm = ProductManager::new(client.clone());
-    let architect = Architect::new(client.clone());
-    let planner = Planner::new(client.clone());
-
-    // 2. User Input
-    let feature_idea = if let Some(q) = &args.query {
-        println!("Feature: {}", style(q).cyan());
-        q.clone()
-    } else {
-         Input::with_theme(&ColorfulTheme::default())
-        .with_prompt("What feature do you want to build?")
-        .interact_text()?
-    };
-
-    // 3. Product Phase
-    step_header("1. PRODUCT MANAGER: Analyzing Request...");
-    let reqs = spin("Thinking...", || pm.process_request(&feature_idea))?;
-    
-    // Display Reqs
-    println!("\n{}:", style("Generated Requirements").bold().green());
-    for req in &reqs {
-        println!("  • {}", req.user_story);
-    }
-    
-    if !confirm_continue(&args)? {
-        println!("{}", style("Aborted.").red());
-        return Ok(());
-    }
-
-    // 4. Architect Phase
-    step_header("2. ARCHITECT: Designing Spec...");
-    let spec = spin("Designing...", || architect.design("new-feature", &reqs))?;
-
-    // Display Spec Summary
-    println!("\n{}:", style("Generated Feature Spec").bold().green());
-    println!("  ID: {}", spec.id);
-    println!("  UI Logic: {} chars", spec.ui_spec.len());
-    
-    if !confirm_continue(&args)? {
-        println!("{}", style("Aborted.").red());
-        return Ok(());
-    }
-
-    // 5. Planner Phase
-    step_header("3. PLANNER: Creating Plan...");
-    let plan = spin("Planning...", || planner.plan(&spec))?;
-
-    // Display Plan
-    println!("\n{}:", style("Implementation Plan").bold().green());
-    for (i, step) in plan.steps.iter().enumerate() {
-        println!("  {}. {:?}", i + 1, step);
-    }
-
-    if !confirm_continue(&args)? {
-        println!("{}", style("Aborted.").red());
-        return Ok(());
-    }
-
-    // 6. Execution (Mock for now, or real via PlanRunner)
-    // 6. Execution (Mock for now, or real via PlanRunner)
-    step_header("4. CONSTRUCTION: Executing...");
-    execute_plan(&plan)?;
-    println!("{}", style("Success! Pipeline Complete.").bold().green());
-    
-    Ok(())
-}
-
-fn execute_plan(plan: &ImplementationPlan) -> Result<()> {
-    for step in &plan.steps {
-        match step {
-            Action::CreateFile { path, content } => {
-                if let Some(parent) = std::path::Path::new(path).parent() {
-                    std::fs::create_dir_all(parent)?;
-                }
-                std::fs::write(path, content)?;
-                println!("  {} Created {}", style("[FILE]").bold().cyan(), path);
-            },
-            Action::ModifyFile { path, new_content } => {
-                 std::fs::write(path, new_content)?;
-                 println!("  {} Modified {}", style("[FILE]").bold().yellow(), path);
-            },
-            Action::RunCommand { command, cwd, must_succeed } => {
-                let mut cmd = std::process::Command::new("sh");
-                cmd.arg("-c").arg(command);
-                if let Some(dir) = cwd {
-                    cmd.current_dir(dir);
-                }
-                let output = cmd.output()?;
-                if !output.status.success() && *must_succeed {
-                    return Err(anyhow::anyhow!("Command '{}' failed: {}", command, String::from_utf8_lossy(&output.stderr)));
-                }
-                println!("  {} Ran '{}'", style("[EXEC]").bold().magenta(), command);
-            },
-            Action::Verify { test_command } => {
-                let output = std::process::Command::new("sh")
-                    .arg("-c")
-                    .arg(test_command)
-                    .output()?;
-                 if !output.status.success() {
-                    return Err(anyhow::anyhow!("Verification failed: {}", String::from_utf8_lossy(&output.stderr)));
-                }
-                println!("  {} Verified '{}'", style("[TEST]").bold().green(), test_command);
-            }
-        }
-    }
-    Ok(())
-}
-
-fn step_header(text: &str) {
-    println!("\n{}", style(text).bold().cyan());
-}
-
-fn spin<F, T>(msg: &str, f: F) -> Result<T> 
-where F: FnOnce() -> Result<T> {
-    let spinner = indicatif::ProgressBar::new_spinner();
-    spinner.set_message(msg.to_string());
-    spinner.enable_steady_tick(Duration::from_millis(100));
-    
-    let res = f();
-    
-    spinner.finish_and_clear();
-    res
-}
-
-fn confirm_continue(args: &Args) -> Result<bool> {
-    if args.yes {
-        return Ok(true);
-    }
-    Confirm::with_theme(&ColorfulTheme::default())
-        .with_prompt("Proceed?")
-        .default(true)
-        .interact()
-        .context("Failed to read confirmation")
 }
