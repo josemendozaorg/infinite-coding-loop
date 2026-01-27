@@ -25,35 +25,7 @@ impl StateStore {
     }
 
     async fn migrate(&self) -> Result<()> {
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS applications (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                work_dir TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )",
-        )
-        .execute(&self.pool)
-        .await?;
-
-        // Ensure work_dir column exists (SQLite doesnt support ADD COLUMN IF NOT EXISTS)
-        let _ = sqlx::query("ALTER TABLE applications ADD COLUMN work_dir TEXT")
-            .execute(&self.pool)
-            .await;
-
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS primitives (
-                id TEXT NOT NULL,
-                app_id TEXT NOT NULL,
-                type TEXT NOT NULL,
-                payload BLOB NOT NULL,
-                version INTEGER DEFAULT 1,
-                PRIMARY KEY (id, app_id),
-                FOREIGN KEY (app_id) REFERENCES applications(id)
-            )",
-        )
-        .execute(&self.pool)
-        .await?;
+        sqlx::migrate!("./migrations").run(&self.pool).await?;
         Ok(())
     }
 
