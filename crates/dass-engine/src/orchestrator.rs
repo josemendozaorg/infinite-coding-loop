@@ -332,4 +332,20 @@ impl<C: AiCliClient + Clone> Orchestrator<C> {
             summary
         }
     }
+
+    pub fn get_standard_command(&self, category: &str) -> Option<String> {
+        self.app.primitives.values().find_map(|p| {
+            if let Primitive::Standard {
+                category: c,
+                command_template: Some(cmd),
+                ..
+            } = p
+            {
+                if c == category {
+                    return Some(cmd.clone());
+                }
+            }
+            None
+        })
+    }
 }

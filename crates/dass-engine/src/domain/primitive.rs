@@ -31,6 +31,11 @@ pub enum Primitive {
         severity: String,
         tags: Vec<String>,
     },
+    Standard {
+        category: String,
+        rules: Vec<String>,
+        command_template: Option<String>,
+    },
 }
 
 impl Primitive {
@@ -47,6 +52,7 @@ impl Primitive {
                 ..
             } => format!("{}:{}", action_ref, timestamp),
             Primitive::Observation { insight, .. } => insight.chars().take(20).collect(),
+            Primitive::Standard { category, .. } => category.clone(),
         }
     }
 
@@ -59,6 +65,7 @@ impl Primitive {
             Primitive::Verification { .. } => "VERIFY",
             Primitive::ExecutionStep { .. } => "EXEC",
             Primitive::Observation { .. } => "OBS",
+            Primitive::Standard { .. } => "STD",
         }
     }
 }
