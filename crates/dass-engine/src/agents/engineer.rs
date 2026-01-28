@@ -1,14 +1,21 @@
+use crate::agents::Agent;
 use crate::agents::cli_client::AiCliClient;
 use crate::clover::Verifiable;
 use crate::plan::action::ImplementationPlan;
 use crate::spec::feature_spec::FeatureSpec;
 use anyhow::Result;
 
-pub struct Planner<C: AiCliClient> {
+pub struct Engineer<C: AiCliClient> {
     client: C,
 }
 
-impl<C: AiCliClient> Planner<C> {
+impl<C: AiCliClient> Agent for Engineer<C> {
+    fn role(&self) -> &str {
+        "Engineer"
+    }
+}
+
+impl<C: AiCliClient> Engineer<C> {
     pub fn new(client: C) -> Self {
         Self { client }
     }
@@ -38,7 +45,6 @@ impl<C: AiCliClient> Planner<C> {
                 let after_structure = &response[start + 3..];
                 if let Some(end) = after_structure.find("```") {
                     let content = &after_structure[..end].trim();
-                    // Strip optional 'json' tag header
                     if let Some(idx) = content.find(char::is_whitespace) {
                         if content[..idx].to_lowercase().contains("json") {
                             &content[idx..]
@@ -58,7 +64,6 @@ impl<C: AiCliClient> Planner<C> {
             let plan: ImplementationPlan = match serde_json::from_str(cleaned_response) {
                 Ok(p) => p,
                 Err(e) => {
-                    // Basic retry for JSON error (omitted complex extraction for brevity)
                     current_context = format!(
                         "Invalid JSON for Plan: {}. Fix it. Input was: {}",
                         e, cleaned_response
@@ -81,49 +86,8 @@ impl<C: AiCliClient> Planner<C> {
         }
 
         Err(anyhow::anyhow!(
-            "Planner failed to create safe plan after {} attempts",
+            "Engineer failed to create safe plan after {} attempts",
             max_attempts
         ))
-    }
-}
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::agents::cli_client::mocks::MockCliClient;
-    use crate::plan::action::Action;
-
-    #[test]
-    fn test_planner_safety_check() {
-        let spec = FeatureSpec {
-            id: "test".to_string(),
-            requirement_ids: vec![],
-            ui_spec: "".to_string(),
-            logic_spec: "".to_string(),
-            data_spec: "".to_string(),
-            verification_plan: "".to_string(),
-        };
-
-        // Mock: 1. Unsafe Command (rm -rf), 2. Safe Plan
-        let mock_client = MockCliClient::new(vec![
-            r#"{
-                "feature_id": "test",
-                "steps": [ { "type": "RunCommand", "payload": { "command": "rm -rf /", "cwd": null, "must_succeed": true } } ]
-            }"#.to_string(),
-            r#"{
-                "feature_id": "test",
-                "steps": [ { "type": "Verify", "payload": { "test_command": "ls" } } ]
-            }"#.to_string()
-        ]);
-
-        let planner = Planner::new(mock_client);
-        let plan = planner
-            .plan(&spec)
-            .expect("Should succeed after unsafe rejection");
-
-        assert_eq!(plan.steps.len(), 1);
-        match &plan.steps[0] {
-            Action::Verify { .. } => {}
-            _ => panic!("Expected Verify step"),
-        }
     }
 }

@@ -1,5 +1,5 @@
 use crate::agents::{
-    architect::Architect, cli_client::AiCliClient, planner::Planner,
+    architect::Architect, cli_client::AiCliClient, engineer::Engineer,
     product_manager::ProductManager,
 };
 use crate::domain::application::SoftwareApplication;
@@ -13,7 +13,7 @@ use anyhow::Result;
 pub struct Orchestrator<C: AiCliClient + Clone> {
     pm: ProductManager<C>,
     architect: Architect<C>,
-    planner: Planner<C>,
+    engineer: Engineer<C>,
     pub app: SoftwareApplication,
     store: StateStore,
     work_dir: std::path::PathBuf,
@@ -52,7 +52,7 @@ impl<C: AiCliClient + Clone> Orchestrator<C> {
         Ok(Self {
             pm: ProductManager::new(client.clone()),
             architect: Architect::new(client.clone()),
-            planner: Planner::new(client.clone()),
+            engineer: Engineer::new(client.clone()),
             app,
             store,
             work_dir,
@@ -82,7 +82,7 @@ impl<C: AiCliClient + Clone> Orchestrator<C> {
     }
 
     pub async fn create_plan(&mut self, spec: &FeatureSpec) -> Result<ImplementationPlan> {
-        let plan = self.planner.plan(spec)?;
+        let plan = self.engineer.plan(spec)?;
         self.app.add_primitive(Primitive::Plan(plan.clone()));
         self.persist().await?;
         Ok(plan)

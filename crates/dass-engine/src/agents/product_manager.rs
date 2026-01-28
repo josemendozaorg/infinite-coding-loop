@@ -1,10 +1,17 @@
+use crate::agents::Agent;
 use crate::agents::cli_client::AiCliClient;
 use crate::clover::Verifiable;
 use crate::product::requirement::Requirement;
 use anyhow::Result;
 
 pub struct ProductManager<C: AiCliClient> {
-    client: C,
+    pub client: C,
+}
+
+impl<C: AiCliClient> Agent for ProductManager<C> {
+    fn role(&self) -> &str {
+        "Product Manager"
+    }
 }
 
 impl<C: AiCliClient> ProductManager<C> {

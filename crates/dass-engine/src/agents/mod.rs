@@ -1,8 +1,10 @@
-pub mod cli_client;
-pub mod product_manager;
 pub mod architect;
-pub mod planner;
+pub mod cli_client;
+pub mod engineer;
+pub mod product_manager;
+pub mod qa;
 
 pub trait Agent {
-    fn name(&self) -> &str;
+    /// The unique role name (e.g., "Product Manager")
+    fn role(&self) -> &str;
 }

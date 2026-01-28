@@ -1,3 +1,4 @@
+use crate::agents::Agent;
 use crate::agents::cli_client::AiCliClient;
 use crate::clover::{ConsistencyCheck, Verifiable};
 use crate::product::requirement::Requirement;
@@ -6,6 +7,12 @@ use anyhow::Result;
 
 pub struct Architect<C: AiCliClient> {
     client: C,
+}
+
+impl<C: AiCliClient> Agent for Architect<C> {
+    fn role(&self) -> &str {
+        "Architect"
+    }
 }
 
 impl<C: AiCliClient> Architect<C> {
