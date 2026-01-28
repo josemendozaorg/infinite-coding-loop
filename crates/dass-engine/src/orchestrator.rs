@@ -180,6 +180,27 @@ impl<C: AiCliClient + Clone> Orchestrator<C> {
             return Ok(());
         }
 
+        // 2.5 Architecture & Standards Phase
+        let has_standards = self
+            .app
+            .primitives
+            .values()
+            .any(|p| matches!(p, Primitive::Standard { .. }));
+
+        if !has_standards {
+            ui.start_step("ARCHITECT: Establishing Environment Standards...");
+            // We need an architect instance here.
+            // Since `self.architect` isn't stored, we'll instantiate it temporarily or utilize `design_feature` logic.
+            // Ideally, Orchestrator should own agents or create them.
+            // Existing pattern: `self.design_feature` creates an architect. Let's create a helper method.
+            let standards = self.establish_standards(&reqs).await?;
+            for s in standards {
+                self.app.add_primitive(s);
+            }
+            self.persist().await?;
+            ui.end_step("Environment Standards Established");
+        }
+
         // 3. Architect Phase
         let has_spec = resume_session
             && self
@@ -347,5 +368,11 @@ impl<C: AiCliClient + Clone> Orchestrator<C> {
             }
             None
         })
+    }
+    async fn establish_standards(
+        &self,
+        reqs: &[crate::product::requirement::Requirement],
+    ) -> Result<Vec<Primitive>> {
+        self.architect.establish_architecture(reqs)
     }
 }
