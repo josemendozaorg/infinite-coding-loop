@@ -1,0 +1,51 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/entities/agent.schema.json",
+    "title": "Agent",
+    "description": "An AI worker responsible for creating specific artifacts (The 'Who').",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "const": "Agent"
+                },
+                "role": {
+                    "enum": [
+                        "ProductManager",
+                        "Architect",
+                        "Engineer",
+                        "QA",
+                        "Manager"
+                    ]
+                },
+                "system_prompt": {
+                    "type": "string",
+                    "description": "The personality and constraints for this agent."
+                },
+                "tools": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "List of allowed tools (e.g., 'search_web', 'write_file')."
+                },
+                "responsibilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "List of Entity kinds this agent produces (e.g., 'Requirement', 'Plan')."
+                }
+            },
+            "required": [
+                "kind",
+                "role",
+                "responsibilities"
+            ]
+        }
+    ]
+}

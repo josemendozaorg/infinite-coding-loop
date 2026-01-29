@@ -1,0 +1,39 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/entities/change_request.schema.json",
+    "title": "ChangeRequest",
+    "description": "A formal proposal to modify any artifact (SWEBOK: Configuration Control).",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "const": "ChangeRequest"
+                },
+                "target_entity_id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "status": {
+                    "enum": [
+                        "Proposed",
+                        "Approved",
+                        "Rejected",
+                        "Implemented"
+                    ]
+                }
+            },
+            "required": [
+                "kind",
+                "target_entity_id",
+                "status"
+            ]
+        }
+    ]
+}

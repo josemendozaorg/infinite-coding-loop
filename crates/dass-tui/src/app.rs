@@ -1,9 +1,8 @@
-use dass_engine::product::requirement::Requirement;
-use dass_engine::spec::feature_spec::FeatureSpec;
-use dass_engine::plan::action::ImplementationPlan;
 use ratatui::widgets::ListState;
+use serde_json::Value;
 
 #[derive(Debug, Default, PartialEq)]
+#[allow(dead_code)]
 pub enum PipelineStatus {
     #[default]
     Idle,
@@ -15,14 +14,15 @@ pub enum PipelineStatus {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct App {
     pub should_quit: bool,
     pub pipeline_status: PipelineStatus,
-    
+
     // Artifacts
-    pub requirements: Vec<Requirement>,
-    pub current_spec: Option<FeatureSpec>,
-    pub current_plan: Option<ImplementationPlan>,
+    pub requirements: Vec<Value>,
+    pub current_spec: Option<Value>,
+    pub current_plan: Option<Value>,
 
     // UI State
     pub req_list_state: ListState,

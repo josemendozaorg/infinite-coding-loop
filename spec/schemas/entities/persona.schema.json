@@ -1,0 +1,32 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/entities/persona.schema.json",
+    "title": "Persona",
+    "description": "A representation of a user role or stakeholder (e.g., 'Admin', 'Guest').",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "const": "Persona"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "responsibilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            },
+            "required": [
+                "kind",
+                "role"
+            ]
+        }
+    ]
+}

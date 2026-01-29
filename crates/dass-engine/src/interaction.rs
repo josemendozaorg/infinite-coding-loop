@@ -1,8 +1,6 @@
-use crate::plan::action::ImplementationPlan;
-use crate::product::requirement::Requirement;
-use crate::spec::feature_spec::FeatureSpec;
 use anyhow::Result;
 use async_trait::async_trait;
+use serde_json::Value;
 
 #[async_trait]
 pub trait UserInteraction {
@@ -25,13 +23,13 @@ pub trait UserInteraction {
     fn end_step(&self, name: &str);
 
     /// Display the analyzed requirements.
-    fn render_requirements(&self, reqs: &[Requirement]);
+    fn render_requirements(&self, reqs: &[Value]);
 
     /// Display the generated specification.
-    fn render_spec(&self, spec: &FeatureSpec);
+    fn render_spec(&self, spec: &Value);
 
     /// Display the generated plan.
-    fn render_plan(&self, plan: &ImplementationPlan);
+    fn render_plan(&self, plan: &Value);
 
     /// Log general information.
     fn log_info(&self, msg: &str);

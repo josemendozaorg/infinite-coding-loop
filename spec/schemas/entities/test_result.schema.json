@@ -1,0 +1,49 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/entities/test_result.schema.json",
+    "title": "TestResult",
+    "description": "The outcome of a test case execution (Professional Grade).",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "const": "TestResult"
+                },
+                "outcome": {
+                    "enum": [
+                        "Pass",
+                        "Fail",
+                        "Error",
+                        "Skipped"
+                    ]
+                },
+                "duration_ms": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "executed_at": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "environment_ref": {
+                    "type": "string",
+                    "description": "ID of the Environment where this ran"
+                },
+                "logs": {
+                    "type": "string"
+                },
+                "error_message": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "kind",
+                "outcome"
+            ]
+        }
+    ]
+}

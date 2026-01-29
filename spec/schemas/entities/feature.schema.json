@@ -1,0 +1,45 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/entities/feature.schema.json",
+    "title": "Feature",
+    "description": "A high-level functional capability or 'Epic'.",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "const": "Feature"
+                },
+                "priority": {
+                    "enum": [
+                        "Critical",
+                        "High",
+                        "Medium",
+                        "Low"
+                    ]
+                },
+                "business_value": {
+                    "type": "string",
+                    "description": "Why this feature provides value to the business/user."
+                },
+                "status": {
+                    "enum": [
+                        "Proposed",
+                        "In Progress",
+                        "Completed",
+                        "Deferred"
+                    ],
+                    "default": "Proposed"
+                }
+            },
+            "required": [
+                "kind",
+                "priority",
+                "business_value"
+            ]
+        }
+    ]
+}

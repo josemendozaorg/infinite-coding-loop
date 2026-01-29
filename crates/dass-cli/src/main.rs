@@ -4,10 +4,9 @@ use clap::Parser;
 use console::style;
 use dass_engine::{
     agents::cli_client::ShellCliClient, interaction::UserInteraction, orchestrator::Orchestrator,
-    plan::action::ImplementationPlan, product::requirement::Requirement,
-    spec::feature_spec::FeatureSpec,
 };
 use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
+use serde_json::Value;
 
 #[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None)]
@@ -87,23 +86,34 @@ impl UserInteraction for CliInteraction {
         // Could be used for timing or spinner cleanup if we managed global state
     }
 
-    fn render_requirements(&self, reqs: &[Requirement]) {
+    fn render_requirements(&self, reqs: &[Value]) {
         println!("\n{}:", style("Requirements").bold().green());
         for req in reqs {
-            println!("  • {}", req.user_story);
+            if let Some(story) = req.get("user_story").and_then(|v| v.as_str()) {
+                println!("  • {}", story);
+            } else {
+                println!("  • {:?}", req);
+            }
         }
     }
 
-    fn render_spec(&self, spec: &FeatureSpec) {
+    fn render_spec(&self, spec: &Value) {
         println!("\n{}:", style("Feature Spec").bold().green());
-        println!("  ID: {}", spec.id);
-        println!("  UI Logic: {} chars", spec.ui_spec.len());
+        if let Some(id) = spec.get("id").and_then(|v| v.as_str()) {
+            println!("  ID: {}", id);
+        } else {
+            println!("  Spec: {:?}", spec);
+        }
     }
 
-    fn render_plan(&self, plan: &ImplementationPlan) {
+    fn render_plan(&self, plan: &Value) {
         println!("\n{}:", style("Implementation Plan").bold().green());
-        for (i, step) in plan.steps.iter().enumerate() {
-            println!("  {}. {:?}", i + 1, step);
+        if let Some(steps) = plan.get("tasks").and_then(|v| v.as_array()) {
+            for (i, step) in steps.iter().enumerate() {
+                println!("  {}. {:?}", i + 1, step);
+            }
+        } else {
+            println!("  Plan: {:?}", plan);
         }
     }
 
@@ -118,62 +128,30 @@ impl UserInteraction for CliInteraction {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let mut args = Args::parse();
+    let args = Args::parse();
 
-    // 1. Resolve Application ID
-    let final_app_id = if let Some(id) = args.app_id.clone() {
-        id
+    // 2. Create New Application
+    let app_name: String = Input::with_theme(&ColorfulTheme::default())
+        .with_prompt("Application Name")
+        .default("MyNewApp".into())
+        .interact_text()?;
+
+    let final_app_id = if let Some(ref id) = args.app_id {
+        id.clone()
     } else {
-        let available = Orchestrator::<ShellCliClient>::list_available_apps()
-            .await
-            .unwrap_or_default();
-        if available.is_empty() {
-            Input::with_theme(&ColorfulTheme::default())
-                .with_prompt("Application ID (new)")
-                .default("default-app".into())
-                .interact_text()?
-        } else {
-            let mut items: Vec<String> = available
-                .iter()
-                .map(|(id, name, work_dir)| {
-                    let dir = work_dir.as_deref().unwrap_or("No path");
-                    format!("{} ({}) [{}]", name, id, style(dir).dim())
-                })
-                .collect();
-            items.push(style("Create New Application").yellow().to_string());
-
-            let selection = Select::with_theme(&ColorfulTheme::default())
-                .with_prompt("Select an application")
-                .items(&items)
-                .default(0)
-                .interact()?;
-
-            if selection < available.len() {
-                available[selection].0.clone()
-            } else {
-                Input::with_theme(&ColorfulTheme::default())
-                    .with_prompt("Application ID (new)")
-                    .interact_text()?
-            }
-        }
+        uuid::Uuid::new_v4().to_string()
     };
-    args.app_id = Some(final_app_id.clone());
 
-    // 2. Resolve Working Directory
-    let stored_work_dir = Orchestrator::<ShellCliClient>::get_app_work_dir(&final_app_id)
-        .await
-        .unwrap_or_default();
+    // Resolve Working Directory
+    let work_dir_path = if let Some(ref wd) = args.work_dir {
+        std::path::PathBuf::from(wd)
+    } else {
+        std::env::current_dir()?.join("tmp").join(&app_name)
+    };
 
-    if args.work_dir.is_none() {
-        let default_dir = stored_work_dir.unwrap_or_else(|| ".".to_string());
-        let path: String = Input::with_theme(&ColorfulTheme::default())
-            .with_prompt("Output directory")
-            .default(default_dir)
-            .interact_text()?;
-        args.work_dir = Some(path);
+    if !work_dir_path.exists() {
+        tokio::fs::create_dir_all(&work_dir_path).await?;
     }
-
-    let work_dir = std::path::PathBuf::from(args.work_dir.as_ref().unwrap());
 
     // Banner
     println!(
@@ -188,13 +166,8 @@ async fn main() -> Result<()> {
     println!("{}", style("Running in LIVE MODE (calling AI CLI)").green());
     let client = ShellCliClient::new(&args.ai_cmd);
 
-    let mut orchestrator = Orchestrator::new(
-        client,
-        final_app_id.clone(),
-        format!("App: {}", final_app_id),
-        work_dir,
-    )
-    .await?;
+    let mut orchestrator =
+        Orchestrator::new(client, final_app_id.clone(), app_name, work_dir_path).await?;
 
     let ui = CliInteraction::new(args.clone());
 

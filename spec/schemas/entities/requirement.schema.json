@@ -1,0 +1,53 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/entities/requirement.schema.json",
+    "title": "Requirement",
+    "description": "An atomic unit of functionality or constraint (SWEBOK: Software Requirements).",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "const": "Requirement"
+                },
+                "req_type": {
+                    "enum": [
+                        "Functional",
+                        "Non-Functional",
+                        "Constraint"
+                    ],
+                    "description": "Classifies the requirement type (FR vs NFR)."
+                },
+                "priority": {
+                    "enum": [
+                        "Must Have",
+                        "Should Have",
+                        "Could Have",
+                        "Won't Have"
+                    ],
+                    "description": "MoSCoW prioritization."
+                },
+                "user_story": {
+                    "type": "string",
+                    "description": "As a <role>, I want <feature>, so that <benefit>."
+                },
+                "acceptance_criteria": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "minItems": 1
+                }
+            },
+            "required": [
+                "kind",
+                "req_type",
+                "user_story",
+                "acceptance_criteria"
+            ]
+        }
+    ]
+}

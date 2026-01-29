@@ -1,0 +1,45 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/entities/tech_stack.schema.json",
+    "title": "TechStack",
+    "description": "A specific technology item chosen for the project (e.g., 'React', 'Tokio').",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "const": "TechStack"
+                },
+                "type": {
+                    "enum": [
+                        "Language",
+                        "Framework",
+                        "Library",
+                        "Database",
+                        "Runtime"
+                    ]
+                },
+                "version_constraint": {
+                    "type": "string",
+                    "description": "e.g., '^1.2.0'"
+                },
+                "website": {
+                    "type": "string",
+                    "format": "uri"
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Ideally referencing an ADR or decision."
+                }
+            },
+            "required": [
+                "kind",
+                "type",
+                "version_constraint"
+            ]
+        }
+    ]
+}

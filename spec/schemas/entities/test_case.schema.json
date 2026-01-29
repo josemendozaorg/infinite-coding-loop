@@ -1,0 +1,51 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/entities/test_case.schema.json",
+    "title": "TestCase",
+    "description": "A verifiable test specification (SWEBOK: Software Testing).",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "const": "TestCase"
+                },
+                "preconditions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "State required before running the test."
+                },
+                "test_data": {
+                    "type": "object",
+                    "description": "Input data used for the test."
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "expected_result": {
+                    "type": "string"
+                },
+                "postconditions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "State expected after the test (e.g., database cleanup)."
+                }
+            },
+            "required": [
+                "kind",
+                "steps",
+                "expected_result"
+            ]
+        }
+    ]
+}

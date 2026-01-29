@@ -1,0 +1,44 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/entities/tool.schema.json",
+    "title": "Tool",
+    "description": "A specific software tool or service required by the environment.",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "const": "Tool"
+                },
+                "category": {
+                    "enum": [
+                        "Compiler",
+                        "Linter",
+                        "Database",
+                        "Server",
+                        "CLI",
+                        "Editor"
+                    ]
+                },
+                "command_name": {
+                    "type": "string",
+                    "description": "The executable name (e.g., 'cargo', 'npm')."
+                },
+                "version_requirement": {
+                    "type": "string"
+                },
+                "installation_guide": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "kind",
+                "category",
+                "command_name"
+            ]
+        }
+    ]
+}

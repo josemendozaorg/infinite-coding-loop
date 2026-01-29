@@ -1,0 +1,111 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json",
+    "title": "Software Engineering Taxonomy (Complete + Agents)",
+    "description": "Validation schemas for the Autonomous Coding Loop entities.",
+    "type": "object",
+    "oneOf": [
+        {
+            "$ref": "./entities/software_application.schema.json"
+        },
+        {
+            "$ref": "./entities/feature.schema.json"
+        },
+        {
+            "$ref": "./entities/requirement.schema.json"
+        },
+        {
+            "$ref": "./entities/design_spec.schema.json"
+        },
+        {
+            "$ref": "./entities/plan.schema.json"
+        },
+        {
+            "$ref": "./entities/source_file.schema.json"
+        },
+        {
+            "$ref": "./entities/test_case.schema.json"
+        },
+        {
+            "$ref": "./entities/test_result.schema.json"
+        },
+        {
+            "$ref": "./entities/standard.schema.json"
+        },
+        {
+            "$ref": "./entities/observation.schema.json"
+        },
+        {
+            "$ref": "./entities/persona.schema.json"
+        },
+        {
+            "$ref": "./entities/domain_entity.schema.json"
+        },
+        {
+            "$ref": "./entities/environment.schema.json"
+        },
+        {
+            "$ref": "./entities/risk.schema.json"
+        },
+        {
+            "$ref": "./entities/change_request.schema.json"
+        },
+        {
+            "$ref": "./entities/tech_stack.schema.json"
+        },
+        {
+            "$ref": "./entities/tool.schema.json"
+        },
+        {
+            "$ref": "./entities/architecture_pattern.schema.json"
+        },
+        {
+            "$ref": "./entities/project_structure.schema.json"
+        },
+        {
+            "$ref": "./entities/agent.schema.json"
+        }
+    ],
+    "definitions": {
+        "EntityMetadata": {
+            "type": "object",
+            "required": [
+                "id",
+                "name",
+                "kind"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "synonyms": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Alternative names for this entity (e.g., Feature -> Epic)."
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
+                }
+            }
+        }
+    }
+}

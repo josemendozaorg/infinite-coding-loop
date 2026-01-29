@@ -1,0 +1,56 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/entities/environment.schema.json",
+    "title": "Environment",
+    "description": "The operational context (Professional Grade).",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "const": "Environment"
+                },
+                "type": {
+                    "enum": [
+                        "Development",
+                        "Tests",
+                        "Staging",
+                        "Production"
+                    ]
+                },
+                "os": {
+                    "type": "string"
+                },
+                "container_image": {
+                    "type": "string"
+                },
+                "tools": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "env_variables": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "secrets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "List of secret names required (values not stored here)."
+                }
+            },
+            "required": [
+                "kind",
+                "type"
+            ]
+        }
+    ]
+}

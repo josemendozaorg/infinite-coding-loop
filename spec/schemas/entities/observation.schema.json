@@ -1,0 +1,50 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/entities/observation.schema.json",
+    "title": "Observation",
+    "description": "An insight or error captured during execution (Professional Grade).",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "const": "Observation"
+                },
+                "insight": {
+                    "type": "string"
+                },
+                "observed_at": {
+                    "type": "string",
+                    "format": "date-time"
+                },
+                "context": {
+                    "type": "string"
+                },
+                "artifact_id": {
+                    "type": "string",
+                    "description": "ID of the artifact related to this observation (Risk, TestResult, etc.)"
+                },
+                "severity": {
+                    "enum": [
+                        "Info",
+                        "Warning",
+                        "Error",
+                        "Critical"
+                    ]
+                },
+                "recommendation": {
+                    "type": "string",
+                    "description": "Suggested action to address the observation."
+                }
+            },
+            "required": [
+                "kind",
+                "insight",
+                "severity"
+            ]
+        }
+    ]
+}

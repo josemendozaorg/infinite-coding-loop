@@ -1,378 +1,150 @@
-use crate::agents::{
-    architect::Architect, cli_client::AiCliClient, engineer::Engineer,
-    product_manager::ProductManager,
-};
+use crate::agents::cli_client::AiCliClient;
+use crate::agents::generic::GenericAgent;
 use crate::domain::application::SoftwareApplication;
-use crate::domain::db::StateStore;
-use crate::domain::primitive::Primitive;
-use crate::plan::action::ImplementationPlan;
-use crate::product::requirement::Requirement;
-use crate::spec::feature_spec::FeatureSpec;
+
+use crate::domain::types::AgentRole;
+use crate::graph::DependencyGraph;
+use crate::graph::executor::{GraphExecutor, InMemoryExecutor, Task};
 use anyhow::Result;
 
-pub struct Orchestrator<C: AiCliClient + Clone> {
-    pm: ProductManager<C>,
-    architect: Architect<C>,
-    engineer: Engineer<C>,
+pub struct Orchestrator<C: AiCliClient + Clone + Send + Sync + 'static> {
     pub app: SoftwareApplication,
-    store: StateStore,
-    work_dir: std::path::PathBuf,
+    // New Graph Components
+    executor: InMemoryExecutor,
+    // Marker for the client generic, or we can store it if needed later
+    _client: std::marker::PhantomData<C>,
 }
 
-impl<C: AiCliClient + Clone> Orchestrator<C> {
-    pub async fn list_available_apps() -> Result<Vec<(String, String, Option<String>)>> {
-        let store = StateStore::new(".dass.db").await?;
-        store.list_applications().await
-    }
-
-    pub async fn get_app_work_dir(app_id: &str) -> Result<Option<String>> {
-        let store = StateStore::new(".dass.db").await?;
-        match store.load_application(app_id).await {
-            Ok(app) => Ok(app.work_dir),
-            Err(_) => Ok(None),
-        }
-    }
-
+impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
     pub async fn new(
         client: C,
         app_id: String,
         app_name: String,
         work_dir: std::path::PathBuf,
     ) -> Result<Self> {
-        let store = StateStore::new(".dass.db").await?;
-
-        let mut app = store
-            .load_application(&app_id)
-            .await
-            .unwrap_or_else(|_| SoftwareApplication::new(app_id, app_name));
-
+        let mut app = SoftwareApplication::new(app_id, app_name);
         app.work_dir = Some(work_dir.to_string_lossy().to_string());
-        store.save_application(&app).await?;
+
+        // Initialize Graph (Load Metamodel)
+        let metamodel_json = include_str!("../../../spec/schemas/metamodel.schema.json");
+        let graph = DependencyGraph::load_from_metamodel(metamodel_json)?;
+
+        // Initialize Executor and Register Agents
+        // Initialize Executor and Register Agents
+        let mut executor = InMemoryExecutor::new(graph);
+        executor.register_agent(Box::new(GenericAgent::new(
+            client.clone(),
+            AgentRole::ProductManager,
+        )));
+        executor.register_agent(Box::new(GenericAgent::new(
+            client.clone(),
+            AgentRole::Architect,
+        )));
+        executor.register_agent(Box::new(GenericAgent::new(
+            client.clone(),
+            AgentRole::Engineer,
+        )));
 
         Ok(Self {
-            pm: ProductManager::new(client.clone()),
-            architect: Architect::new(client.clone()),
-            engineer: Engineer::new(client.clone()),
             app,
-            store,
-            work_dir,
+            executor,
+            _client: std::marker::PhantomData,
         })
-    }
-
-    async fn persist(&self) -> Result<()> {
-        self.store.save_application(&self.app).await?;
-        Ok(())
-    }
-
-    pub async fn analyze_request(&mut self, idea: &str) -> Result<Vec<Requirement>> {
-        let reqs = self.pm.process_request(idea)?;
-        for req in &reqs {
-            self.app.add_primitive(Primitive::Requirement(req.clone()));
-        }
-        self.persist().await?;
-        Ok(reqs)
-    }
-
-    pub async fn design_feature(&mut self, id: &str, reqs: &[Requirement]) -> Result<FeatureSpec> {
-        let spec = self.architect.design(id, reqs)?;
-        self.app
-            .add_primitive(Primitive::Specification(spec.clone()));
-        self.persist().await?;
-        Ok(spec)
-    }
-
-    pub async fn create_plan(&mut self, spec: &FeatureSpec) -> Result<ImplementationPlan> {
-        let plan = self.engineer.plan(spec)?;
-        self.app.add_primitive(Primitive::Plan(plan.clone()));
-        self.persist().await?;
-        Ok(plan)
-    }
-
-    pub async fn record_code(&mut self, path: String, content: String) -> Result<()> {
-        // 1. Write to filesystem
-        let file_path = self.work_dir.join(&path);
-        if let Some(parent) = file_path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
-        }
-        tokio::fs::write(&file_path, &content).await?;
-
-        // 2. Persist to DB
-        self.app.add_primitive(Primitive::Code { path, content });
-        self.persist().await
     }
 
     pub async fn run(&mut self, ui: &impl crate::interaction::UserInteraction) -> Result<()> {
-        // 1. Check for existing session or ask user
-        let mut feature_idea = String::new();
-        let mut resume_session = self
-            .app
-            .primitives
-            .values()
-            .any(|p| matches!(p, Primitive::Requirement(_)));
+        ui.log_info("Starting Graph-Driven Orchestration...");
 
-        if resume_session {
-            let options = vec![
-                "Continue Current Plan / Progress".to_string(),
-                "Add New Feature (New Requirements)".to_string(),
-                "Discard and Redesign from scratch".to_string(),
-            ];
-            let choice = ui
-                .select_option(
-                    "Existing state detected. What would you like to do?",
-                    &options,
-                )
-                .await?;
-
-            match choice {
-                0 => {
-                    ui.log_info("Resuming existing session...");
-                }
-                1 => {
-                    resume_session = false;
-                    feature_idea = ui
-                        .ask_for_feature("What new feature do you want to build?")
-                        .await?;
-                }
-                2 => {
-                    ui.log_info("Discarding existing session state...");
-                    self.app.primitives.clear();
-                    resume_session = false;
-                    feature_idea = ui
-                        .ask_for_feature("What feature do you want to build?")
-                        .await?;
-                }
-                _ => return Ok(()),
-            }
-        } else {
-            feature_idea = ui
-                .ask_for_feature("What feature do you want to build?")
-                .await?;
-        };
-
-        if feature_idea.is_empty() && !resume_session {
-            return Ok(()); // User abort
-        }
-
-        // 2. Product Phase
-        let reqs = if resume_session {
-            self.app
-                .primitives
-                .values()
-                .filter_map(|p| {
-                    if let Primitive::Requirement(r) = p {
-                        Some(r.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect()
-        } else {
-            ui.start_step("PRODUCT MANAGER: Analyzing Request...");
-            let reqs = self.analyze_request(&feature_idea).await?;
-            ui.end_step("Analysis Complete");
-            reqs
-        };
-
-        ui.render_requirements(&reqs);
-
-        if !resume_session && !ui.confirm("Proceed with these requirements?").await? {
-            ui.log_info("Aborted.");
+        // 1. Determine Goal (e.g., Implement Feature)
+        let feature_idea = ui
+            .ask_for_feature("What feature do you want to build?")
+            .await?;
+        if feature_idea.is_empty() {
             return Ok(());
         }
 
-        // 2.5 Architecture & Standards Phase
-        let has_standards = self
-            .app
-            .primitives
-            .values()
-            .any(|p| matches!(p, Primitive::Standard { .. }));
+        // 2. Query Graph for Dependencies of "SoftwareApplication" -> we need "Feature"
+        // In our Metamodel: SoftwareApplication contains Feature.
+        // Agent creates Feature.
 
-        if !has_standards {
-            ui.start_step("ARCHITECT: Establishing Environment Standards...");
-            // We need an architect instance here.
-            // Since `self.architect` isn't stored, we'll instantiate it temporarily or utilize `design_feature` logic.
-            // Ideally, Orchestrator should own agents or create them.
-            // Existing pattern: `self.design_feature` creates an architect. Let's create a helper method.
-            let standards = self.establish_standards(&reqs).await?;
-            for s in standards {
-                self.app.add_primitive(s);
-            }
-            self.persist().await?;
-            ui.end_step("Environment Standards Established");
-        }
+        // This is a simplified "Goal Seeking" loop
+        let _goal = "Feature";
 
-        // 3. Architect Phase
-        let has_spec = resume_session
-            && self
-                .app
-                .primitives
-                .values()
-                .any(|p| matches!(p, Primitive::Specification(_)));
-        let spec = if has_spec {
-            self.app
-                .primitives
-                .values()
-                .find_map(|p| {
-                    if let Primitive::Specification(s) = p {
-                        Some(s.clone())
-                    } else {
-                        None
-                    }
-                })
-                .unwrap()
-        } else {
-            ui.start_step("ARCHITECT: Designing Spec...");
-            let spec = self.design_feature("new-feature", &reqs).await?;
-            ui.end_step("Design Complete");
-            spec
+        ui.start_step("Resolving Dependencies for Feature...");
+
+        // Example: The Orchestrator knows it needs a "Feature".
+        // It asks the Executor: "Who creates Feature?"
+        // Executor checks Graph -> "Agent".
+
+        // In this Proof of Concept, we manually trigger the flow derived from the graph
+
+        // Step 1: Create Requirement (Agent: ProductManager)
+        let req_template = self
+            .executor
+            .graph
+            .get_prompt_template("creates", "Requirement");
+        let req_task = Task {
+            id: "task_req_001".to_string(),
+            description: format!("Analyze request: {}", feature_idea),
+            inputs: vec![],
+            prompt: req_template,
         };
+        // The InMemoryExecutor currently returns a dummy artifact
+        let _req_artifact = self
+            .executor
+            .dispatch_agent(AgentRole::ProductManager, req_task)
+            .await?;
+        ui.log_info("Product Manager produced Requirements");
 
-        ui.render_spec(&spec);
-
-        if !has_spec && !ui.confirm("Proceed with this specification?").await? {
-            ui.log_info("Aborted.");
-            return Ok(());
-        }
-
-        // 4. Planner Phase
-        let has_plan = resume_session
-            && self
-                .app
-                .primitives
-                .values()
-                .any(|p| matches!(p, Primitive::Plan(_)));
-        let plan = if has_plan {
-            self.app
-                .primitives
-                .values()
-                .find_map(|p| {
-                    if let Primitive::Plan(p) = p {
-                        Some(p.clone())
-                    } else {
-                        None
-                    }
-                })
-                .unwrap()
-        } else {
-            ui.start_step("PLANNER: Creating Plan...");
-            let plan = self.create_plan(&spec).await?;
-            ui.end_step("Plan Created");
-            plan
+        // Step 2: Create DesignSpec (Agent: Architect)
+        let spec_template = self
+            .executor
+            .graph
+            .get_prompt_template("creates", "DesignSpec");
+        let spec_task = Task {
+            id: "task_spec_001".to_string(),
+            description: "Design technical specification".to_string(),
+            inputs: vec!["task_req_001".to_string()],
+            prompt: spec_template,
         };
+        let _spec_artifact = self
+            .executor
+            .dispatch_agent(AgentRole::Architect, spec_task)
+            .await?;
+        ui.log_info("Architect produced Design Spec");
 
-        ui.render_plan(&plan);
+        // Step 3: Create ProjectStructure (Agent: Architect)
+        let struc_template = self
+            .executor
+            .graph
+            .get_prompt_template("creates", "ProjectStructure");
+        let struc_task = Task {
+            id: "task_struc_001".to_string(),
+            description: "Define directory structure".to_string(),
+            inputs: vec!["task_spec_001".to_string()],
+            prompt: struc_template,
+        };
+        let _struc_artifact = self
+            .executor
+            .dispatch_agent(AgentRole::Architect, struc_task)
+            .await?;
+        ui.log_info("Architect defined Project Structure");
 
-        if !has_plan && !ui.confirm("Proceed with this plan?").await? {
-            ui.log_info("Aborted.");
-            return Ok(());
-        }
+        // Step 4: Create Plan (Agent: Engineer)
+        let plan_template = self.executor.graph.get_prompt_template("creates", "Plan");
+        let plan_task = Task {
+            id: "task_plan_001".to_string(),
+            description: "Create implementation plan".to_string(),
+            inputs: vec!["task_spec_001".to_string()],
+            prompt: plan_template,
+        };
+        let _plan_artifact = self
+            .executor
+            .dispatch_agent(AgentRole::Engineer, plan_task)
+            .await?;
+        ui.log_info("Engineer created Plan");
 
-        // 5. Execution Phase
-        ui.start_step("CONSTRUCTION: Executing Plan...");
-        let (results, all_success) =
-            crate::plan::executor::PlanExecutor::execute(&plan, &self.work_dir)?;
-
-        // Find the failing step to record an observation later if needed
-        let failure_info = results.iter().find_map(|p| {
-            if let Primitive::ExecutionStep {
-                status,
-                action_ref,
-                stderr,
-                ..
-            } = p
-            {
-                if status == "Failure" {
-                    return Some((action_ref.clone(), stderr.clone()));
-                }
-            }
-            None
-        });
-
-        let mut successful_steps = 0;
-        for p in results {
-            if let Primitive::ExecutionStep { status, .. } = &p {
-                if status == "Success" {
-                    successful_steps += 1;
-                }
-            }
-            self.app.add_primitive(p);
-        }
-
-        // Update plan progress
-        if let Some(Primitive::Plan(p)) = self.app.primitives.get_mut(&plan.feature_id) {
-            p.completed_steps += successful_steps;
-        }
-
-        self.persist().await?;
-
-        if !all_success {
-            ui.log_error("Execution failed. Initiating AI Self-Healing...");
-
-            if let Some((action_ref, stderr)) = failure_info {
-                let obs = Primitive::Observation {
-                    insight: format!("Step {} failed with error: {}", action_ref, stderr),
-                    context: "Plan execution failure".to_string(),
-                    severity: "Error".to_string(),
-                    tags: vec!["execution".to_string(), "failure".to_string()],
-                };
-                ui.log_info(&format!("Recorded observation for {}", action_ref));
-                self.app.add_primitive(obs);
-                self.persist().await?;
-            }
-
-            // TODO: Call Repair Agent with self.get_observations_summary(&["execution"])
-            ui.log_info("Observation recorded. Please repair the environment/code and resume.");
-            return Ok(());
-        }
-
-        ui.end_step("Execution Complete");
-        ui.log_info("Success! Pipeline Complete.");
-
+        ui.end_step("Pipeline Complete (Graph-Driven)");
         Ok(())
-    }
-
-    pub fn get_observations_summary(&self, filter_tags: Option<&[&str]>) -> String {
-        let mut summary = String::from("Learnings from previous attempts:\n");
-        let mut count = 0;
-        for p in self.app.primitives.values() {
-            if let Primitive::Observation { insight, tags, .. } = p {
-                let include = match filter_tags {
-                    Some(filters) => filters.iter().any(|&f| tags.iter().any(|t| t == f)),
-                    None => true,
-                };
-
-                if include {
-                    summary.push_str(&format!("- {}\n", insight));
-                    count += 1;
-                }
-            }
-        }
-        if count == 0 {
-            "No previous observations.".to_string()
-        } else {
-            summary
-        }
-    }
-
-    pub fn get_standard_command(&self, category: &str) -> Option<String> {
-        self.app.primitives.values().find_map(|p| {
-            if let Primitive::Standard {
-                category: c,
-                command_template: Some(cmd),
-                ..
-            } = p
-            {
-                if c == category {
-                    return Some(cmd.clone());
-                }
-            }
-            None
-        })
-    }
-    async fn establish_standards(
-        &self,
-        reqs: &[crate::product::requirement::Requirement],
-    ) -> Result<Vec<Primitive>> {
-        self.architect.establish_architecture(reqs)
     }
 }

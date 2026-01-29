@@ -3,3 +3,7 @@
 Cargo.lock
 /tui/tmpproduct/
 /tmp/
+*.dass.db
+*.dass.db-shm
+*.dass.db-wal
+*.dass.db.bak

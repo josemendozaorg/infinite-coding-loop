@@ -45,27 +45,27 @@ impl AiCliClient for ShellCliClient {
 #[cfg(test)]
 pub mod mocks {
     use super::*;
-    use std::cell::RefCell;
     use std::collections::VecDeque;
-    use std::rc::Rc;
+    use std::sync::{Arc, Mutex};
 
     /// A Mock Client for testing/simulation.
     #[derive(Clone)]
     pub struct MockCliClient {
-        pub responses: Rc<RefCell<VecDeque<String>>>,
+        pub responses: Arc<Mutex<VecDeque<String>>>,
     }
 
     impl MockCliClient {
         pub fn new(responses: Vec<String>) -> Self {
             Self {
-                responses: Rc::new(RefCell::new(responses.into())),
+                responses: Arc::new(Mutex::new(responses.into())),
             }
         }
     }
 
     impl AiCliClient for MockCliClient {
         fn prompt(&self, _prompt: &str) -> Result<String> {
-            if let Some(res) = self.responses.borrow_mut().pop_front() {
+            let mut guard = self.responses.lock().unwrap();
+            if let Some(res) = guard.pop_front() {
                 Ok(res)
             } else {
                 Ok("MOCK_RESPONSE".to_string())

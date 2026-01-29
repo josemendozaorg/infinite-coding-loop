@@ -1,0 +1,30 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/entities/architecture_component.schema.json",
+    "title": "ArchitectureComponent",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "const": "ArchitectureComponent"
+                },
+                "layer": {
+                    "enum": [
+                        "Frontend",
+                        "Backend",
+                        "Database",
+                        "Infrastructure"
+                    ]
+                }
+            },
+            "required": [
+                "kind",
+                "layer"
+            ]
+        }
+    ]
+}

@@ -1,0 +1,43 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/entities/risk.schema.json",
+    "title": "Risk",
+    "description": "A potential future event that may negatively impact the project (SWEBOK: Risk Management).",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "const": "Risk"
+                },
+                "probability": {
+                    "enum": [
+                        "High",
+                        "Medium",
+                        "Low"
+                    ]
+                },
+                "impact": {
+                    "enum": [
+                        "Critical",
+                        "Major",
+                        "Minor",
+                        "Negligible"
+                    ]
+                },
+                "mitigation_plan": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "kind",
+                "probability",
+                "impact",
+                "mitigation_plan"
+            ]
+        }
+    ]
+}

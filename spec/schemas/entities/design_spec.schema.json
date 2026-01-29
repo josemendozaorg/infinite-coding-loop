@@ -1,0 +1,34 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/entities/design_spec.schema.json",
+    "title": "DesignSpec",
+    "description": "Technical design description (SDD) for a feature (SWEBOK: Software Design).",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "const": "DesignSpec"
+                },
+                "ui_spec": {
+                    "type": "string"
+                },
+                "logic_spec": {
+                    "type": "string"
+                },
+                "data_spec": {
+                    "type": "string"
+                },
+                "verification_plan": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "kind"
+            ]
+        }
+    ]
+}

@@ -1,0 +1,25 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/entities/software_application.schema.json",
+    "title": "SoftwareApplication",
+    "description": "The root container for the entire software engineering project.",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "const": "SoftwareApplication"
+                },
+                "work_dir": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "kind"
+            ]
+        }
+    ]
+}

@@ -1,0 +1,72 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/entities/project_structure.schema.json",
+    "title": "ProjectStructure",
+    "description": "The physical directory layout and logical module organization (SWEBOK: Software Construction).",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "const": "ProjectStructure"
+                },
+                "root_path": {
+                    "type": "string",
+                    "description": "Absolute or relative root (e.g., './crate-name')"
+                },
+                "layout": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/FileSystemNode"
+                    }
+                },
+                "conventions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Language-specific rules (e.g., 'Rust: src/main.rs is entry')"
+                }
+            },
+            "required": [
+                "kind",
+                "layout"
+            ]
+        }
+    ],
+    "definitions": {
+        "FileSystemNode": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Name of directory or file node"
+                },
+                "type": {
+                    "enum": [
+                        "Directory",
+                        "File",
+                        "Module"
+                    ]
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Purpose of this node"
+                },
+                "children": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/FileSystemNode"
+                    }
+                }
+            },
+            "required": [
+                "name",
+                "type"
+            ]
+        }
+    }
+}

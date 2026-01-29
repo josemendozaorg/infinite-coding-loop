@@ -1,11 +1,11 @@
-use std::io;
+use anyhow::Result;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
-use anyhow::Result;
+use ratatui::{Terminal, backend::CrosstermBackend};
+use std::io;
 use std::time::Duration;
 
 mod app;
@@ -14,6 +14,7 @@ mod ui;
 use app::App;
 
 #[tokio::main]
+#[allow(clippy::collapsible_if)]
 async fn main() -> Result<()> {
     // Setup Terminal
     enable_raw_mode()?;
@@ -44,7 +45,11 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()> {
+#[allow(clippy::collapsible_if)]
+async fn run_app<B: ratatui::backend::Backend>(
+    terminal: &mut Terminal<B>,
+    app: &mut App,
+) -> Result<()> {
     loop {
         terminal.draw(|f| ui::draw(f, app))?;
 
@@ -54,11 +59,14 @@ async fn run_app<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>, app: 
                 if let KeyCode::Char('q') = key.code {
                     app.on_key('q');
                 } else if let KeyCode::Char('c') = key.code {
-                    if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) {
-                       app.on_key('q');
+                    if key
+                        .modifiers
+                        .contains(crossterm::event::KeyModifiers::CONTROL)
+                    {
+                        app.on_key('q');
                     }
                 } else if let KeyCode::Char(c) = key.code {
-                     app.on_key(c);
+                    app.on_key(c);
                 }
             }
         }

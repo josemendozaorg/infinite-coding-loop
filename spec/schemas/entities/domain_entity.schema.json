@@ -1,0 +1,76 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/entities/domain_entity.schema.json",
+    "title": "DomainEntity",
+    "description": "A data object in the domain model (Professional Grade).",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "const": "DomainEntity"
+                },
+                "attributes": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string"
+                            },
+                            "type": {
+                                "type": "string"
+                            },
+                            "description": {
+                                "type": "string"
+                            },
+                            "is_primary_key": {
+                                "type": "boolean"
+                            },
+                            "required": {
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "type"
+                        ]
+                    }
+                },
+                "relationships": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "target_entity": {
+                                "type": "string"
+                            },
+                            "relation_type": {
+                                "enum": [
+                                    "OneToOne",
+                                    "OneToMany",
+                                    "ManyToOne",
+                                    "ManyToMany"
+                                ]
+                            },
+                            "description": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "target_entity",
+                            "relation_type"
+                        ]
+                    }
+                }
+            },
+            "required": [
+                "kind",
+                "attributes"
+            ]
+        }
+    ]
+}

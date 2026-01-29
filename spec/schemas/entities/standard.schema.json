@@ -1,0 +1,55 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://infinite-coding-loop.dass/schemas/entities/standard.schema.json",
+    "title": "Standard",
+    "description": "A rule or constraint that applies to the project.",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "const": "Standard"
+                },
+                "category": {
+                    "enum": [
+                        "Language",
+                        "Framework",
+                        "Style",
+                        "Testing",
+                        "Deployment",
+                        "Security"
+                    ]
+                },
+                "compliance_level": {
+                    "enum": [
+                        "Mandatory",
+                        "Recommended",
+                        "Optional"
+                    ],
+                    "default": "Mandatory"
+                },
+                "rules": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "enforcement_tool": {
+                    "type": "string",
+                    "description": "Tool used to enforce this (e.g., 'clippy', 'eslint')"
+                },
+                "command_template": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "kind",
+                "category",
+                "rules"
+            ]
+        }
+    ]
+}
