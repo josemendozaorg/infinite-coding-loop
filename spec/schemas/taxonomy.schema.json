@@ -1,8 +1,8 @@
 {
     "$id": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json",
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "title": "Software Engineering Taxonomy (Complete + Agents)",
-    "description": "Validation schemas for the Autonomous Coding Loop entities.",
+    "title": "Software Engineering Taxonomy",
+    "description": "Project-specific vocabulary (Dictionary) for the Autonomous Coding Loop.",
     "type": "object",
     "oneOf": [
         {
@@ -76,38 +76,32 @@
         }
     ],
     "$defs": {
-        "Kind_SoftwareApplication": {
-            "const": "SoftwareApplication"
+        "SEP_1": {
+            "description": "----------------------------------------------------------------------"
         },
-        "Kind_Feature": {
-            "const": "Feature"
+        "SECTION_1": {
+            "description": "SECTION 1: DATA ENTITIES (The Artifacts)"
         },
-        "Kind_Requirement": {
-            "const": "Requirement"
+        "SEP_2": {
+            "description": "----------------------------------------------------------------------"
+        },
+        "Kind_ArchitectureComponent": {
+            "const": "ArchitectureComponent"
+        },
+        "Kind_ArchitecturePattern": {
+            "const": "ArchitecturePattern"
+        },
+        "Kind_ChangeRequest": {
+            "const": "ChangeRequest"
+        },
+        "Kind_Command": {
+            "const": "Command"
+        },
+        "Kind_DataModel": {
+            "const": "DataModel"
         },
         "Kind_DesignSpec": {
             "const": "DesignSpec"
-        },
-        "Kind_Plan": {
-            "const": "Plan"
-        },
-        "Kind_SourceFile": {
-            "const": "SourceFile"
-        },
-        "Kind_TestCase": {
-            "const": "TestCase"
-        },
-        "Kind_TestResult": {
-            "const": "TestResult"
-        },
-        "Kind_Standard": {
-            "const": "Standard"
-        },
-        "Kind_Observation": {
-            "const": "Observation"
-        },
-        "Kind_Persona": {
-            "const": "Persona"
         },
         "Kind_DomainEntity": {
             "const": "DomainEntity"
@@ -115,11 +109,41 @@
         "Kind_Environment": {
             "const": "Environment"
         },
+        "Kind_Feature": {
+            "const": "Feature"
+        },
+        "Kind_Observation": {
+            "const": "Observation"
+        },
+        "Kind_Persona": {
+            "const": "Persona"
+        },
+        "Kind_Plan": {
+            "const": "Plan"
+        },
+        "Kind_ProjectStructure": {
+            "const": "ProjectStructure"
+        },
+        "Kind_Requirement": {
+            "const": "Requirement"
+        },
         "Kind_Risk": {
             "const": "Risk"
         },
-        "Kind_ChangeRequest": {
-            "const": "ChangeRequest"
+        "Kind_SoftwareApplication": {
+            "const": "SoftwareApplication"
+        },
+        "Kind_SourceFile": {
+            "const": "SourceFile"
+        },
+        "Kind_Standard": {
+            "const": "Standard"
+        },
+        "Kind_TestCase": {
+            "const": "TestCase"
+        },
+        "Kind_TestResult": {
+            "const": "TestResult"
         },
         "Kind_TechnologyStack": {
             "const": "TechnologyStack"
@@ -127,23 +151,14 @@
         "Kind_Tool": {
             "const": "Tool"
         },
-        "Kind_ArchitecturePattern": {
-            "const": "ArchitecturePattern"
+        "SEP_3": {
+            "description": "----------------------------------------------------------------------"
         },
-        "Kind_ProjectStructure": {
-            "const": "ProjectStructure"
+        "SECTION_2": {
+            "description": "SECTION 2: AGENT PERSONAS (The Actuators)"
         },
-        "Kind_DataModel": {
-            "const": "DataModel"
-        },
-        "Kind_ArchitectureComponent": {
-            "const": "ArchitectureComponent"
-        },
-        "Kind_Command": {
-            "const": "Command"
-        },
-        "Kind_ProductManager": {
-            "const": "ProductManager"
+        "SEP_4": {
+            "description": "----------------------------------------------------------------------"
         },
         "Kind_Architect": {
             "const": "Architect"
@@ -151,65 +166,71 @@
         "Kind_Engineer": {
             "const": "Engineer"
         },
-        "Kind_QA": {
-            "const": "QA"
-        },
         "Kind_Manager": {
             "const": "Manager"
         },
-        "Role_ProductManager": {
+        "Kind_ProductManager": {
             "const": "ProductManager"
         },
-        "Role_Architect": {
-            "const": "Architect"
-        },
-        "Role_Engineer": {
-            "const": "Engineer"
-        },
-        "Role_QA": {
+        "Kind_QA": {
             "const": "QA"
         },
-        "Role_Manager": {
-            "const": "Manager"
+        "SEP_5": {
+            "description": "----------------------------------------------------------------------"
         },
-        "Rel_Contains": {
-            "const": "contains"
+        "SECTION_3": {
+            "description": "SECTION 3: RELATIONSHIP TYPES (The Logic)"
         },
-        "Rel_Refines": {
-            "const": "refines"
-        },
-        "Rel_Implements": {
-            "const": "implements"
-        },
-        "Rel_Verifies": {
-            "const": "verifies"
-        },
-        "Rel_Specifies": {
-            "const": "specifies"
-        },
-        "Rel_Constrains": {
-            "const": "constrains"
-        },
-        "Rel_Triggers": {
-            "const": "triggers"
+        "SEP_6": {
+            "description": "----------------------------------------------------------------------"
         },
         "Rel_Analyzes": {
             "const": "analyzes"
         },
+        "Rel_Contains": {
+            "const": "contains"
+        },
+        "Rel_Constrains": {
+            "const": "constrains"
+        },
+        "Rel_Creates": {
+            "const": "creates"
+        },
         "Rel_Defines": {
             "const": "defines"
+        },
+        "Rel_Implements": {
+            "const": "implements"
         },
         "Rel_Mitigates": {
             "const": "mitigates"
         },
+        "Rel_Refines": {
+            "const": "refines"
+        },
+        "Rel_Specifies": {
+            "const": "specifies"
+        },
         "Rel_Targets": {
             "const": "targets"
+        },
+        "Rel_Triggers": {
+            "const": "triggers"
         },
         "Rel_Uses": {
             "const": "uses"
         },
-        "Rel_Creates": {
-            "const": "creates"
+        "Rel_Verifies": {
+            "const": "verifies"
+        },
+        "SEP_7": {
+            "description": "----------------------------------------------------------------------"
+        },
+        "SECTION_4": {
+            "description": "SECTION 4: SHARED VOCABULARIES"
+        },
+        "SEP_8": {
+            "description": "----------------------------------------------------------------------"
         },
         "EntityKind": {
             "type": "string",
