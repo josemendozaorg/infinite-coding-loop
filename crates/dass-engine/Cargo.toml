@@ -16,11 +16,7 @@ tokio = { workspace = true, features = ["fs"] }
 chrono = { workspace = true, features = ["serde"] }
 petgraph.workspace = true
 
-[build-dependencies]
-schemars = "0.8"
-serde_json.workspace = true
-typify = "0.5.0"
-walkdir = "2.5.0"
+
 
 [dev-dependencies]
 tempfile.workspace = true
