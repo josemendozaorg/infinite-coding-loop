@@ -5,7 +5,7 @@
     "description": "The physical directory layout and logical module organization (SWEBOK: Software Construction).",
     "allOf": [
         {
-            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/$defs/EntityMetadata"
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
         },
         {
             "type": "object",

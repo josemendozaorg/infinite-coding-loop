@@ -5,7 +5,7 @@
     "description": "An AI worker responsible for creating specific artifacts (The 'Who').",
     "allOf": [
         {
-            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/$defs/EntityMetadata"
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
         },
         {
             "type": "object",

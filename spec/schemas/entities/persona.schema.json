@@ -5,7 +5,7 @@
     "description": "A representation of a user role or stakeholder (e.g., 'Admin', 'Guest').",
     "allOf": [
         {
-            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/$defs/EntityMetadata"
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
         },
         {
             "type": "object",

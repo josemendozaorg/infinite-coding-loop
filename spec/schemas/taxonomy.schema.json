@@ -325,9 +325,6 @@
                     "$ref": "#/$defs/Rel_Creates"
                 }
             ]
-        },
-        "EntityMetadata": {
-            "$ref": "base.schema.json#/$defs/EntityMetadata"
         }
     }
 }

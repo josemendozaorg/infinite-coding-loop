@@ -5,7 +5,7 @@
     "description": "A formal proposal to modify any artifact (SWEBOK: Configuration Control).",
     "allOf": [
         {
-            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/$defs/EntityMetadata"
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
         },
         {
             "type": "object",
