@@ -280,6 +280,11 @@
                 },
                 {
                     "source": "TestCase",
+                    "target": "SourceFile",
+                    "relation": "constrains"
+                },
+                {
+                    "source": "TestCase",
                     "target": "Requirement",
                     "relation": "verifies"
                 },
