@@ -1,6 +1,5 @@
 use crate::agents::cli_client::AiCliClient;
 use crate::agents::generic::GenericAgent;
-use crate::domain::application::SoftwareApplication;
 
 use crate::domain::types::AgentRole;
 use crate::graph::DependencyGraph;
@@ -8,7 +7,9 @@ use crate::graph::executor::{GraphExecutor, InMemoryExecutor, Task};
 use anyhow::Result;
 
 pub struct Orchestrator<C: AiCliClient + Clone + Send + Sync + 'static> {
-    pub app: SoftwareApplication,
+    pub app_id: String,
+    pub app_name: String,
+    pub work_dir: Option<String>,
     // New Graph Components
     executor: InMemoryExecutor,
     // Marker for the client generic, or we can store it if needed later
@@ -22,14 +23,10 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         app_name: String,
         work_dir: std::path::PathBuf,
     ) -> Result<Self> {
-        let mut app = SoftwareApplication::new(app_id, app_name);
-        app.work_dir = Some(work_dir.to_string_lossy().to_string());
-
         // Initialize Graph (Load Metamodel)
         let metamodel_json = include_str!("../../../spec/schemas/metamodel.schema.json");
         let graph = DependencyGraph::load_from_metamodel(metamodel_json)?;
 
-        // Initialize Executor and Register Agents
         // Initialize Executor and Register Agents
         let mut executor = InMemoryExecutor::new(graph);
         executor.register_agent(Box::new(GenericAgent::new(
@@ -46,7 +43,9 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         )));
 
         Ok(Self {
-            app,
+            app_id,
+            app_name,
+            work_dir: Some(work_dir.to_string_lossy().to_string()),
             executor,
             _client: std::marker::PhantomData,
         })
