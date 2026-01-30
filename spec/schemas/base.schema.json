@@ -1,0 +1,120 @@
+{
+    "$id": "https://infinite-coding-loop.dass/schemas/base.schema.json",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Coding Loop Primitives",
+    "description": "Core structural definitions (Grammar) for the Autonomous Coding Loop.",
+    "type": "object",
+    "$defs": {
+        "EntityMetadata": {
+            "type": "object",
+            "required": [
+                "id",
+                "name",
+                "kind"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string",
+                    "description": "Project-specific Entity Kind (defined in taxonomy)."
+                },
+                "description": {
+                    "type": "string"
+                },
+                "synonyms": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
+                }
+            }
+        },
+        "Relationship": {
+            "type": "object",
+            "required": [
+                "source_id",
+                "target_id",
+                "type"
+            ],
+            "properties": {
+                "source_id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "target_id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "type": {
+                    "type": "string",
+                    "description": "Project-specific Relationship Type (defined in taxonomy)."
+                }
+            }
+        },
+        "Rule": {
+            "type": "object",
+            "required": [
+                "source",
+                "target",
+                "relation"
+            ],
+            "properties": {
+                "source": {
+                    "type": "string",
+                    "description": "Source Entity Kind."
+                },
+                "target": {
+                    "type": "string",
+                    "description": "Target Entity Kind."
+                },
+                "relation": {
+                    "type": "string",
+                    "description": "Relationship Type."
+                }
+            }
+        },
+        "AgentConfig": {
+            "type": "object",
+            "required": [
+                "kind",
+                "role",
+                "system_prompt",
+                "tools"
+            ],
+            "properties": {
+                "kind": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                },
+                "system_prompt": {
+                    "type": "string"
+                },
+                "tools": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            },
+            "additionalProperties": false
+        }
+    }
+}

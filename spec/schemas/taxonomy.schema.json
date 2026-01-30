@@ -342,44 +342,7 @@
             ]
         },
         "EntityMetadata": {
-            "type": "object",
-            "required": [
-                "id",
-                "name",
-                "kind"
-            ],
-            "properties": {
-                "id": {
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "kind": {
-                    "$ref": "#/$defs/EntityKind"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "synonyms": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "description": "Alternative names for this entity kind."
-                },
-                "tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "metadata": {
-                    "type": "object",
-                    "additionalProperties": true
-                }
-            }
+            "$ref": "base.schema.json#/$defs/EntityMetadata"
         }
     }
 }

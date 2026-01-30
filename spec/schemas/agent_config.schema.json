@@ -1,33 +1,21 @@
 {
     "$id": "https://infinite-coding-loop.dass/schemas/agent_config.schema.json",
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "title": "Agent Configuration",
-    "description": "Validation schema for static agent definition files (spec/agents/*.json).",
-    "type": "object",
-    "required": [
-        "kind",
-        "role",
-        "system_prompt",
-        "tools"
-    ],
-    "properties": {
-        "kind": {
-            "$ref": "taxonomy.schema.json#/$defs/EntityKind"
+    "title": "Agent Configuration Wrapper",
+    "description": "Validation wrapper for static agent definitions, inheriting from base primitives.",
+    "allOf": [
+        {
+            "$ref": "base.schema.json#/$defs/AgentConfig"
         },
-        "role": {
-            "$ref": "taxonomy.schema.json#/$defs/EntityKind"
-        },
-        "system_prompt": {
-            "type": "string",
-            "description": "The personality and instructions for this agent."
-        },
-        "tools": {
-            "type": "array",
-            "items": {
-                "type": "string"
-            },
-            "description": "List of allowed tools for this agent."
+        {
+            "properties": {
+                "kind": {
+                    "$ref": "taxonomy.schema.json#/$defs/EntityKind"
+                },
+                "role": {
+                    "$ref": "taxonomy.schema.json#/$defs/EntityKind"
+                }
+            }
         }
-    },
-    "additionalProperties": false
+    ]
 }

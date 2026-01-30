@@ -24,44 +24,38 @@
     },
     "$defs": {
         "Rule": {
-            "type": "object",
-            "properties": {
-                "source": {
-                    "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/$defs/EntityKind"
+            "allOf": [
+                {
+                    "$ref": "base.schema.json#/$defs/Rule"
                 },
-                "target": {
-                    "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/$defs/EntityKind"
-                },
-                "relation": {
-                    "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/$defs/RelationshipType"
+                {
+                    "properties": {
+                        "source": {
+                            "$ref": "taxonomy.schema.json#/$defs/EntityKind"
+                        },
+                        "target": {
+                            "$ref": "taxonomy.schema.json#/$defs/EntityKind"
+                        },
+                        "relation": {
+                            "$ref": "taxonomy.schema.json#/$defs/RelationshipType"
+                        }
+                    }
                 }
-            },
-            "required": [
-                "source",
-                "target",
-                "relation"
             ]
         },
         "Relationship": {
-            "type": "object",
-            "required": [
-                "source_id",
-                "target_id",
-                "type"
-            ],
-            "properties": {
-                "source_id": {
-                    "type": "string",
-                    "format": "uuid"
+            "allOf": [
+                {
+                    "$ref": "base.schema.json#/$defs/Relationship"
                 },
-                "target_id": {
-                    "type": "string",
-                    "format": "uuid"
-                },
-                "type": {
-                    "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/$defs/RelationshipType"
+                {
+                    "properties": {
+                        "type": {
+                            "$ref": "taxonomy.schema.json#/$defs/RelationshipType"
+                        }
+                    }
                 }
-            }
+            ]
         },
         "AgentDefinition": {
             "type": "object",
