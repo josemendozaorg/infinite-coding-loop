@@ -1,5 +1,5 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://infinite-coding-loop.dass/schemas/metamodel.schema.json",
     "title": "Software Engineering Metamodel (Complete + Agents)",
     "description": "Strict execution graph mirroring the Orchestrator logic with Agents.",
@@ -18,11 +18,30 @@
         "relationships": {
             "type": "array",
             "items": {
-                "$ref": "#/definitions/Relationship"
+                "$ref": "#/$defs/Relationship"
             }
         }
     },
-    "definitions": {
+    "$defs": {
+        "Rule": {
+            "type": "object",
+            "properties": {
+                "source": {
+                    "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/$defs/EntityKind"
+                },
+                "target": {
+                    "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/$defs/EntityKind"
+                },
+                "relation": {
+                    "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/$defs/RelationshipType"
+                }
+            },
+            "required": [
+                "source",
+                "target",
+                "relation"
+            ]
+        },
         "Relationship": {
             "type": "object",
             "required": [
@@ -40,68 +59,39 @@
                     "format": "uuid"
                 },
                 "type": {
-                    "type": "string",
-                    "enum": [
-                        "contains",
-                        "refines",
-                        "implements",
-                        "verifies",
-                        "specifies",
-                        "constrains",
-                        "triggers",
-                        "analyzes",
-                        "defines",
-                        "mitigates",
-                        "targets",
-                        "uses",
-                        "creates"
-                    ]
+                    "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/$defs/RelationshipType"
                 }
             }
         },
-        "PromptTemplate": {
+        "AgentDefinition": {
             "type": "object",
-            "required": [
-                "relation",
-                "template_ref"
-            ],
             "properties": {
-                "relation": {
-                    "type": "string"
+                "role": {
+                    "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/$defs/EntityKind"
                 },
-                "source": {
-                    "type": "string"
-                },
-                "target": {
-                    "type": "string"
-                },
-                "template_ref": {
+                "config_ref": {
                     "type": "string"
                 }
-            }
+            },
+            "required": [
+                "role",
+                "config_ref"
+            ]
         },
-        "PromptTemplates": {
-            "description": "Dynamic prompt configuration.",
-            "templates": [
+        "AgentDefinitions": {
+            "description": "Agent configurations.",
+            "agents": [
                 {
-                    "relation": "creates",
-                    "target": "Requirement",
-                    "template_ref": "spec/prompts/product_manager_requirements.md"
+                    "role": "ProductManager",
+                    "config_ref": "spec/agents/product_manager.json"
                 },
                 {
-                    "relation": "creates",
-                    "target": "DesignSpec",
-                    "template_ref": "spec/prompts/architect_design_feature.md"
+                    "role": "Architect",
+                    "config_ref": "spec/agents/architect.json"
                 },
                 {
-                    "relation": "creates",
-                    "target": "ProjectStructure",
-                    "template_ref": "spec/prompts/architect_project_structure.md"
-                },
-                {
-                    "relation": "creates",
-                    "target": "Plan",
-                    "template_ref": "spec/prompts/engineer_implementation_plan.md"
+                    "role": "Engineer",
+                    "config_ref": "spec/agents/engineer.json"
                 }
             ]
         },
@@ -139,28 +129,23 @@
                     "relation": "contains"
                 },
                 {
-                    "source": "Agent",
-                    "target": "Feature",
-                    "relation": "creates"
-                },
-                {
-                    "source": "Agent",
+                    "source": "ProductManager",
                     "target": "Requirement",
                     "relation": "creates"
                 },
                 {
-                    "source": "Agent",
+                    "source": "Architect",
                     "target": "DesignSpec",
                     "relation": "creates"
                 },
                 {
-                    "source": "Agent",
-                    "target": "Plan",
+                    "source": "Architect",
+                    "target": "ProjectStructure",
                     "relation": "creates"
                 },
                 {
-                    "source": "Agent",
-                    "target": "SourceFile",
+                    "source": "Engineer",
+                    "target": "Plan",
                     "relation": "creates"
                 },
                 {

@@ -1,6 +1,6 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
     "$id": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "Software Engineering Taxonomy (Complete + Agents)",
     "description": "Validation schemas for the Autonomous Coding Loop entities.",
     "type": "object",
@@ -51,7 +51,7 @@
             "$ref": "./entities/change_request.schema.json"
         },
         {
-            "$ref": "./entities/tech_stack.schema.json"
+            "$ref": "./entities/technology_stack.schema.json"
         },
         {
             "$ref": "./entities/tool.schema.json"
@@ -64,9 +64,283 @@
         },
         {
             "$ref": "./entities/agent.schema.json"
+        },
+        {
+            "$ref": "./entities/architecture_component.schema.json"
+        },
+        {
+            "$ref": "./entities/command.schema.json"
+        },
+        {
+            "$ref": "./entities/data_model.schema.json"
         }
     ],
-    "definitions": {
+    "$defs": {
+        "Kind_SoftwareApplication": {
+            "const": "SoftwareApplication"
+        },
+        "Kind_Feature": {
+            "const": "Feature"
+        },
+        "Kind_Requirement": {
+            "const": "Requirement"
+        },
+        "Kind_DesignSpec": {
+            "const": "DesignSpec"
+        },
+        "Kind_Plan": {
+            "const": "Plan"
+        },
+        "Kind_SourceFile": {
+            "const": "SourceFile"
+        },
+        "Kind_TestCase": {
+            "const": "TestCase"
+        },
+        "Kind_TestResult": {
+            "const": "TestResult"
+        },
+        "Kind_Standard": {
+            "const": "Standard"
+        },
+        "Kind_Observation": {
+            "const": "Observation"
+        },
+        "Kind_Persona": {
+            "const": "Persona"
+        },
+        "Kind_DomainEntity": {
+            "const": "DomainEntity"
+        },
+        "Kind_Environment": {
+            "const": "Environment"
+        },
+        "Kind_Risk": {
+            "const": "Risk"
+        },
+        "Kind_ChangeRequest": {
+            "const": "ChangeRequest"
+        },
+        "Kind_TechnologyStack": {
+            "const": "TechnologyStack"
+        },
+        "Kind_Tool": {
+            "const": "Tool"
+        },
+        "Kind_ArchitecturePattern": {
+            "const": "ArchitecturePattern"
+        },
+        "Kind_ProjectStructure": {
+            "const": "ProjectStructure"
+        },
+        "Kind_DataModel": {
+            "const": "DataModel"
+        },
+        "Kind_ArchitectureComponent": {
+            "const": "ArchitectureComponent"
+        },
+        "Kind_Command": {
+            "const": "Command"
+        },
+        "Kind_ProductManager": {
+            "const": "ProductManager"
+        },
+        "Kind_Architect": {
+            "const": "Architect"
+        },
+        "Kind_Engineer": {
+            "const": "Engineer"
+        },
+        "Kind_QA": {
+            "const": "QA"
+        },
+        "Kind_Manager": {
+            "const": "Manager"
+        },
+        "Role_ProductManager": {
+            "const": "ProductManager"
+        },
+        "Role_Architect": {
+            "const": "Architect"
+        },
+        "Role_Engineer": {
+            "const": "Engineer"
+        },
+        "Role_QA": {
+            "const": "QA"
+        },
+        "Role_Manager": {
+            "const": "Manager"
+        },
+        "Rel_Contains": {
+            "const": "contains"
+        },
+        "Rel_Refines": {
+            "const": "refines"
+        },
+        "Rel_Implements": {
+            "const": "implements"
+        },
+        "Rel_Verifies": {
+            "const": "verifies"
+        },
+        "Rel_Specifies": {
+            "const": "specifies"
+        },
+        "Rel_Constrains": {
+            "const": "constrains"
+        },
+        "Rel_Triggers": {
+            "const": "triggers"
+        },
+        "Rel_Analyzes": {
+            "const": "analyzes"
+        },
+        "Rel_Defines": {
+            "const": "defines"
+        },
+        "Rel_Mitigates": {
+            "const": "mitigates"
+        },
+        "Rel_Targets": {
+            "const": "targets"
+        },
+        "Rel_Uses": {
+            "const": "uses"
+        },
+        "Rel_Creates": {
+            "const": "creates"
+        },
+        "EntityKind": {
+            "type": "string",
+            "oneOf": [
+                {
+                    "$ref": "#/$defs/Kind_SoftwareApplication"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Feature"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Requirement"
+                },
+                {
+                    "$ref": "#/$defs/Kind_DesignSpec"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Plan"
+                },
+                {
+                    "$ref": "#/$defs/Kind_SourceFile"
+                },
+                {
+                    "$ref": "#/$defs/Kind_TestCase"
+                },
+                {
+                    "$ref": "#/$defs/Kind_TestResult"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Standard"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Observation"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Persona"
+                },
+                {
+                    "$ref": "#/$defs/Kind_DomainEntity"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Environment"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Risk"
+                },
+                {
+                    "$ref": "#/$defs/Kind_ChangeRequest"
+                },
+                {
+                    "$ref": "#/$defs/Kind_TechnologyStack"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Tool"
+                },
+                {
+                    "$ref": "#/$defs/Kind_ArchitecturePattern"
+                },
+                {
+                    "$ref": "#/$defs/Kind_ProjectStructure"
+                },
+                {
+                    "$ref": "#/$defs/Kind_ProductManager"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Architect"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Engineer"
+                },
+                {
+                    "$ref": "#/$defs/Kind_QA"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Manager"
+                },
+                {
+                    "$ref": "#/$defs/Kind_ArchitectureComponent"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Command"
+                },
+                {
+                    "$ref": "#/$defs/Kind_DataModel"
+                }
+            ]
+        },
+        "RelationshipType": {
+            "type": "string",
+            "oneOf": [
+                {
+                    "$ref": "#/$defs/Rel_Contains"
+                },
+                {
+                    "$ref": "#/$defs/Rel_Refines"
+                },
+                {
+                    "$ref": "#/$defs/Rel_Implements"
+                },
+                {
+                    "$ref": "#/$defs/Rel_Verifies"
+                },
+                {
+                    "$ref": "#/$defs/Rel_Specifies"
+                },
+                {
+                    "$ref": "#/$defs/Rel_Constrains"
+                },
+                {
+                    "$ref": "#/$defs/Rel_Triggers"
+                },
+                {
+                    "$ref": "#/$defs/Rel_Analyzes"
+                },
+                {
+                    "$ref": "#/$defs/Rel_Defines"
+                },
+                {
+                    "$ref": "#/$defs/Rel_Mitigates"
+                },
+                {
+                    "$ref": "#/$defs/Rel_Targets"
+                },
+                {
+                    "$ref": "#/$defs/Rel_Uses"
+                },
+                {
+                    "$ref": "#/$defs/Rel_Creates"
+                }
+            ]
+        },
         "EntityMetadata": {
             "type": "object",
             "required": [
@@ -83,7 +357,7 @@
                     "type": "string"
                 },
                 "kind": {
-                    "type": "string"
+                    "$ref": "#/$defs/EntityKind"
                 },
                 "description": {
                     "type": "string"
@@ -93,7 +367,7 @@
                     "items": {
                         "type": "string"
                     },
-                    "description": "Alternative names for this entity (e.g., Feature -> Epic)."
+                    "description": "Alternative names for this entity kind."
                 },
                 "tags": {
                     "type": "array",

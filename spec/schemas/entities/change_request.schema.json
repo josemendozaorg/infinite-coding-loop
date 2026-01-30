@@ -1,17 +1,17 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://infinite-coding-loop.dass/schemas/entities/change_request.schema.json",
     "title": "ChangeRequest",
     "description": "A formal proposal to modify any artifact (SWEBOK: Configuration Control).",
     "allOf": [
         {
-            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/$defs/EntityMetadata"
         },
         {
             "type": "object",
             "properties": {
                 "kind": {
-                    "const": "ChangeRequest"
+                    "$ref": "../taxonomy.schema.json#/$defs/Kind_ChangeRequest"
                 },
                 "target_entity_id": {
                     "type": "string",

@@ -9,12 +9,5 @@ Identify:
 3. Potential bottlenecks.
 
 Output your analysis as a JSON object:
-```json
-{
-  "kind": "AnalysisResult",
-  "issues": [
-    { "severity": "High", "description": "..." }
-  ],
-  "recommendations": [ "..." ]
-}
+{{schema}}
 ```

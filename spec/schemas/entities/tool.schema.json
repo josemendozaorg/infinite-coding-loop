@@ -1,17 +1,17 @@
 {
-    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$id": "https://infinite-coding-loop.dass/schemas/entities/tool.schema.json",
     "title": "Tool",
     "description": "A specific software tool or service required by the environment.",
     "allOf": [
         {
-            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/definitions/EntityMetadata"
+            "$ref": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json#/$defs/EntityMetadata"
         },
         {
             "type": "object",
             "properties": {
                 "kind": {
-                    "const": "Tool"
+                    "$ref": "../taxonomy.schema.json#/$defs/Kind_Tool"
                 },
                 "category": {
                     "enum": [

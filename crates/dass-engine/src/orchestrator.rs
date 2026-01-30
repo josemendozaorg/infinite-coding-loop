@@ -29,18 +29,48 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
 
         // Initialize Executor and Register Agents
         let mut executor = InMemoryExecutor::new(graph);
-        executor.register_agent(Box::new(GenericAgent::new(
-            client.clone(),
-            AgentRole::ProductManager,
-        )));
-        executor.register_agent(Box::new(GenericAgent::new(
-            client.clone(),
-            AgentRole::Architect,
-        )));
-        executor.register_agent(Box::new(GenericAgent::new(
-            client.clone(),
-            AgentRole::Engineer,
-        )));
+
+        // Dynamic Registration from Graph
+        // Collect roles first to avoid borrowing conflict
+        let loaded_roles: Vec<String> = executor.graph.loaded_agents.keys().cloned().collect();
+
+        for role_str in loaded_roles {
+            // Map string role to AgentRole Enum
+            // In a real implementation this would be more robust or fully string-based
+            let role_enum = match role_str.as_str() {
+                "ProductManager" => Some(AgentRole::ProductManager),
+                "Architect" => Some(AgentRole::Architect),
+                "Engineer" => Some(AgentRole::Engineer),
+                "QA" => Some(AgentRole::QA),
+                "Manager" => Some(AgentRole::Manager),
+                _ => None,
+            };
+
+            if let Some(r) = role_enum {
+                // Parse Config
+                let config_json = executor.graph.loaded_agents.get(&role_str).unwrap();
+                let system_prompt =
+                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(config_json) {
+                        v.get("system_prompt")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("")
+                            .to_string()
+                    } else {
+                        "".to_string()
+                    };
+
+                executor.register_agent(Box::new(GenericAgent::new(
+                    client.clone(),
+                    r,
+                    system_prompt,
+                )));
+            } else {
+                eprintln!(
+                    "Warning: Unknown agent role '{}' in configuration",
+                    role_str
+                );
+            }
+        }
 
         Ok(Self {
             app_id,
@@ -78,10 +108,10 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         // In this Proof of Concept, we manually trigger the flow derived from the graph
 
         // Step 1: Create Requirement (Agent: ProductManager)
-        let req_template = self
-            .executor
-            .graph
-            .get_prompt_template("creates", "Requirement");
+        let req_template =
+            self.executor
+                .graph
+                .get_prompt_template("ProductManager", "creates", "Requirement");
         let req_task = Task {
             id: "task_req_001".to_string(),
             description: format!("Analyze request: {}", feature_idea),
@@ -96,10 +126,10 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         ui.log_info("Product Manager produced Requirements");
 
         // Step 2: Create DesignSpec (Agent: Architect)
-        let spec_template = self
-            .executor
-            .graph
-            .get_prompt_template("creates", "DesignSpec");
+        let spec_template =
+            self.executor
+                .graph
+                .get_prompt_template("Architect", "creates", "DesignSpec");
         let spec_task = Task {
             id: "task_spec_001".to_string(),
             description: "Design technical specification".to_string(),
@@ -113,10 +143,10 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         ui.log_info("Architect produced Design Spec");
 
         // Step 3: Create ProjectStructure (Agent: Architect)
-        let struc_template = self
-            .executor
-            .graph
-            .get_prompt_template("creates", "ProjectStructure");
+        let struc_template =
+            self.executor
+                .graph
+                .get_prompt_template("Architect", "creates", "ProjectStructure");
         let struc_task = Task {
             id: "task_struc_001".to_string(),
             description: "Define directory structure".to_string(),
@@ -130,7 +160,10 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         ui.log_info("Architect defined Project Structure");
 
         // Step 4: Create Plan (Agent: Engineer)
-        let plan_template = self.executor.graph.get_prompt_template("creates", "Plan");
+        let plan_template = self
+            .executor
+            .graph
+            .get_prompt_template("Engineer", "creates", "Plan");
         let plan_task = Task {
             id: "task_plan_001".to_string(),
             description: "Create implementation plan".to_string(),

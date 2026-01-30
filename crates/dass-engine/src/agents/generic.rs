@@ -9,11 +9,16 @@ use serde_json::Value;
 pub struct GenericAgent<C: AiCliClient> {
     client: C,
     role: AgentRole,
+    system_prompt: String,
 }
 
 impl<C: AiCliClient> GenericAgent<C> {
-    pub fn new(client: C, role: AgentRole) -> Self {
-        Self { client, role }
+    pub fn new(client: C, role: AgentRole, system_prompt: String) -> Self {
+        Self {
+            client,
+            role,
+            system_prompt,
+        }
     }
 
     fn clean_response(&self, input: &str) -> String {
@@ -48,7 +53,13 @@ impl<C: AiCliClient + Send + Sync> Agent for GenericAgent<C> {
             anyhow::anyhow!("GenericAgent requires a 'prompt' in the Task definition.")
         })?;
 
-        let response = self.client.prompt(&prompt)?;
+        let full_prompt = if !self.system_prompt.is_empty() {
+            format!("{}\n\n{}", self.system_prompt, prompt)
+        } else {
+            prompt
+        };
+
+        let response = self.client.prompt(&full_prompt)?;
         let cleaned = self.clean_response(&response);
 
         // Try parsing as JSON first
