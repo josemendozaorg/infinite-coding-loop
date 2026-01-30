@@ -76,15 +76,6 @@
         }
     ],
     "$defs": {
-        "SEP_1": {
-            "description": "----------------------------------------------------------------------"
-        },
-        "SECTION_1": {
-            "description": "SECTION 1: DATA ENTITIES (The Artifacts)"
-        },
-        "SEP_2": {
-            "description": "----------------------------------------------------------------------"
-        },
         "Kind_ArchitectureComponent": {
             "const": "ArchitectureComponent"
         },
@@ -151,15 +142,6 @@
         "Kind_Tool": {
             "const": "Tool"
         },
-        "SEP_3": {
-            "description": "----------------------------------------------------------------------"
-        },
-        "SECTION_2": {
-            "description": "SECTION 2: AGENT PERSONAS (The Actuators)"
-        },
-        "SEP_4": {
-            "description": "----------------------------------------------------------------------"
-        },
         "Kind_Architect": {
             "const": "Architect"
         },
@@ -174,15 +156,6 @@
         },
         "Kind_QA": {
             "const": "QA"
-        },
-        "SEP_5": {
-            "description": "----------------------------------------------------------------------"
-        },
-        "SECTION_3": {
-            "description": "SECTION 3: RELATIONSHIP TYPES (The Logic)"
-        },
-        "SEP_6": {
-            "description": "----------------------------------------------------------------------"
         },
         "Rel_Analyzes": {
             "const": "analyzes"
@@ -222,15 +195,6 @@
         },
         "Rel_Verifies": {
             "const": "verifies"
-        },
-        "SEP_7": {
-            "description": "----------------------------------------------------------------------"
-        },
-        "SECTION_4": {
-            "description": "SECTION 4: SHARED VOCABULARIES"
-        },
-        "SEP_8": {
-            "description": "----------------------------------------------------------------------"
         },
         "EntityKind": {
             "type": "string",
