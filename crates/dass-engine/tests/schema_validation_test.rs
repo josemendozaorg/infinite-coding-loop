@@ -10,8 +10,8 @@ fn validate_all_schemas_and_configs() {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     // Navigate to workspace root from crates/dass-engine
     let workspace_root = Path::new(manifest_dir).parent().unwrap().parent().unwrap();
-    let schemas_dir = workspace_root.join("spec/schemas");
-    let agents_dir = workspace_root.join("spec/agents");
+    let schemas_dir = workspace_root.join("ontology/schemas");
+    let agents_dir = workspace_root.join("ontology/agents");
 
     // 1. Identify all schemas
     let mut schema_files = Vec::new();

@@ -24,7 +24,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         work_dir: std::path::PathBuf,
     ) -> Result<Self> {
         // Initialize Graph (Load Metamodel)
-        let metamodel_json = include_str!("../../../spec/schemas/metamodel.schema.json");
+        let metamodel_json = include_str!("../../../ontology/schemas/metamodel.schema.json");
         let graph = DependencyGraph::load_from_metamodel(metamodel_json)?;
 
         // Initialize Executor and Register Agents

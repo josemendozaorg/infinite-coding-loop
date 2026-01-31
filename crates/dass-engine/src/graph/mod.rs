@@ -91,9 +91,9 @@ impl DependencyGraph {
                 let t_idx = dg.get_or_create_node(&rule.target);
                 dg.graph.add_edge(s_idx, t_idx, rule.relation.clone()); // Clone relation string
 
-                // Infer Prompt Path: spec/prompts/{Source}_{Relation}_{Target}.md
+                // Infer Prompt Path: ontology/prompts/{Source}_{Relation}_{Target}.md
                 let prompt_path_str = format!(
-                    "spec/prompts/{}_{}_{}.md",
+                    "ontology/prompts/{}_{}_{}.md",
                     rule.source, rule.relation, rule.target
                 );
 
@@ -124,12 +124,14 @@ impl DependencyGraph {
                 }
 
                 // Also Load Schema for the Target Entity (Target IS Entity)
-                // Convention: spec/schemas/entities/{snake_case_target}.schema.json
+                // Convention: ontology/schemas/entities/{snake_case_target}.schema.json
                 let target_entity = &rule.target;
                 if !dg.schemas.contains_key(target_entity) {
                     let snake_case_target = Self::to_snake_case(target_entity);
-                    let schema_path_str =
-                        format!("spec/schemas/entities/{}.schema.json", snake_case_target);
+                    let schema_path_str = format!(
+                        "ontology/schemas/entities/{}.schema.json",
+                        snake_case_target
+                    );
                     let schema_p = std::path::Path::new(&schema_path_str);
 
                     let schema_paths_to_try = vec![

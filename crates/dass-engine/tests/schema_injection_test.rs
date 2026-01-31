@@ -4,7 +4,7 @@ use dass_engine::graph::DependencyGraph;
 fn test_schema_injection_integration() {
     // 1. Create a minimal mock metamodel JSON
     // We reference a real schema from our spec to verify loading.
-    // Let's use "Feature" as the target since it exists: "spec/schemas/entities/feature.schema.json"
+    // Let's use "Feature" as the target since it exists: "ontology/schemas/entities/feature.schema.json"
     // And we need a real prompt template file to test the substitution
     // But since the template loading relies on file existence, we might need a temporary file or reuse an existing one.
     // However, existing ones have been modified to contain {{schema}}.
@@ -109,7 +109,7 @@ fn test_agent_loading_integration() {
                 "agents": [
                     {
                         "role": "ProductManager",
-                        "config_ref": "spec/agents/product_manager.json"
+                        "config_ref": "ontology/agents/product_manager.json"
                     }
                 ]
             }
