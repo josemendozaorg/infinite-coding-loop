@@ -1,0 +1,46 @@
+{
+    "entities": [],
+    "relationships": [],
+    "definitions": {
+        "GraphRules": {
+            "rules": [
+                {
+                    "source": "ProductManager",
+                    "target": "Requirement",
+                    "relation": "creates"
+                },
+                {
+                    "source": "Architect",
+                    "target": "DesignSpec",
+                    "relation": "creates"
+                },
+                {
+                    "source": "Architect",
+                    "target": "ProjectStructure",
+                    "relation": "creates"
+                },
+                {
+                    "source": "Engineer",
+                    "target": "Plan",
+                    "relation": "creates"
+                }
+            ]
+        },
+        "AgentDefinitions": {
+            "agents": [
+                {
+                    "role": "ProductManager",
+                    "config_ref": "agents/engineer.json"
+                },
+                {
+                    "role": "Architect",
+                    "config_ref": "agents/engineer.json"
+                },
+                {
+                    "role": "Engineer",
+                    "config_ref": "agents/engineer.json"
+                }
+            ]
+        }
+    }
+}

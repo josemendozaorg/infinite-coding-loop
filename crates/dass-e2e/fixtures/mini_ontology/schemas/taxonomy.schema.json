@@ -1,0 +1,26 @@
+{
+    "$defs": {
+        "EntityKind": {
+            "type": "string",
+            "enum": [
+                "Engineer",
+                "Feature",
+                "Plan"
+            ]
+        },
+        "RelationshipType": {
+            "type": "string",
+            "enum": [
+                "creates"
+            ]
+        }
+    },
+    "oneOf": [
+        {
+            "$ref": "./entities/feature.schema.json"
+        },
+        {
+            "$ref": "./entities/plan.schema.json"
+        }
+    ]
+}

@@ -81,9 +81,14 @@ impl DependencyGraph {
         }
     }
 
-    pub fn load_from_metamodel(json_content: &str) -> Result<Self> {
+    pub fn load_from_metamodel(
+        json_content: &str,
+        base_path: Option<&std::path::Path>,
+    ) -> Result<Self> {
         let def: GraphDefinition = serde_json::from_str(json_content)?;
         let mut dg = Self::new();
+
+        let root = base_path.unwrap_or_else(|| std::path::Path::new("ontology"));
 
         if let Some(defs) = def.definitions {
             for rule in defs.graph_rules.rules {
@@ -91,17 +96,15 @@ impl DependencyGraph {
                 let t_idx = dg.get_or_create_node(&rule.target);
                 dg.graph.add_edge(s_idx, t_idx, rule.relation.clone()); // Clone relation string
 
-                // Infer Prompt Path: ontology/prompts/{Source}_{Relation}_{Target}.md
-                let prompt_path_str = format!(
-                    "ontology/prompts/{}_{}_{}.md",
-                    rule.source, rule.relation, rule.target
-                );
+                // Infer Prompt Path: {base}/prompts/{Source}_{Relation}_{Target}.md
+                let prompt_filename =
+                    format!("{}_{}_{}.md", rule.source, rule.relation, rule.target);
+                let p = root.join("prompts").join(&prompt_filename);
 
-                let p = std::path::Path::new(&prompt_path_str);
                 let paths_to_try = vec![
-                    p.to_path_buf(),
-                    std::path::Path::new("../..").join(p),
-                    std::path::Path::new("..").join(p),
+                    p.clone(),
+                    std::path::Path::new("../..").join(&p),
+                    std::path::Path::new("..").join(&p),
                 ];
 
                 let mut content = String::new();
@@ -124,20 +127,17 @@ impl DependencyGraph {
                 }
 
                 // Also Load Schema for the Target Entity (Target IS Entity)
-                // Convention: ontology/schemas/entities/{snake_case_target}.schema.json
+                // Convention: {base}/schemas/entities/{snake_case_target}.schema.json
                 let target_entity = &rule.target;
                 if !dg.schemas.contains_key(target_entity) {
                     let snake_case_target = Self::to_snake_case(target_entity);
-                    let schema_path_str = format!(
-                        "ontology/schemas/entities/{}.schema.json",
-                        snake_case_target
-                    );
-                    let schema_p = std::path::Path::new(&schema_path_str);
+                    let schema_filename = format!("{}.schema.json", snake_case_target);
+                    let schema_p = root.join("schemas/entities").join(&schema_filename);
 
                     let schema_paths_to_try = vec![
-                        schema_p.to_path_buf(),
-                        std::path::Path::new("../..").join(schema_p),
-                        std::path::Path::new("..").join(schema_p),
+                        schema_p.clone(),
+                        std::path::Path::new("../..").join(&schema_p),
+                        std::path::Path::new("..").join(&schema_p),
                     ];
 
                     for path in schema_paths_to_try {
@@ -152,17 +152,24 @@ impl DependencyGraph {
             if let Some(agent_defs) = defs.agents {
                 for agent_def in agent_defs.agents {
                     let role = agent_def.role.clone();
-                    let p = std::path::Path::new(&agent_def.config_ref);
+                    // config_ref is usually "agents/engineer.json" -> relative to ontology root?
+                    // In previous code it was used as is.
+                    // If we assume config_ref is relative to `base_path`?
+                    // Example: "agents/engineer.json"
+                    // Join with root: "ontology/agents/engineer.json"
+
+                    let p = root.join(&agent_def.config_ref);
+
                     let paths_to_try = vec![
-                        p.to_path_buf(),
-                        std::path::Path::new("../..").join(p),
-                        std::path::Path::new("..").join(p),
+                        p.clone(),
+                        std::path::Path::new("../..").join(&p),
+                        std::path::Path::new("..").join(&p),
                     ];
 
                     let mut content = String::new();
                     let mut found = false;
-                    for path in paths_to_try {
-                        if let Ok(c) = std::fs::read_to_string(&path) {
+                    for path in &paths_to_try {
+                        if let Ok(c) = std::fs::read_to_string(path) {
                             content = c;
                             found = true;
                             break;
@@ -172,8 +179,8 @@ impl DependencyGraph {
                         dg.loaded_agents.insert(role, content);
                     } else {
                         eprintln!(
-                            "Warning: Failed to load agent config {}: No such file in tried paths",
-                            agent_def.config_ref
+                            "Warning: Failed to load agent config {}: No such file in tried paths. Root: {:?}, Tried: {:?}",
+                            agent_def.config_ref, root, paths_to_try
                         );
                     }
                 }
@@ -266,7 +273,7 @@ mod tests {
             }
         }"#;
 
-        let graph = DependencyGraph::load_from_metamodel(json).expect("Failed to load graph");
+        let graph = DependencyGraph::load_from_metamodel(json, None).expect("Failed to load graph");
 
         // Query: Who creates a Feature?
         // Method: get_dependencies("Feature", "creates") checks for incoming "creates" edges

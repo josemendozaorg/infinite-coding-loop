@@ -29,7 +29,8 @@ fn test_schema_injection_integration() {
     // 2. Load the Graph
     // This assumes we are running from the workspace root where `spec/` is accessible.
     // If running via `cargo test`, we usually are.
-    let graph = DependencyGraph::load_from_metamodel(metamodel_json).expect("Failed to load graph");
+    let graph =
+        DependencyGraph::load_from_metamodel(metamodel_json, None).expect("Failed to load graph");
 
     // 3. Verify Schema Loaded
     assert!(
@@ -81,7 +82,8 @@ fn test_source_differentiation() {
     }"#;
 
     // Load graph
-    let graph = DependencyGraph::load_from_metamodel(metamodel_json).expect("Failed to load graph");
+    let graph =
+        DependencyGraph::load_from_metamodel(metamodel_json, None).expect("Failed to load graph");
 
     // Verify PM creates gets PM creates prompt
     let creates_template = graph
@@ -109,14 +111,15 @@ fn test_agent_loading_integration() {
                 "agents": [
                     {
                         "role": "ProductManager",
-                        "config_ref": "ontology/agents/product_manager.json"
+                        "config_ref": "agents/product_manager.json"
                     }
                 ]
             }
         }
     }"#;
 
-    let graph = DependencyGraph::load_from_metamodel(metamodel_json).expect("Failed to load graph");
+    let graph =
+        DependencyGraph::load_from_metamodel(metamodel_json, None).expect("Failed to load graph");
 
     assert!(
         graph.loaded_agents.contains_key("ProductManager"),

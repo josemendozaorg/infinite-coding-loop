@@ -1,0 +1,14 @@
+{
+    "type": "object",
+    "properties": {
+        "steps": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        }
+    },
+    "required": [
+        "steps"
+    ]
+}

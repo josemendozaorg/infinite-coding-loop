@@ -1,0 +1,6 @@
+{
+    "name": "Engineer",
+    "description": "Writes code and tests.",
+    "model": "mock-model",
+    "system_prompt": "You are a software engineer."
+}
