@@ -118,11 +118,13 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
 
         // In this Proof of Concept, we manually trigger the flow derived from the graph
 
-        // Step 1: Create Requirement (Agent: ProductManager)
-        let req_template =
-            self.executor
-                .graph
-                .get_prompt_template("ProductManager", "creates", "Requirement");
+        let req_template = self
+            .executor
+            .graph
+            .get_prompt_template("ProductManager", "creates", "Requirement")
+            .map(|t| t.replace("{{source_content}}", &feature_idea))
+            .map(|t| self.enhance_prompt(t, "Requirements", "requirements.yaml"));
+
         let req_task = Task {
             id: "task_req_001".to_string(),
             description: format!("Analyze request: {}", feature_idea),
@@ -137,10 +139,18 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         ui.log_info("Product Manager produced Requirements");
 
         // Step 2: Create DesignSpec (Agent: Architect)
-        let spec_template =
-            self.executor
-                .graph
-                .get_prompt_template("Architect", "creates", "DesignSpec");
+        let spec_template = self
+            .executor
+            .graph
+            .get_prompt_template("Architect", "creates", "DesignSpec")
+            .map(|t| {
+                t.replace(
+                    "{{source_content}}",
+                    &serde_json::to_string_pretty(&_req_artifact).unwrap_or_default(),
+                )
+            })
+            .map(|t| self.enhance_prompt(t, "DesignSpec", "spec.json"));
+
         let spec_task = Task {
             id: "task_spec_001".to_string(),
             description: "Design technical specification".to_string(),
@@ -154,10 +164,18 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         ui.log_info("Architect produced Design Spec");
 
         // Step 3: Create ProjectStructure (Agent: Architect)
-        let struc_template =
-            self.executor
-                .graph
-                .get_prompt_template("Architect", "creates", "ProjectStructure");
+        let struc_template = self
+            .executor
+            .graph
+            .get_prompt_template("Architect", "creates", "ProjectStructure")
+            .map(|t| {
+                t.replace(
+                    "{{source_content}}",
+                    &serde_json::to_string_pretty(&_spec_artifact).unwrap_or_default(),
+                )
+            })
+            .map(|t| self.enhance_prompt(t, "ProjectStructure", "project_structure.json"));
+
         let struc_task = Task {
             id: "task_struc_001".to_string(),
             description: "Define directory structure".to_string(),
@@ -174,7 +192,15 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         let plan_template = self
             .executor
             .graph
-            .get_prompt_template("Engineer", "creates", "Plan");
+            .get_prompt_template("Engineer", "creates", "Plan")
+            .map(|t| {
+                t.replace(
+                    "{{source_content}}",
+                    &serde_json::to_string_pretty(&_spec_artifact).unwrap_or_default(),
+                )
+            })
+            .map(|t| self.enhance_prompt(t, "Plan", "plan.json"));
+
         let plan_task = Task {
             id: "task_plan_001".to_string(),
             description: "Create implementation plan".to_string(),
@@ -189,5 +215,12 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
 
         ui.end_step("Pipeline Complete (Graph-Driven)");
         Ok(())
+    }
+
+    fn enhance_prompt(&self, prompt: String, target: &str, filename: &str) -> String {
+        format!(
+            "{}\n\n**CRITICAL**: You MUST use your file-writing tool to save this {} to `{}` in the current directory. After saving, output ONLY the {} content in a code block.",
+            prompt, target, filename, target
+        )
     }
 }

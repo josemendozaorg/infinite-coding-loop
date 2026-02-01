@@ -123,6 +123,31 @@
                     "relation": "contains"
                 },
                 {
+                    "source": "SoftwareApplication",
+                    "target": "ProductManager",
+                    "relation": "assigned"
+                },
+                {
+                    "source": "SoftwareApplication",
+                    "target": "Architect",
+                    "relation": "assigned"
+                },
+                {
+                    "source": "SoftwareApplication",
+                    "target": "Engineer",
+                    "relation": "assigned"
+                },
+                {
+                    "source": "SoftwareApplication",
+                    "target": "ChangeRequest",
+                    "relation": "receives"
+                },
+                {
+                    "source": "SoftwareApplication",
+                    "target": "TestResult",
+                    "relation": "produces"
+                },
+                {
                     "source": "ProductManager",
                     "target": "Requirement",
                     "relation": "creates"
@@ -278,9 +303,9 @@
                     "relation": "triggers"
                 },
                 {
-                    "source": "Observation",
-                    "target": "SoftwareApplication",
-                    "relation": "analyzes"
+                    "source": "SoftwareApplication",
+                    "target": "Observation",
+                    "relation": "triggers"
                 }
             ]
         }

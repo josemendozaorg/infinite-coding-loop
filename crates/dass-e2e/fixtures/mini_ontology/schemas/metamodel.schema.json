@@ -1,9 +1,34 @@
 {
     "entities": [],
     "relationships": [],
-    "definitions": {
+    "$defs": {
         "GraphRules": {
             "rules": [
+                {
+                    "source": "SoftwareApplication",
+                    "target": "ProductManager",
+                    "relation": "assigned"
+                },
+                {
+                    "source": "SoftwareApplication",
+                    "target": "Architect",
+                    "relation": "assigned"
+                },
+                {
+                    "source": "SoftwareApplication",
+                    "target": "Engineer",
+                    "relation": "assigned"
+                },
+                {
+                    "source": "SoftwareApplication",
+                    "target": "Feature",
+                    "relation": "contains"
+                },
+                {
+                    "source": "Feature",
+                    "target": "Requirement",
+                    "relation": "contains"
+                },
                 {
                     "source": "ProductManager",
                     "target": "Requirement",

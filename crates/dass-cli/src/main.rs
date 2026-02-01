@@ -12,12 +12,12 @@ use serde_json::Value;
 #[command(version, about, long_about = None)]
 struct Args {
     /// Skip confirmation prompts (auto-accept)
-    #[arg(short, long)]
+    #[arg(short, long, alias = "yolo")]
     yes: bool,
 
-    /// Executable to use for AI calls (default: "gemini")
-    #[arg(long, default_value = "gemini")]
-    ai_cmd: String,
+    /// Model to use (default: "gemini-2.5-flash")
+    #[arg(long, default_value = "gemini-2.5-flash")]
+    model: String,
 
     /// Feature idea (skips input prompt)
     query: Option<String>,
@@ -164,7 +164,9 @@ async fn main() -> Result<()> {
     println!("{}", style("---------------------------").dim());
 
     println!("{}", style("Running in LIVE MODE (calling AI CLI)").green());
-    let client = ShellCliClient::new(&args.ai_cmd);
+    let client = ShellCliClient::new("gemini")
+        .with_yolo(args.yes)
+        .with_model(args.model.clone());
 
     let mut orchestrator =
         Orchestrator::new(client, final_app_id.clone(), app_name, work_dir_path).await?;

@@ -12,6 +12,7 @@ pub mod executor;
 pub struct GraphDefinition {
     pub entities: Option<Vec<serde_json::Value>>,
     pub relationships: Option<Vec<RelationshipDef>>,
+    #[serde(rename = "$defs")]
     pub definitions: Option<Definitions>,
 }
 
@@ -55,6 +56,7 @@ pub struct RelationshipDef {
 }
 
 // 2. The In-Memory Graph
+#[derive(Debug)]
 pub struct DependencyGraph {
     pub graph: DiGraph<String, String>, // Node=EntityKind, Edge=RelationType
     pub kind_map: HashMap<String, NodeIndex>,
@@ -187,7 +189,67 @@ impl DependencyGraph {
             }
         }
 
+        dg.validate_topology()?;
         Ok(dg)
+    }
+
+    pub fn validate_topology(&self) -> Result<()> {
+        let node_count = self.graph.node_count();
+        if node_count == 0 {
+            return Ok(());
+        }
+
+        // 1. Identify Roots (Nodes with in-degree 0)
+        let mut roots = Vec::new();
+        for node_idx in self.graph.node_indices() {
+            let in_degree = self
+                .graph
+                .edges_directed(node_idx, petgraph::Direction::Incoming)
+                .count();
+            if in_degree == 0 {
+                roots.push(node_idx);
+            }
+        }
+
+        if roots.is_empty() {
+            return Err(anyhow::anyhow!(
+                "Graph validation failed: No root node found (possible cycle or empty graph rules)."
+            ));
+        }
+
+        if roots.len() > 1 {
+            let root_names: Vec<String> =
+                roots.iter().map(|&idx| self.graph[idx].clone()).collect();
+            return Err(anyhow::anyhow!(
+                "Graph validation failed: Multiple root nodes found: {:?}. Only one root is allowed.",
+                root_names
+            ));
+        }
+
+        let root_idx = roots[0];
+
+        // 2. Verify Reachability from Root
+        let mut visited = std::collections::HashSet::new();
+        let mut bfs = petgraph::visit::Bfs::new(&self.graph, root_idx);
+        while let Some(nx) = bfs.next(&self.graph) {
+            visited.insert(nx);
+        }
+
+        if visited.len() < node_count {
+            let mut unreachable = Vec::new();
+            for node_idx in self.graph.node_indices() {
+                if !visited.contains(&node_idx) {
+                    unreachable.push(self.graph[node_idx].clone());
+                }
+            }
+            return Err(anyhow::anyhow!(
+                "Graph validation failed: Unreachable nodes found from root '{}': {:?}",
+                self.graph[root_idx],
+                unreachable
+            ));
+        }
+
+        Ok(())
     }
 
     fn to_snake_case(s: &str) -> String {
@@ -263,7 +325,7 @@ mod tests {
         let json = r#"{
             "entities": [],
             "relationships": [],
-            "definitions": {
+            "$defs": {
                 "GraphRules": {
                     "rules": [
                         { "source": "Agent", "target": "Feature", "relation": "creates" },
@@ -283,5 +345,50 @@ mod tests {
         // Query: What verifies a Feature? (None in this graph)
         let verifiers = graph.get_dependencies("Feature", "verifies");
         assert!(verifiers.is_empty());
+    }
+
+    #[test]
+    fn test_invalid_topology_multiple_roots() {
+        let json = r#"{
+            "entities": [],
+            "relationships": [],
+            "$defs": {
+                "GraphRules": {
+                    "rules": [
+                        { "source": "A", "target": "B", "relation": "rel" },
+                        { "source": "C", "target": "D", "relation": "rel" }
+                    ]
+                }
+            }
+        }"#;
+
+        let result = DependencyGraph::load_from_metamodel(json, None);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Multiple root nodes")
+        );
+    }
+
+    #[test]
+    fn test_invalid_topology_unreachable() {
+        let json = r#"{
+            "entities": [],
+            "relationships": [],
+            "$defs": {
+                "GraphRules": {
+                    "rules": [
+                        { "source": "A", "target": "B", "relation": "rel" },
+                        { "source": "B", "target": "A", "relation": "rel" },
+                        { "source": "C", "target": "D", "relation": "rel" }
+                    ]
+                }
+            }
+        }"#;
+
+        let result = DependencyGraph::load_from_metamodel(json, None);
+        assert!(result.is_err());
     }
 }

@@ -11,23 +11,56 @@ pub trait AiCliClient {
 #[derive(Clone)]
 pub struct ShellCliClient {
     pub executable: String,
+    pub work_dir: Option<String>,
+    pub yolo: bool,
+    pub model: Option<String>,
 }
 
 impl ShellCliClient {
     pub fn new(executable: &str) -> Self {
         Self {
             executable: executable.to_string(),
+            work_dir: None,
+            yolo: false,
+            model: None,
         }
+    }
+
+    pub fn with_work_dir(mut self, work_dir: String) -> Self {
+        self.work_dir = Some(work_dir);
+        self
+    }
+
+    pub fn with_yolo(mut self, yolo: bool) -> Self {
+        self.yolo = yolo;
+        self
+    }
+
+    pub fn with_model(mut self, model: String) -> Self {
+        self.model = Some(model);
+        self
     }
 }
 
 impl AiCliClient for ShellCliClient {
     fn prompt(&self, prompt_text: &str) -> Result<String> {
         // Example execution: gemini -p "some prompt"
-        let output = Command::new(&self.executable)
-            .arg("-p")
-            .arg(prompt_text)
-            .output()?;
+        let mut cmd = Command::new(&self.executable);
+        cmd.arg("-p").arg(prompt_text);
+
+        if self.yolo {
+            cmd.arg("--yolo");
+        }
+
+        if let Some(ref m) = self.model {
+            cmd.arg("--model").arg(m);
+        }
+
+        if let Some(ref wd) = self.work_dir {
+            cmd.current_dir(wd);
+        }
+
+        let output = cmd.output()?;
 
         if !output.status.success() {
             return Err(anyhow::anyhow!(

@@ -19,17 +19,32 @@
 <https://infinite-coding-loop.dass/ontology/contains> <http://www.w3.org/2000/01/rdf-schema#domain> <https://infinite-coding-loop.dass/ontology/SoftwareApplication> ;
 	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/ProjectStructure> .
 <https://infinite-coding-loop.dass/ontology/ProductManager> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
+<https://infinite-coding-loop.dass/ontology/assigned> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#ObjectProperty> ;
+	<http://www.w3.org/2000/01/rdf-schema#domain> <https://infinite-coding-loop.dass/ontology/SoftwareApplication> ;
+	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/ProductManager> .
+<https://infinite-coding-loop.dass/ontology/Architect> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
+<https://infinite-coding-loop.dass/ontology/assigned> <http://www.w3.org/2000/01/rdf-schema#domain> <https://infinite-coding-loop.dass/ontology/SoftwareApplication> ;
+	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/Architect> .
+<https://infinite-coding-loop.dass/ontology/Engineer> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
+<https://infinite-coding-loop.dass/ontology/assigned> <http://www.w3.org/2000/01/rdf-schema#domain> <https://infinite-coding-loop.dass/ontology/SoftwareApplication> ;
+	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/Engineer> .
+<https://infinite-coding-loop.dass/ontology/ChangeRequest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
+<https://infinite-coding-loop.dass/ontology/receives> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#ObjectProperty> ;
+	<http://www.w3.org/2000/01/rdf-schema#domain> <https://infinite-coding-loop.dass/ontology/SoftwareApplication> ;
+	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/ChangeRequest> .
+<https://infinite-coding-loop.dass/ontology/TestResult> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
+<https://infinite-coding-loop.dass/ontology/produces> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#ObjectProperty> ;
+	<http://www.w3.org/2000/01/rdf-schema#domain> <https://infinite-coding-loop.dass/ontology/SoftwareApplication> ;
+	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/TestResult> .
 <https://infinite-coding-loop.dass/ontology/Requirement> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
 <https://infinite-coding-loop.dass/ontology/creates> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#ObjectProperty> ;
 	<http://www.w3.org/2000/01/rdf-schema#domain> <https://infinite-coding-loop.dass/ontology/ProductManager> ;
 	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/Requirement> .
-<https://infinite-coding-loop.dass/ontology/Architect> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
 <https://infinite-coding-loop.dass/ontology/DesignSpec> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
 <https://infinite-coding-loop.dass/ontology/creates> <http://www.w3.org/2000/01/rdf-schema#domain> <https://infinite-coding-loop.dass/ontology/Architect> ;
 	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/DesignSpec> ;
 	<http://www.w3.org/2000/01/rdf-schema#domain> <https://infinite-coding-loop.dass/ontology/Architect> ;
 	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/ProjectStructure> .
-<https://infinite-coding-loop.dass/ontology/Engineer> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
 <https://infinite-coding-loop.dass/ontology/Plan> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
 <https://infinite-coding-loop.dass/ontology/creates> <http://www.w3.org/2000/01/rdf-schema#domain> <https://infinite-coding-loop.dass/ontology/Engineer> ;
 	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/Plan> .
@@ -55,7 +70,6 @@
 	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/ProjectStructure> .
 <https://infinite-coding-loop.dass/ontology/contains> <http://www.w3.org/2000/01/rdf-schema#domain> <https://infinite-coding-loop.dass/ontology/ProjectStructure> ;
 	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/SourceFile> .
-<https://infinite-coding-loop.dass/ontology/ChangeRequest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
 <https://infinite-coding-loop.dass/ontology/targets> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#ObjectProperty> ;
 	<http://www.w3.org/2000/01/rdf-schema#domain> <https://infinite-coding-loop.dass/ontology/ChangeRequest> ;
 	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/Requirement> ;
@@ -98,13 +112,11 @@
 	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/SourceFile> .
 <https://infinite-coding-loop.dass/ontology/verifies> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#ObjectProperty> ;
 	<http://www.w3.org/2000/01/rdf-schema#domain> <https://infinite-coding-loop.dass/ontology/TestCase> ;
-	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/Requirement> .
-<https://infinite-coding-loop.dass/ontology/TestResult> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
-<https://infinite-coding-loop.dass/ontology/verifies> <http://www.w3.org/2000/01/rdf-schema#domain> <https://infinite-coding-loop.dass/ontology/TestResult> ;
+	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/Requirement> ;
+	<http://www.w3.org/2000/01/rdf-schema#domain> <https://infinite-coding-loop.dass/ontology/TestResult> ;
 	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/TestCase> .
 <https://infinite-coding-loop.dass/ontology/Observation> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
 <https://infinite-coding-loop.dass/ontology/triggers> <http://www.w3.org/2000/01/rdf-schema#domain> <https://infinite-coding-loop.dass/ontology/TestResult> ;
+	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/Observation> ;
+	<http://www.w3.org/2000/01/rdf-schema#domain> <https://infinite-coding-loop.dass/ontology/SoftwareApplication> ;
 	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/Observation> .
-<https://infinite-coding-loop.dass/ontology/analyzes> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#ObjectProperty> ;
-	<http://www.w3.org/2000/01/rdf-schema#domain> <https://infinite-coding-loop.dass/ontology/Observation> ;
-	<http://www.w3.org/2000/01/rdf-schema#range> <https://infinite-coding-loop.dass/ontology/SoftwareApplication> .

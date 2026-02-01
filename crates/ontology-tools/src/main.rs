@@ -29,6 +29,11 @@ enum Commands {
         #[arg(short, long, default_value = "ontology/ontology.ttl")]
         input: PathBuf,
     },
+    /// Validate the graph topology of the metamodel
+    Validate {
+        #[arg(short, long, default_value = "ontology/schemas/metamodel.schema.json")]
+        input: PathBuf,
+    },
 }
 
 #[derive(Deserialize, Debug)]
@@ -78,6 +83,9 @@ fn main() -> anyhow::Result<()> {
         }
         Commands::Verify { input } => {
             verify(&input)?;
+        }
+        Commands::Validate { input } => {
+            validate_graph(&input)?;
         }
     }
 
@@ -215,4 +223,21 @@ fn verify(input_path: &PathBuf) -> anyhow::Result<()> {
 
     println!("Verification passed. Read {} triples.", count);
     Ok(())
+}
+
+fn validate_graph(input_path: &PathBuf) -> anyhow::Result<()> {
+    use dass_engine::graph::DependencyGraph;
+    println!("Validating graph topology of {:?}", input_path);
+
+    let content = std::fs::read_to_string(input_path)?;
+    match DependencyGraph::load_from_metamodel(&content, None) {
+        Ok(_) => {
+            println!("✅ Graph topology is VALID (Single root, all reachable).");
+            Ok(())
+        }
+        Err(e) => {
+            eprintln!("❌ Graph validation FAILED: {}", e);
+            std::process::exit(1);
+        }
+    }
 }

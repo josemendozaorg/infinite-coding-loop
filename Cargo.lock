@@ -1476,6 +1476,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "dass-engine",
  "rio_api",
  "rio_turtle",
  "serde",

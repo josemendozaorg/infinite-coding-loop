@@ -10,3 +10,4 @@ rio_api = "0.8.5"
 rio_turtle = "0.8.5"
 serde.workspace = true
 serde_json.workspace = true
+dass-engine = { path = "../dass-engine" }

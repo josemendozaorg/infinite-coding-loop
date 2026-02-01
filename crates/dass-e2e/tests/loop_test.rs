@@ -1,53 +1,17 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use dass_engine::agents::cli_client::AiCliClient;
+use dass_engine::agents::cli_client::ShellCliClient;
 use dass_engine::interaction::UserInteraction;
 use dass_engine::orchestrator::Orchestrator;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 
-// 1. Mock Client
-#[derive(Clone)]
-struct TestAiClient {
-    // We can store call history here for assertions
-    history: Arc<Mutex<Vec<String>>>,
-}
-
-impl TestAiClient {
-    fn new() -> Self {
-        Self {
-            history: Arc::new(Mutex::new(Vec::new())),
-        }
-    }
-}
-
-// NOTE: orchestrator.rs uses trait AiCliClient. cli_client.rs defines it as synch/simple trait.
-impl AiCliClient for TestAiClient {
-    fn prompt(&self, prompt_text: &str) -> Result<String> {
-        // Log the call
-        self.history.lock().unwrap().push(prompt_text.to_string());
-
-        // Simple Rule Engine for Mock Responses
-        if prompt_text.contains("Engineer") {
-            // Engineer requested -> Return Plan
-            return Ok(r#"{
-                "steps": ["Step 1: Analyze", "Step 2: Implement", "Step 3: Test"]
-            }"#
-            .to_string());
-        }
-
-        // Return dummy JSON for others to avoid parse errors
-        Ok(r#"{ "status": "mock_success" }"#.to_string())
-    }
-}
-
-// 2. Mock UI (To drive the Orchestrator)
+// 1. Mock UI (To drive the Orchestrator)
 struct TestUi;
 
 #[async_trait]
 impl UserInteraction for TestUi {
     async fn ask_for_feature(&self, _prompt: &str) -> Result<String> {
-        Ok("Build a Login System".to_string())
+        Ok("Build a simple CLI tool that prints Hello World in Rust".to_string())
     }
     async fn ask_user(&self, _prompt: &str) -> Result<String> {
         Ok("yes".to_string())
@@ -68,7 +32,7 @@ impl UserInteraction for TestUi {
     }
 
     fn start_step(&self, msg: &str) {
-        println!("[STEP] {}", msg);
+        println!("\n[STEP] {}", msg);
     }
     fn end_step(&self, msg: &str) {
         println!("[DONE] {}", msg);
@@ -88,47 +52,54 @@ async fn test_end_to_end_execution() -> Result<()> {
     let schema_path = fixtures_dir.join("schemas/metamodel.schema.json");
     let schema_content = std::fs::read_to_string(&schema_path)?;
 
-    // 2. Initialize Orchestrator with Test Client & Metamodel
-    // With externalized path, we can simply pass the fixtures directory as the base path!
-    let client = TestAiClient::new();
+    // Use a unique work dir for this test run inside the repo to avoid workspace validation issues
+    let work_dir = manifest_dir.join("../../target/test-work-dir-real-ai");
+    if work_dir.exists() {
+        std::fs::remove_dir_all(&work_dir)?;
+    }
+    std::fs::create_dir_all(&work_dir)?;
 
-    // We pass the raw schema content (with relative paths) and the fixture root as base path.
+    // 2. Initialize Orchestrator with Real Shell Client (gemini)
+    // We point to the gemini executable and set the work_dir
+    let client = ShellCliClient::new("gemini")
+        .with_work_dir(work_dir.to_string_lossy().to_string())
+        .with_yolo(true)
+        .with_model("gemini-2.5-flash".to_string());
+
     let mut orchestrator = Orchestrator::new_with_metamodel(
         client.clone(),
-        "test-app".to_string(),
-        "Test App".to_string(),
-        std::path::PathBuf::from("/tmp/test-work-dir"),
+        "test-app-real".to_string(),
+        "Test App Real".to_string(),
+        work_dir.clone(),
         &schema_content,
         Some(&fixtures_dir),
     )
     .await?;
 
     // 3. Run the Loop
-    // We expect this to run through ProductManager -> Architect -> Architect -> Engineer
+    // This will actually call gemini!
     orchestrator.run(&TestUi).await?;
 
-    // 4. Assertions
-    // Check if the Engineer was called (which means we reached the Plan stage)
-    let history = client.history.lock().unwrap();
-    let _engineer_calls = history.iter().filter(|p| p.contains("Engineer")).count();
+    // 4. Verification: Check for artifact existence
+    // The agents should have created files in the work_dir
+    // We expect at least the plan and requirements to be there if the orchestration finished.
 
-    // Note: Since we mocked the other agents (PM, Architect) to point to "agents/engineer.json" in the mini ontology,
-    // they might effectively look like Engineer calls depending on prompt content or how we mocked it.
-    // But `call_agent` receives the prompt text.
-    // The prompts for PM/Architect will be loaded from "prompts/ProductManager_creates_Requirement.md" etc.
-    // Those files don't exist in our mini fixture!
-    // The engine's `get_prompt_template` returns empty string or "file not found" logic?
-    // Let's check `dass-engine` implementation. If missing, it uses default?
+    let entries = std::fs::read_dir(&work_dir)?
+        .map(|res| res.map(|e| e.path()))
+        .collect::<Result<Vec<_>, std::io::Error>>()?;
 
-    // Actually, `get_prompt_template` returns `Option<String>`.
-    // And `Task` takes `prompt: Option<String>`.
-    // If prompt is None, what does the agent do?
-    // This might fail or send empty prompt.
-    // Our TestAiClient just logs it.
+    println!("Created Files in {:?}:", work_dir);
+    for entry in &entries {
+        println!("  - {:?}", entry.file_name().unwrap());
+    }
 
-    // Let's assert that we at least tried 4 steps (PM, Arch, Arch, Eng).
-    println!("History: {:?}", *history);
-    assert!(!history.is_empty(), "Orchestrator did not call any agents");
+    assert!(
+        !entries.is_empty(),
+        "No artifacts were created by the agents"
+    );
+
+    // We check for some common names the agents might use (or we can just check if NOT empty)
+    // Since it's a real LLM, filenames might vary, but they should be there.
 
     Ok(())
 }

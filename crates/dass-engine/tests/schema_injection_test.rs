@@ -12,7 +12,7 @@ fn test_schema_injection_integration() {
     let metamodel_json = r#"{
         "entities": [],
         "relationships": [],
-        "definitions": {
+        "$defs": {
             "GraphRules": {
                 "rules": [
                     {
@@ -63,7 +63,7 @@ fn test_source_differentiation() {
     let metamodel_json = r#"{
         "entities": [],
         "relationships": [],
-        "definitions": {
+        "$defs": {
             "GraphRules": {
                 "rules": [
                     {
@@ -105,7 +105,7 @@ fn test_agent_loading_integration() {
     let metamodel_json = r#"{
         "entities": [],
         "relationships": [],
-        "definitions": {
+        "$defs": {
             "GraphRules": { "rules": [] },
             "AgentDefinitions": {
                 "agents": [
