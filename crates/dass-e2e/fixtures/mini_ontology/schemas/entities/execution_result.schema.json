@@ -1,0 +1,21 @@
+{
+    "type": "object",
+    "properties": {
+        "score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+        },
+        "feedback": {
+            "type": "string"
+        },
+        "output": {
+            "type": "string"
+        }
+    },
+    "required": [
+        "score",
+        "feedback"
+    ],
+    "additionalProperties": true
+}

@@ -94,36 +94,6 @@
             "rules": [
                 {
                     "source": "SoftwareApplication",
-                    "target": "Feature",
-                    "relation": "contains"
-                },
-                {
-                    "source": "SoftwareApplication",
-                    "target": "Standard",
-                    "relation": "contains"
-                },
-                {
-                    "source": "SoftwareApplication",
-                    "target": "Environment",
-                    "relation": "contains"
-                },
-                {
-                    "source": "SoftwareApplication",
-                    "target": "Risk",
-                    "relation": "contains"
-                },
-                {
-                    "source": "SoftwareApplication",
-                    "target": "ArchitecturePattern",
-                    "relation": "contains"
-                },
-                {
-                    "source": "SoftwareApplication",
-                    "target": "ProjectStructure",
-                    "relation": "contains"
-                },
-                {
-                    "source": "SoftwareApplication",
                     "target": "ProductManager",
                     "relation": "assigned"
                 },
@@ -134,178 +104,173 @@
                 },
                 {
                     "source": "SoftwareApplication",
-                    "target": "Engineer",
+                    "target": "Developer",
                     "relation": "assigned"
                 },
                 {
                     "source": "SoftwareApplication",
-                    "target": "ChangeRequest",
-                    "relation": "receives"
+                    "target": "Tester",
+                    "relation": "assigned"
                 },
                 {
                     "source": "SoftwareApplication",
-                    "target": "TestResult",
-                    "relation": "produces"
+                    "target": "DevOps",
+                    "relation": "assigned"
                 },
                 {
-                    "source": "ProductManager",
-                    "target": "Requirement",
-                    "relation": "creates"
+                    "source": "SoftwareApplication",
+                    "target": "ProjectManager",
+                    "relation": "assigned"
                 },
                 {
-                    "source": "Architect",
-                    "target": "DesignSpec",
-                    "relation": "creates"
+                    "source": "SoftwareApplication",
+                    "target": "BusinessAnalyst",
+                    "relation": "assigned"
                 },
                 {
-                    "source": "Architect",
-                    "target": "ProjectStructure",
-                    "relation": "creates"
+                    "source": "TDD",
+                    "target": "Methodology",
+                    "relation": "isA"
                 },
                 {
-                    "source": "Engineer",
-                    "target": "Plan",
-                    "relation": "creates"
+                    "source": "BDD",
+                    "target": "Methodology",
+                    "relation": "isA"
                 },
                 {
-                    "source": "TechnologyStack",
-                    "target": "Tool",
-                    "relation": "uses"
-                },
-                {
-                    "source": "Environment",
-                    "target": "Tool",
-                    "relation": "contains"
-                },
-                {
-                    "source": "ArchitecturePattern",
-                    "target": "DesignSpec",
-                    "relation": "defines"
-                },
-                {
-                    "source": "ArchitecturePattern",
-                    "target": "ProjectStructure",
-                    "relation": "defines"
-                },
-                {
-                    "source": "Standard",
-                    "target": "TechnologyStack",
-                    "relation": "constrains"
-                },
-                {
-                    "source": "TechnologyStack",
-                    "target": "SourceFile",
-                    "relation": "constrains"
-                },
-                {
-                    "source": "TechnologyStack",
-                    "target": "ProjectStructure",
-                    "relation": "constrains"
-                },
-                {
-                    "source": "ProjectStructure",
-                    "target": "SourceFile",
-                    "relation": "contains"
-                },
-                {
-                    "source": "ChangeRequest",
-                    "target": "Requirement",
-                    "relation": "targets"
-                },
-                {
-                    "source": "ChangeRequest",
-                    "target": "DesignSpec",
-                    "relation": "targets"
-                },
-                {
-                    "source": "ChangeRequest",
-                    "target": "Plan",
-                    "relation": "triggers"
-                },
-                {
-                    "source": "Environment",
-                    "target": "Plan",
-                    "relation": "constrains"
-                },
-                {
-                    "source": "Standard",
-                    "target": "DesignSpec",
-                    "relation": "constrains"
-                },
-                {
-                    "source": "Standard",
-                    "target": "SourceFile",
-                    "relation": "constrains"
+                    "source": "DDD",
+                    "target": "Methodology",
+                    "relation": "isA"
                 },
                 {
                     "source": "Feature",
-                    "target": "Requirement",
-                    "relation": "contains"
+                    "target": "UserStory",
+                    "relation": "requires"
                 },
                 {
-                    "source": "Feature",
-                    "target": "Persona",
-                    "relation": "defines"
+                    "source": "UserStory",
+                    "target": "AcceptanceCriteria",
+                    "relation": "requires"
                 },
                 {
-                    "source": "Persona",
-                    "target": "Requirement",
-                    "relation": "defines"
+                    "source": "UserStory",
+                    "target": "ImplementationPlan",
+                    "relation": "requires"
                 },
                 {
-                    "source": "Requirement",
-                    "target": "DesignSpec",
-                    "relation": "specifies"
+                    "source": "TestCase",
+                    "target": "UnitTest",
+                    "relation": "requires"
                 },
                 {
-                    "source": "Requirement",
-                    "target": "DomainEntity",
-                    "relation": "defines"
+                    "source": "UnitTest",
+                    "target": "SuccessfulTestResult",
+                    "relation": "requires"
                 },
                 {
-                    "source": "Risk",
-                    "target": "DesignSpec",
-                    "relation": "mitigates"
+                    "source": "BusinessAnalyst",
+                    "target": "Feature",
+                    "relation": "verifies"
                 },
                 {
-                    "source": "DomainEntity",
-                    "target": "DesignSpec",
-                    "relation": "constrains"
+                    "source": "Developer",
+                    "target": "Code",
+                    "relation": "creates"
                 },
                 {
-                    "source": "DesignSpec",
-                    "target": "Plan",
-                    "relation": "specifies"
+                    "source": "Developer",
+                    "target": "Code",
+                    "relation": "verifies"
                 },
                 {
-                    "source": "Plan",
-                    "target": "SourceFile",
+                    "source": "Developer",
+                    "target": "UserStory",
                     "relation": "implements"
                 },
                 {
-                    "source": "TestCase",
-                    "target": "SourceFile",
-                    "relation": "constrains"
+                    "source": "Developer",
+                    "target": "UnitTest",
+                    "relation": "implements"
                 },
                 {
-                    "source": "TestCase",
-                    "target": "Requirement",
+                    "source": "Developer",
+                    "target": "UnitTest",
                     "relation": "verifies"
                 },
                 {
-                    "source": "TestResult",
-                    "target": "TestCase",
-                    "relation": "verifies"
+                    "source": "Developer",
+                    "target": "UnitTest",
+                    "relation": "improves"
                 },
                 {
-                    "source": "TestResult",
-                    "target": "Observation",
-                    "relation": "triggers"
+                    "source": "Developer",
+                    "target": "Code",
+                    "relation": "improves"
                 },
                 {
-                    "source": "SoftwareApplication",
-                    "target": "Observation",
-                    "relation": "triggers"
+                    "source": "Code",
+                    "target": "CyclomaticLowComplexity",
+                    "relation": "requires"
+                },
+                {
+                    "source": "Code",
+                    "target": "CodingStyle",
+                    "relation": "requires"
+                },
+                {
+                    "source": "Code",
+                    "target": "CodingPractice",
+                    "relation": "requires"
+                },
+                {
+                    "source": "KISS",
+                    "target": "CodingPractice",
+                    "relation": "isA"
+                },
+                {
+                    "source": "DRY",
+                    "target": "CodingPractice",
+                    "relation": "isA"
+                },
+                {
+                    "source": "Developer",
+                    "target": "CodingStyle",
+                    "relation": "applies"
+                },
+                {
+                    "source": "Developer",
+                    "target": "CodingPractice",
+                    "relation": "applies"
+                },
+                {
+                    "source": "GoogleCodingStyle",
+                    "target": "CodingStyle",
+                    "relation": "isA"
+                },
+                {
+                    "source": "Architect",
+                    "target": "CodingStyle",
+                    "relation": "defines"
+                },
+                {
+                    "source": "Architect",
+                    "target": "QualityMetric",
+                    "relation": "defines"
+                },
+                {
+                    "source": "Architect",
+                    "target": "ArchitectureStyle",
+                    "relation": "defines"
+                },
+                {
+                    "source": "Microservices",
+                    "target": "ArchitectureStyle",
+                    "relation": "isA"
+                },
+                {
+                    "source": "CyclomaticLowComplexity",
+                    "target": "QualityMetric",
+                    "relation": "isA"
                 }
             ]
         }

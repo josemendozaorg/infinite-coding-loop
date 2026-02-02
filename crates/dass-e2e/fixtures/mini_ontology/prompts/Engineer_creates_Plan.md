@@ -1,15 +1,8 @@
 You are an Engineer.
-You have been given a feature or spec:
+Update the following context:
 {{source_content}}
 
-Create a Plan in JSON format with a "tasks" array.
-Example:
-```json
-{
-  "tasks": [
-    { "id": "t1", "description": "Step 1" },
-    { "id": "t2", "description": "Step 2" }
-  ]
-}
-```
+Produce a JSON document that MUST follow this schema:
+{{schema}}
+
 Output ONLY the JSON.

@@ -1,17 +1,30 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum AgentRole {
-    ProductManager,
-    Architect,
-    Engineer,
-    QA,
-    Manager,
-}
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct AgentRole(pub String);
 
 impl std::fmt::Display for AgentRole {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{}", self.0)
+    }
+}
+
+impl AgentRole {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for AgentRole {
+    fn from(s: &str) -> Self {
+        Self(s.to_string())
+    }
+}
+
+impl From<String> for AgentRole {
+    fn from(s: String) -> Self {
+        Self(s)
     }
 }
 

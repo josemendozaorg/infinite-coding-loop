@@ -157,6 +157,117 @@
         "Kind_QA": {
             "const": "QA"
         },
+        "Kind_Agent": {
+            "const": "Agent"
+        },
+        "Kind_Artifact": {
+            "const": "Artifact"
+        },
+        "Kind_Methodology": {
+            "const": "Methodology"
+        },
+        "Kind_Framework": {
+            "const": "Framework"
+        },
+        "Kind_Language": {
+            "const": "Language"
+        },
+        "Kind_Database": {
+            "const": "Database"
+        },
+        "Kind_Technology": {
+            "const": "Technology"
+        },
+        "Kind_ArchitectureStyle": {
+            "const": "ArchitectureStyle"
+        },
+        "Kind_ProductOwner": {
+            "const": "ProductOwner"
+        },
+        "Kind_Developer": {
+            "const": "Developer"
+        },
+        "Kind_DevOps": {
+            "const": "DevOps"
+        },
+        "Kind_ProjectManager": {
+            "const": "ProjectManager"
+        },
+        "Kind_BusinessAnalyst": {
+            "const": "BusinessAnalyst"
+        },
+        "Kind_UserStory": {
+            "const": "UserStory"
+        },
+        "Kind_AcceptanceCriteria": {
+            "const": "AcceptanceCriteria"
+        },
+        "Kind_SuccessfulTestResult": {
+            "const": "SuccessfulTestResult"
+        },
+        "Kind_ImplementationPlan": {
+            "const": "ImplementationPlan"
+        },
+        "Kind_UIDesign": {
+            "const": "UIDesign"
+        },
+        "Kind_SoftwareArchitecture": {
+            "const": "SoftwareArchitecture"
+        },
+        "Kind_LogicalDataModel": {
+            "const": "LogicalDataModel"
+        },
+        "Kind_PhysicalDataModel": {
+            "const": "PhysicalDataModel"
+        },
+        "Kind_OpenApiSpec": {
+            "const": "OpenApiSpec"
+        },
+        "Kind_DomainEventSpec": {
+            "const": "DomainEventSpec"
+        },
+        "Kind_UserStoryImplementationPlan": {
+            "const": "UserStoryImplementationPlan"
+        },
+        "Kind_Code": {
+            "const": "Code"
+        },
+        "Kind_UnitTest": {
+            "const": "UnitTest"
+        },
+        "Kind_TDD": {
+            "const": "TDD"
+        },
+        "Kind_BDD": {
+            "const": "BDD"
+        },
+        "Kind_DDD": {
+            "const": "DDD"
+        },
+        "Kind_CodingStyle": {
+            "const": "CodingStyle"
+        },
+        "Kind_CodingPractice": {
+            "const": "CodingPractice"
+        },
+        "Kind_QualityMetric": {
+            "const": "QualityMetric"
+        },
+        "Kind_GoogleCodingStyle": {
+            "const": "GoogleCodingStyle"
+        },
+        "Kind_KISS": {
+            "const": "KISS"
+        },
+        "Kind_DRY": {
+            "const": "DRY"
+        },
+        "Kind_Microservices": {
+            "const": "Microservices"
+        },
+        "Kind_CyclomaticLowComplexity": {
+            "const": "CyclomaticLowComplexity"
+        },
         "Rel_Analyzes": {
             "const": "analyzes"
         },
@@ -195,6 +306,27 @@
         },
         "Rel_Verifies": {
             "const": "verifies"
+        },
+        "Rel_Requires": {
+            "const": "requires"
+        },
+        "Rel_Includes": {
+            "const": "includes"
+        },
+        "Rel_CanBe": {
+            "const": "canBe"
+        },
+        "Rel_IsA": {
+            "const": "isA"
+        },
+        "Rel_CanHave": {
+            "const": "canHave"
+        },
+        "Rel_Applies": {
+            "const": "applies"
+        },
+        "Rel_Improves": {
+            "const": "improves"
         },
         "EntityKind": {
             "type": "string",
@@ -279,6 +411,117 @@
                 },
                 {
                     "$ref": "#/$defs/Kind_DataModel"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Agent"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Artifact"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Methodology"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Framework"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Language"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Database"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Technology"
+                },
+                {
+                    "$ref": "#/$defs/Kind_ArchitectureStyle"
+                },
+                {
+                    "$ref": "#/$defs/Kind_ProductOwner"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Developer"
+                },
+                {
+                    "$ref": "#/$defs/Kind_DevOps"
+                },
+                {
+                    "$ref": "#/$defs/Kind_ProjectManager"
+                },
+                {
+                    "$ref": "#/$defs/Kind_BusinessAnalyst"
+                },
+                {
+                    "$ref": "#/$defs/Kind_UserStory"
+                },
+                {
+                    "$ref": "#/$defs/Kind_AcceptanceCriteria"
+                },
+                {
+                    "$ref": "#/$defs/Kind_SuccessfulTestResult"
+                },
+                {
+                    "$ref": "#/$defs/Kind_ImplementationPlan"
+                },
+                {
+                    "$ref": "#/$defs/Kind_UIDesign"
+                },
+                {
+                    "$ref": "#/$defs/Kind_SoftwareArchitecture"
+                },
+                {
+                    "$ref": "#/$defs/Kind_LogicalDataModel"
+                },
+                {
+                    "$ref": "#/$defs/Kind_PhysicalDataModel"
+                },
+                {
+                    "$ref": "#/$defs/Kind_OpenApiSpec"
+                },
+                {
+                    "$ref": "#/$defs/Kind_DomainEventSpec"
+                },
+                {
+                    "$ref": "#/$defs/Kind_UserStoryImplementationPlan"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Code"
+                },
+                {
+                    "$ref": "#/$defs/Kind_UnitTest"
+                },
+                {
+                    "$ref": "#/$defs/Kind_TDD"
+                },
+                {
+                    "$ref": "#/$defs/Kind_BDD"
+                },
+                {
+                    "$ref": "#/$defs/Kind_DDD"
+                },
+                {
+                    "$ref": "#/$defs/Kind_CodingStyle"
+                },
+                {
+                    "$ref": "#/$defs/Kind_CodingPractice"
+                },
+                {
+                    "$ref": "#/$defs/Kind_QualityMetric"
+                },
+                {
+                    "$ref": "#/$defs/Kind_GoogleCodingStyle"
+                },
+                {
+                    "$ref": "#/$defs/Kind_KISS"
+                },
+                {
+                    "$ref": "#/$defs/Kind_DRY"
+                },
+                {
+                    "$ref": "#/$defs/Kind_Microservices"
+                },
+                {
+                    "$ref": "#/$defs/Kind_CyclomaticLowComplexity"
                 }
             ]
         },
@@ -323,6 +566,27 @@
                 },
                 {
                     "$ref": "#/$defs/Rel_Creates"
+                },
+                {
+                    "$ref": "#/$defs/Rel_Requires"
+                },
+                {
+                    "$ref": "#/$defs/Rel_Includes"
+                },
+                {
+                    "$ref": "#/$defs/Rel_CanBe"
+                },
+                {
+                    "$ref": "#/$defs/Rel_IsA"
+                },
+                {
+                    "$ref": "#/$defs/Rel_CanHave"
+                },
+                {
+                    "$ref": "#/$defs/Rel_Applies"
+                },
+                {
+                    "$ref": "#/$defs/Rel_Improves"
                 }
             ]
         }

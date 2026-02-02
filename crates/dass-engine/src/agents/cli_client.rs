@@ -11,23 +11,23 @@ pub trait AiCliClient {
 #[derive(Clone)]
 pub struct ShellCliClient {
     pub executable: String,
-    pub work_dir: Option<String>,
+    pub work_dir: String,
     pub yolo: bool,
     pub model: Option<String>,
 }
 
 impl ShellCliClient {
-    pub fn new(executable: &str) -> Self {
+    pub fn new(executable: &str, work_dir: String) -> Self {
         Self {
             executable: executable.to_string(),
-            work_dir: None,
+            work_dir,
             yolo: false,
             model: None,
         }
     }
 
     pub fn with_work_dir(mut self, work_dir: String) -> Self {
-        self.work_dir = Some(work_dir);
+        self.work_dir = work_dir;
         self
     }
 
@@ -44,8 +44,14 @@ impl ShellCliClient {
 
 impl AiCliClient for ShellCliClient {
     fn prompt(&self, prompt_text: &str) -> Result<String> {
-        // Example execution: gemini -p "some prompt"
-        let mut cmd = Command::new(&self.executable);
+        // We execute via sh -c to ensure we can cd to the workdir before running the AI CLI.
+        // Command: sh -c 'cd "$1" && shift && exec "$@"' -- <work_dir> <executable> -p <prompt> ...
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c").arg("cd \"$1\" && shift && exec \"$@\"");
+        cmd.arg("--");
+        cmd.arg(&self.work_dir);
+        cmd.arg(&self.executable);
+
         cmd.arg("-p").arg(prompt_text);
 
         if self.yolo {
@@ -54,10 +60,6 @@ impl AiCliClient for ShellCliClient {
 
         if let Some(ref m) = self.model {
             cmd.arg("--model").arg(m);
-        }
-
-        if let Some(ref wd) = self.work_dir {
-            cmd.current_dir(wd);
         }
 
         let output = cmd.output()?;

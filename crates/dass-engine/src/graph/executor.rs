@@ -56,7 +56,7 @@ impl GraphExecutor for InMemoryExecutor {
     async fn dispatch_agent(&self, role: AgentRole, task: Task) -> Result<Value> {
         if let Some(agent) = self.agents.get(&role) {
             println!(
-                "Thinking... [Agent: {:?}] executing Task: {}",
+                "Thinking... [Agent: {}] executing Task: {}",
                 role, task.description
             );
             return agent.execute(task).await;

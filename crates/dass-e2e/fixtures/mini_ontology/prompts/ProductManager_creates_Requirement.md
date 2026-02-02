@@ -1,10 +1,8 @@
-Analyze the following feature request and produce a list of requirements in YAML format.
-Feature: {{source_content}}
+# Product Manager Task: Create Requirement
+Source Goal: {{source_content}}
 
-Requirements should be a list of user stories.
-Example:
-```yaml
-- user_story: "As a user, I want to..."
-  acceptance_criteria: ["Done 1", "Done 2"]
-```
-Output ONLY the YAML.
+Please create a formal Requirement based on the FeatureIdea provided in the context.
+
+{{schema}}
+
+Output only the JSON content.

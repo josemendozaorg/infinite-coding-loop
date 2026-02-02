@@ -45,7 +45,7 @@ impl<C: AiCliClient> GenericAgent<C> {
 #[async_trait]
 impl<C: AiCliClient + Send + Sync> Agent for GenericAgent<C> {
     fn role(&self) -> AgentRole {
-        self.role
+        self.role.clone()
     }
 
     async fn execute(&self, task: Task) -> Result<Value> {

@@ -1,11 +1,22 @@
 ## Ideas
 
-[] The prompts should not have the section of output json. That is boilerplate. Can be injected in runtime along with the schema itself. The same about the section of the context. The prompt should be more about what the Agent (architect) should do according to the relationship assigned with the entity.
+[ ] We need to increase the metamodel with more entities, more relationships, more rules and constraints.
 
-[] Do we really need the schemas per each entity type in the taxonomy?
-   We need a template that can be enforced for each of the entities that are generated. So maybe yes we need a schema, but they share some common attributes coming from entity metadata.
+[ ] Do We need to define the execution graph? Because what we are building now in taxonomy and metamodel is the ground truth, the constitution, the guardrails, the rules and constraints, but also the logical path to build software that the agent would follow. Based on the taxonomy and the metamodel, infinite loop will ask questions to the User to decide the path to follow in the Graph defined in the metamodel. For example, the first graph root node is "SoftwareApplication". Then there are several paths to follow. The user is prompted to choose what kind of software applicaiton. Also the system suggests a recommended option with some arguments. The user can suggest a fully autonomous YOLO approach that the agent just decides himself on the way and just reports the choices made, and then the User could adjust the choises. The type of Software Application, the architecture Style, the technology stack, the database type, and then based on the taxonomy and the metamodel, the system would follow the execution graph, and this could be follow in a UI, this could be nice. If the SoftwareApplication already exists and the user just wants to add a feature, or fix a Bug, or increase test coverage, this can be offered upfront to the user, and then the Graph would start from there, but we would need to fullfil first all what a feature requires according to the metamodel.
 
-[] Shall we call "Entity" rather an Software Artifact? Real names in the real world. Entity means nothing.
+[] We need to define the taxonomy and metamodel in a way that is easy to understand and use. The taxonomy in JSON schema seems to complicated. Let's try to use YAML instead. It is more human readable and it is supported by most of the tools.
+
+[X] The ai clie client should change to the workdir before executed the gemini command. 
+
+[X] DISCARDED Use OWL 2 for the taxonomy and metamodel. It is a standard for ontologies and it is supported by most of the tools.
+
+[X] The prompts should not have the section of output json. That is boilerplate. Can be injected in runtime along with the schema itself. The same about the section of the context. The prompt should be more about what the Agent (architect) should do according to the relationship assigned with the entity.
+
+[X] Do we really need the schemas per each entity type in the taxonomy?
+    We need a template that can be enforced for each of the entities that are generated. So maybe yes we need a schema, but they share some common attributes coming from entity metadata.
+
+[X] Shall we call "Entity" rather an Software Artifact? Real names in the real world. Entity means nothing.
+   - Entity is the base abstraction for nouns. Relationships are verbs.   
 
 [] What is really an Agent? It is rather a team member in the Software team. So there should be a TeamMemberMetadata instead. These do not need to be entities because these do not need IDs in runtime. But Software Artifact, which are produced multiple times, they do need IDs in runtime to be traceable.
 

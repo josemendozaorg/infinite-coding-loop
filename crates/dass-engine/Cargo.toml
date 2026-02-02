@@ -14,10 +14,8 @@ sqlx = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
 chrono = { workspace = true, features = ["serde"] }
+jsonschema = "0.17"
 petgraph.workspace = true
-
-
 
 [dev-dependencies]
 tempfile.workspace = true
-jsonschema = "0.17"

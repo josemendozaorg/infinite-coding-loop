@@ -61,8 +61,8 @@ async fn test_end_to_end_execution() -> Result<()> {
 
     // 2. Initialize Orchestrator with Real Shell Client (gemini)
     // We point to the gemini executable and set the work_dir
-    let client = ShellCliClient::new("gemini")
-        .with_work_dir(work_dir.to_string_lossy().to_string())
+    let client = ShellCliClient::new("gemini", work_dir.to_string_lossy().to_string())
+        .with_yolo(true)
         .with_yolo(true)
         .with_model("gemini-2.5-flash".to_string());
 

@@ -5,49 +5,29 @@
         "GraphRules": {
             "rules": [
                 {
-                    "source": "SoftwareApplication",
-                    "target": "ProductManager",
-                    "relation": "assigned"
-                },
-                {
-                    "source": "SoftwareApplication",
-                    "target": "Architect",
-                    "relation": "assigned"
-                },
-                {
-                    "source": "SoftwareApplication",
-                    "target": "Engineer",
-                    "relation": "assigned"
-                },
-                {
-                    "source": "SoftwareApplication",
-                    "target": "Feature",
-                    "relation": "contains"
-                },
-                {
-                    "source": "Feature",
-                    "target": "Requirement",
-                    "relation": "contains"
-                },
-                {
                     "source": "ProductManager",
                     "target": "Requirement",
                     "relation": "creates"
                 },
                 {
-                    "source": "Architect",
-                    "target": "DesignSpec",
-                    "relation": "creates"
-                },
-                {
-                    "source": "Architect",
-                    "target": "ProjectStructure",
-                    "relation": "creates"
+                    "source": "Engineer",
+                    "target": "Requirement",
+                    "relation": "verifies"
                 },
                 {
                     "source": "Engineer",
-                    "target": "Plan",
-                    "relation": "creates"
+                    "target": "Requirement",
+                    "relation": "refines"
+                },
+                {
+                    "source": "Engineer",
+                    "target": "Code",
+                    "relation": "implements"
+                },
+                {
+                    "source": "Engineer",
+                    "target": "Code",
+                    "relation": "verifies"
                 }
             ]
         },
@@ -55,10 +35,6 @@
             "agents": [
                 {
                     "role": "ProductManager",
-                    "config_ref": "agents/engineer.json"
-                },
-                {
-                    "role": "Architect",
                     "config_ref": "agents/engineer.json"
                 },
                 {

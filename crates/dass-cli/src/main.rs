@@ -164,7 +164,7 @@ async fn main() -> Result<()> {
     println!("{}", style("---------------------------").dim());
 
     println!("{}", style("Running in LIVE MODE (calling AI CLI)").green());
-    let client = ShellCliClient::new("gemini")
+    let client = ShellCliClient::new("gemini", work_dir_path.to_string_lossy().to_string())
         .with_yolo(args.yes)
         .with_model(args.model.clone());
 

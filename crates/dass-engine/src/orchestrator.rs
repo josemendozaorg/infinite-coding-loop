@@ -2,9 +2,18 @@ use crate::agents::cli_client::AiCliClient;
 use crate::agents::generic::GenericAgent;
 
 use crate::domain::types::AgentRole;
-use crate::graph::DependencyGraph;
 use crate::graph::executor::{GraphExecutor, InMemoryExecutor, Task};
+use crate::graph::{DependencyGraph, RelationCategory};
 use anyhow::Result;
+use std::collections::HashMap;
+
+#[derive(Debug, Clone)]
+pub struct ActionPlan {
+    pub agent: String,
+    pub target: String,
+    pub relation: String,
+    pub category: RelationCategory,
+}
 
 pub struct Orchestrator<C: AiCliClient + Clone + Send + Sync + 'static> {
     pub app_id: String,
@@ -12,6 +21,11 @@ pub struct Orchestrator<C: AiCliClient + Clone + Send + Sync + 'static> {
     pub work_dir: Option<String>,
     // New Graph Components
     executor: InMemoryExecutor,
+    // Tracking produced artifacts (State)
+    pub artifacts: HashMap<String, serde_json::Value>, // EntityKind -> Last Produced Value
+    pub verification_feedback: HashMap<String, String>, // Target -> Feedback
+    pub verified_artifacts: std::collections::HashSet<String>, // Tracks those with score 1.0
+    max_iterations: usize,
     // Marker for the client generic, or we can store it if needed later
     _client: std::marker::PhantomData<C>,
 }
@@ -42,45 +56,33 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         let mut executor = InMemoryExecutor::new(graph);
 
         // Dynamic Registration from Graph
-        // Collect roles first to avoid borrowing conflict
-        let loaded_roles: Vec<String> = executor.graph.loaded_agents.keys().cloned().collect();
+        // Collect roles and configs first to avoid borrowing conflict
+        let agent_data: Vec<(String, String)> = executor
+            .graph
+            .loaded_agents
+            .iter()
+            .map(|(r, c)| (r.clone(), c.clone()))
+            .collect();
 
-        for role_str in loaded_roles {
-            // Map string role to AgentRole Enum
-            // In a real implementation this would be more robust or fully string-based
-            let role_enum = match role_str.as_str() {
-                "ProductManager" => Some(AgentRole::ProductManager),
-                "Architect" => Some(AgentRole::Architect),
-                "Engineer" => Some(AgentRole::Engineer),
-                "QA" => Some(AgentRole::QA),
-                "Manager" => Some(AgentRole::Manager),
-                _ => None,
-            };
+        for (role_str, config_json) in agent_data {
+            let role = AgentRole::from(role_str);
 
-            if let Some(r) = role_enum {
-                // Parse Config
-                let config_json = executor.graph.loaded_agents.get(&role_str).unwrap();
-                let system_prompt =
-                    if let Ok(v) = serde_json::from_str::<serde_json::Value>(config_json) {
-                        v.get("system_prompt")
-                            .and_then(|t| t.as_str())
-                            .unwrap_or("")
-                            .to_string()
-                    } else {
-                        "".to_string()
-                    };
+            // Parse Config
+            let system_prompt =
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&config_json) {
+                    v.get("system_prompt")
+                        .and_then(|t| t.as_str())
+                        .unwrap_or("")
+                        .to_string()
+                } else {
+                    "".to_string()
+                };
 
-                executor.register_agent(Box::new(GenericAgent::new(
-                    client.clone(),
-                    r,
-                    system_prompt,
-                )));
-            } else {
-                eprintln!(
-                    "Warning: Unknown agent role '{}' in configuration",
-                    role_str
-                );
-            }
+            executor.register_agent(Box::new(GenericAgent::new(
+                client.clone(),
+                role,
+                system_prompt,
+            )));
         }
 
         Ok(Self {
@@ -88,132 +90,225 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             app_name,
             work_dir: Some(work_dir.to_string_lossy().to_string()),
             executor,
+            artifacts: HashMap::new(),
+            verification_feedback: HashMap::new(),
+            verified_artifacts: std::collections::HashSet::new(),
+            max_iterations: 10,
             _client: std::marker::PhantomData,
         })
     }
 
     pub async fn run(&mut self, ui: &impl crate::interaction::UserInteraction) -> Result<()> {
-        ui.log_info("Starting Graph-Driven Orchestration...");
+        ui.log_info("Starting Generic Graph-Driven Orchestration...");
 
-        // 1. Determine Goal (e.g., Implement Feature)
-        let feature_idea = ui
+        // 1. Initial Input
+        let initial_goal = ui
             .ask_for_feature("What feature do you want to build?")
             .await?;
-        if feature_idea.is_empty() {
+        if initial_goal.is_empty() {
             return Ok(());
         }
 
-        // 2. Query Graph for Dependencies of "SoftwareApplication" -> we need "Feature"
-        // In our Metamodel: SoftwareApplication contains Feature.
-        // Agent creates Feature.
+        // Feed initial input as a "Requirement" (In a real system, this would be a "SoftwareApplication" signal)
+        self.artifacts.insert(
+            "FeatureIdea".to_string(),
+            serde_json::json!({ "goal": initial_goal }),
+        );
 
-        // This is a simplified "Goal Seeking" loop
-        let _goal = "Feature";
+        // 2. Generic Execution Loop (State Machine)
+        let mut iterations = 0;
 
-        ui.start_step("Resolving Dependencies for Feature...");
+        while iterations < self.max_iterations {
+            iterations += 1;
+            ui.start_step(&format!(
+                "Iteration {} - Evaluating Graph State...",
+                iterations
+            ));
 
-        // Example: The Orchestrator knows it needs a "Feature".
-        // It asks the Executor: "Who creates Feature?"
-        // Executor checks Graph -> "Agent".
+            let next_actions = self.identify_next_actions();
+            if next_actions.is_empty() {
+                ui.log_info("No more actions identified. Flow complete.");
+                break;
+            }
 
-        // In this Proof of Concept, we manually trigger the flow derived from the graph
+            for action in next_actions {
+                ui.log_info(&format!(
+                    "Dispatched Action: {} {} {}",
+                    action.agent, action.relation, action.target
+                ));
+                self.execute_action(action).await?;
+            }
+        }
 
-        let req_template = self
+        ui.end_step("Goal achieved or max iterations reached.");
+        Ok(())
+    }
+
+    fn identify_next_actions(&self) -> Vec<ActionPlan> {
+        let mut plans = Vec::new();
+
+        for edge_idx in self.executor.graph.graph.edge_indices() {
+            let (source_idx, target_idx) =
+                self.executor.graph.graph.edge_endpoints(edge_idx).unwrap();
+            let source_kind = &self.executor.graph.graph[source_idx];
+            let target_kind = &self.executor.graph.graph[target_idx];
+            let relation = self.executor.graph.graph.edge_weight(edge_idx).unwrap();
+            let category = RelationCategory::from_str(relation);
+
+            if self.executor.graph.is_agent(source_kind) {
+                match category {
+                    RelationCategory::Creation => {
+                        // Create if it doesn't exist
+                        if !self.artifacts.contains_key(target_kind) {
+                            plans.push(ActionPlan {
+                                agent: source_kind.clone(),
+                                target: target_kind.clone(),
+                                relation: relation.clone(),
+                                category,
+                            });
+                        }
+                    }
+                    RelationCategory::Verification => {
+                        // Verify if artifact exists but isn't already verified-perfect
+                        if self.artifacts.contains_key(target_kind)
+                            && !self.verified_artifacts.contains(target_kind)
+                            && !self.verification_feedback.contains_key(target_kind)
+                        {
+                            plans.push(ActionPlan {
+                                agent: source_kind.clone(),
+                                target: target_kind.clone(),
+                                relation: relation.clone(),
+                                category,
+                            });
+                        }
+                    }
+                    RelationCategory::Refinement => {
+                        // Refine if artifact exists AND we have feedback (indicating it needs work)
+                        if self.artifacts.contains_key(target_kind)
+                            && self.verification_feedback.contains_key(target_kind)
+                        {
+                            plans.push(ActionPlan {
+                                agent: source_kind.clone(),
+                                target: target_kind.clone(),
+                                relation: relation.clone(),
+                                category,
+                            });
+                        }
+                    }
+                    _ => {
+                        // All other categories (Context, Other) are informative only
+                        // and do not trigger ActionPlans.
+                    }
+                }
+            }
+        }
+
+        // Only return the first logically sound action for this iteration for this POC
+        if !plans.is_empty() {
+            vec![plans[0].clone()]
+        } else {
+            vec![]
+        }
+    }
+
+    async fn execute_action(&mut self, action: ActionPlan) -> Result<()> {
+        let agent_role = AgentRole::from(action.agent.as_str());
+
+        // Find Input Context (Simplified: take all existing artifacts for now)
+        let mut context = serde_json::to_string_pretty(&self.artifacts).unwrap_or_default();
+
+        // If refining, inject feedback
+        if action.category == RelationCategory::Refinement {
+            if let Some(feedback) = self.verification_feedback.get(&action.target) {
+                context = format!("{}\n\n### FEEDBACK FOR REFINEMENT:\n{}", context, feedback);
+            }
+        }
+
+        let prompt_template = self
             .executor
             .graph
-            .get_prompt_template("ProductManager", "creates", "Requirement")
-            .map(|t| t.replace("{{source_content}}", &feature_idea))
-            .map(|t| self.enhance_prompt(t, "Requirements", "requirements.yaml"));
+            .get_prompt_template(&action.agent, &action.relation, &action.target)
+            .unwrap_or_else(|| {
+                format!(
+                    "Perform {} on {} based on the context.",
+                    action.relation, action.target
+                )
+            });
 
-        let req_task = Task {
-            id: "task_req_001".to_string(),
-            description: format!("Analyze request: {}", feature_idea),
+        let final_prompt = prompt_template
+            .replace("{{source_content}}", &context)
+            .replace("{{source}}", &action.agent)
+            .replace("{{relation}}", &action.relation)
+            .replace("{{target}}", &action.target);
+
+        let enhanced_prompt = self.enhance_prompt(
+            final_prompt,
+            &action.target,
+            &format!("{}.json", action.target.to_lowercase()),
+        );
+
+        let task = Task {
+            id: format!("task_{}_{}", action.relation, action.target),
+            description: format!("{} {}", action.relation, action.target),
             inputs: vec![],
-            prompt: req_template,
+            prompt: Some(enhanced_prompt),
         };
-        // The InMemoryExecutor currently returns a dummy artifact
-        let _req_artifact = self
-            .executor
-            .dispatch_agent(AgentRole::ProductManager, req_task)
-            .await?;
-        ui.log_info("Product Manager produced Requirements");
 
-        // Step 2: Create DesignSpec (Agent: Architect)
-        let spec_template = self
-            .executor
-            .graph
-            .get_prompt_template("Architect", "creates", "DesignSpec")
-            .map(|t| {
-                t.replace(
-                    "{{source_content}}",
-                    &serde_json::to_string_pretty(&_req_artifact).unwrap_or_default(),
-                )
-            })
-            .map(|t| self.enhance_prompt(t, "DesignSpec", "spec.json"));
+        let result = self.executor.dispatch_agent(agent_role, task).await?;
 
-        let spec_task = Task {
-            id: "task_spec_001".to_string(),
-            description: "Design technical specification".to_string(),
-            inputs: vec!["task_req_001".to_string()],
-            prompt: spec_template,
-        };
-        let _spec_artifact = self
-            .executor
-            .dispatch_agent(AgentRole::Architect, spec_task)
-            .await?;
-        ui.log_info("Architect produced Design Spec");
+        // Semantic Result Handling
+        match action.category {
+            RelationCategory::Verification => {
+                // Verification results go to feedback map
+                let feedback = result
+                    .get("feedback")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| result.get("test_results").and_then(|v| v.as_str()))
+                    .unwrap_or("No detailed feedback provided.");
 
-        // Step 3: Create ProjectStructure (Agent: Architect)
-        let struc_template = self
-            .executor
-            .graph
-            .get_prompt_template("Architect", "creates", "ProjectStructure")
-            .map(|t| {
-                t.replace(
-                    "{{source_content}}",
-                    &serde_json::to_string_pretty(&_spec_artifact).unwrap_or_default(),
-                )
-            })
-            .map(|t| self.enhance_prompt(t, "ProjectStructure", "project_structure.json"));
+                let score = result.get("score").and_then(|v| v.as_f64()).unwrap_or(1.0);
 
-        let struc_task = Task {
-            id: "task_struc_001".to_string(),
-            description: "Define directory structure".to_string(),
-            inputs: vec!["task_spec_001".to_string()],
-            prompt: struc_template,
-        };
-        let _struc_artifact = self
-            .executor
-            .dispatch_agent(AgentRole::Architect, struc_task)
-            .await?;
-        ui.log_info("Architect defined Project Structure");
+                if score < 1.0 {
+                    self.verification_feedback
+                        .insert(action.target.clone(), feedback.to_string());
+                    self.verified_artifacts.remove(&action.target);
+                } else {
+                    // Passed! Clear feedback and mark as verified
+                    self.verification_feedback.remove(&action.target);
+                    self.verified_artifacts.insert(action.target.clone());
+                }
+            }
+            RelationCategory::Refinement | RelationCategory::Creation => {
+                // Validate Result against Schema (only for artifacts, not necessarily for verification reports yet)
+                if let Err(e) = self
+                    .executor
+                    .graph
+                    .validate_artifact(&action.target, &result)
+                {
+                    return Err(anyhow::anyhow!(
+                        "Artifact validation failed for {}: {}. Result: {}",
+                        action.target,
+                        e,
+                        result
+                    ));
+                }
 
-        // Step 4: Create Plan (Agent: Engineer)
-        let plan_template = self
-            .executor
-            .graph
-            .get_prompt_template("Engineer", "creates", "Plan")
-            .map(|t| {
-                t.replace(
-                    "{{source_content}}",
-                    &serde_json::to_string_pretty(&_spec_artifact).unwrap_or_default(),
-                )
-            })
-            .map(|t| self.enhance_prompt(t, "Plan", "plan.json"));
+                self.artifacts.insert(action.target.clone(), result.clone());
 
-        let plan_task = Task {
-            id: "task_plan_001".to_string(),
-            description: "Create implementation plan".to_string(),
-            inputs: vec!["task_spec_001".to_string()],
-            prompt: plan_template,
-        };
-        let _plan_artifact = self
-            .executor
-            .dispatch_agent(AgentRole::Engineer, plan_task)
-            .await?;
-        ui.log_info("Engineer created Plan");
+                // If it was a refinement or creation, it's no longer "verified"
+                self.verified_artifacts.remove(&action.target);
 
-        ui.end_step("Pipeline Complete (Graph-Driven)");
+                // If it was a refinement, we can clear the feedback
+                if action.category == RelationCategory::Refinement {
+                    self.verification_feedback.remove(&action.target);
+                }
+            }
+            _ => {
+                // Other or Context categories - should not be triggered by scheduler normally
+                self.artifacts.insert(action.target.clone(), result);
+            }
+        }
+
         Ok(())
     }
 
