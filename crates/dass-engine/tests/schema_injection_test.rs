@@ -118,7 +118,7 @@ fn test_agent_loading_integration() {
                 "agents": [
                     {
                         "role": { "name": "ProductManager" },
-                        "config_ref": "agents/product_manager.json"
+                        "config_ref": "agent/system_prompt/product_manager.md"
                     }
                 ]
             }
@@ -134,7 +134,7 @@ fn test_agent_loading_integration() {
     );
     let config = graph.loaded_agents.get("ProductManager").unwrap();
     assert!(
-        config.contains("ProductManager"),
+        config.contains("Product Manager"),
         "Config content should be loaded"
     );
 }

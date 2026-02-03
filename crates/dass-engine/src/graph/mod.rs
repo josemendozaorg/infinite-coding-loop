@@ -144,17 +144,17 @@ impl DependencyGraph {
         let root =
             base_path.unwrap_or_else(|| std::path::Path::new("ontology-software-engineering"));
 
-        // 1. Load All Schemas recursively from schemas/
-        let schema_root = root.join("schemas");
+        // 1. Load All Schemas recursively from artifact/schema/
+        let schema_root = root.join("artifact/schema");
         let mut schema_files = Vec::new();
         Self::find_json_files(&schema_root, &mut schema_files);
 
         for path in schema_files {
             if let Ok(content) = std::fs::read_to_string(&path) {
                 // Determine a key for the schema.
-                // If it's in schemas/entities/xxx.schema.json, the key is "xxx"
+                // If it's in artifact/schema/xxx.schema.json, the key is "xxx"
                 if let Some(parent) = path.parent() {
-                    if parent.ends_with("entities") {
+                    if parent.ends_with("schema") {
                         if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
                             let entity_kind_snake = file_stem.trim_end_matches(".schema");
                             dg.schemas
@@ -212,7 +212,7 @@ impl DependencyGraph {
 
                 // Infer Prompt Path
                 let prompt_filename = format!("{}_{}_{}.md", source_str, relation_str, target_str);
-                let p = root.join("prompts").join(&prompt_filename);
+                let p = root.join("relationship/prompt").join(&prompt_filename);
 
                 let paths_to_try = vec![
                     p.clone(),

@@ -8,7 +8,7 @@ mod tests {
     #[test]
     fn test_artifact_validation() {
         let dir = tempdir().expect("Failed to create temp dir");
-        let entities_dir = dir.path().join("schemas/entities");
+        let entities_dir = dir.path().join("artifact/schema");
         fs::create_dir_all(&entities_dir).expect("Failed to create entities dir");
 
         let schema = json!({

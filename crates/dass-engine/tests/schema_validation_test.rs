@@ -11,18 +11,17 @@ fn validate_all_schemas_and_configs() {
     // Navigate to workspace root from crates/dass-engine
     let workspace_root = Path::new(manifest_dir).parent().unwrap().parent().unwrap();
     let domain_ontology_dir = workspace_root.join("ontology-software-engineering");
-    let schemas_dir = domain_ontology_dir.join("schemas");
-    let agents_dir = domain_ontology_dir.join("agents");
-    let engine_meta_dir = Path::new(manifest_dir).join("ontology/schemas/meta");
+    let artifact_schema_dir = domain_ontology_dir.join("artifact/schema");
+    let artifact_schema_meta_dir = artifact_schema_dir.join("meta");
 
     // 1. Identify all schemas
     let mut schema_files = Vec::new();
-    find_files(&schemas_dir, "schema.json", &mut schema_files);
+    find_files(&artifact_schema_dir, "schema.json", &mut schema_files);
 
     assert!(
         !schema_files.is_empty(),
-        "No schemas found in {:?}",
-        schemas_dir
+        "No schemas found in {:?} or its subdirectories",
+        artifact_schema_dir
     );
 
     // A. Validate Schema Integrity
@@ -37,82 +36,52 @@ fn validate_all_schemas_and_configs() {
         }
     }
 
-    // B. Validate Agent Configs
+    // B. Validate Cross-References (Pre-load known schemas)
     let mut options = jsonschema::JSONSchema::options();
 
-    // Pre-load base, taxonomy, and meta-schemas
-    let base_path = schemas_dir.join("base.schema.json");
-    let taxonomy_path = schemas_dir.join("taxonomy.schema.json");
-    let meta_base_path = engine_meta_dir.join("base.schema.json");
-    let meta_ontology_path = engine_meta_dir.join("ontology.schema.json");
-    let meta_agent_path = engine_meta_dir.join("agent.schema.json");
-
-    let base_json: Value = serde_json::from_str(&fs::read_to_string(base_path).unwrap()).unwrap();
-    let taxonomy_json: Value =
-        serde_json::from_str(&fs::read_to_string(taxonomy_path).unwrap()).unwrap();
-    let meta_base_json: Value =
-        serde_json::from_str(&fs::read_to_string(meta_base_path).unwrap()).unwrap();
-    let meta_ontology_json: Value =
-        serde_json::from_str(&fs::read_to_string(meta_ontology_path).unwrap()).unwrap();
-    let meta_agent_json: Value =
-        serde_json::from_str(&fs::read_to_string(meta_agent_path).unwrap()).unwrap();
-
-    options.with_document(
-        "https://infinite-coding-loop.dass/schemas/base.schema.json".to_string(),
-        base_json,
-    );
-    options.with_document(
-        "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json".to_string(),
-        taxonomy_json,
-    );
-    options.with_document(
-        "https://infinite-coding-loop.dass/schemas/meta/base.schema.json".to_string(),
-        meta_base_json,
-    );
-    options.with_document(
-        "https://infinite-coding-loop.dass/schemas/meta/ontology.schema.json".to_string(),
-        meta_ontology_json,
-    );
-    options.with_document(
-        "https://infinite-coding-loop.dass/schemas/meta/agent.schema.json".to_string(),
-        meta_agent_json,
-    );
-
-    let config_schema_path = schemas_dir.join("agent_config.schema.json");
-    let config_schema_json: Value =
-        serde_json::from_str(&fs::read_to_string(config_schema_path).unwrap()).unwrap();
-
-    let agent_validator = options
-        .compile(&config_schema_json)
-        .expect("Failed to compile agent_config schema");
-
-    let mut agent_files = Vec::new();
-    find_files(&agents_dir, ".json", &mut agent_files);
-
-    assert!(
-        !agent_files.is_empty(),
-        "No agent configs found in {:?}",
-        agents_dir
-    );
-
-    for agent_path in agent_files {
-        let content = fs::read_to_string(&agent_path).unwrap();
-        let instance: Value = serde_json::from_str(&content)
-            .unwrap_or_else(|_| panic!("Failed to parse agent JSON {:?}", agent_path));
-
-        if let Err(errors) = agent_validator.validate(&instance) {
-            // Explicitly collect errors to string to satisfy type inference
-            let mut err_msgs = Vec::new();
-            for e in errors {
-                err_msgs.push(e.to_string());
-            }
-            panic!(
-                "Agent config invalid {:?}:\n{}",
-                agent_path,
-                err_msgs.join("\n")
-            );
-        }
+    // Load Taxonomy
+    let taxonomy_path = artifact_schema_dir.join("taxonomy.schema.json");
+    if taxonomy_path.exists() {
+        let taxonomy_json: Value =
+            serde_json::from_str(&fs::read_to_string(taxonomy_path).unwrap()).unwrap();
+        options.with_document(
+            "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json".to_string(),
+            taxonomy_json,
+        );
     }
+
+    // Load Meta Schemas
+    let meta_base_path = artifact_schema_meta_dir.join("base.schema.json");
+    if meta_base_path.exists() {
+        let meta_base_json: Value =
+            serde_json::from_str(&fs::read_to_string(meta_base_path).unwrap()).unwrap();
+        options.with_document(
+            "https://infinite-coding-loop.dass/schemas/meta/base.schema.json".to_string(),
+            meta_base_json,
+        );
+    }
+
+    let meta_ontology_path = artifact_schema_meta_dir.join("ontology.schema.json");
+    if meta_ontology_path.exists() {
+        let meta_ontology_json: Value =
+            serde_json::from_str(&fs::read_to_string(meta_ontology_path).unwrap()).unwrap();
+        options.with_document(
+            "https://infinite-coding-loop.dass/schemas/meta/ontology.schema.json".to_string(),
+            meta_ontology_json,
+        );
+    }
+
+    let meta_agent_path = artifact_schema_meta_dir.join("agent.schema.json");
+    if meta_agent_path.exists() {
+        let meta_agent_json: Value =
+            serde_json::from_str(&fs::read_to_string(meta_agent_path).unwrap()).unwrap();
+        options.with_document(
+            "https://infinite-coding-loop.dass/schemas/meta/agent.schema.json".to_string(),
+            meta_agent_json,
+        );
+    }
+
+    // Note: Agent config validation skipped as agent configs are now Markdown definitions rather than JSON.
 }
 
 fn find_files(dir: &Path, suffix: &str, results: &mut Vec<PathBuf>) {
