@@ -10,7 +10,7 @@ import ReactFlow, {
 } from 'reactflow';
 import type { Connection, Edge, Node } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Save, FileJson, Share2, AlignCenter, Box, Bot, Network, FileText } from 'lucide-react';
+import { Save, FileJson, Share2, AlignCenter, Box, Bot, FileText } from 'lucide-react';
 import { loadOntology } from './services/schemaService';
 
 
@@ -137,13 +137,21 @@ const App: React.FC = () => {
           'ProductOwner', 'Developer', 'DevOps', 'ProjectManager', 'BusinessAnalyst'
         ]);
 
+        const ARTIFACT_KINDS = new Set([
+          'Artifact',
+          'SourceFile', 'DesignSpec', 'Plan', 'TestCase', 'TestResult', 'Standard',
+          'Observation', 'Persona', 'TechnologyStack', 'Tool', 'ArchitecturePattern',
+          'ProjectStructure', 'ArchitectureComponent', 'Command', 'DataModel',
+          'UserStory', 'AcceptanceCriteria', 'UIDesign', 'SoftwareArchitecture',
+          'LogicalDataModel', 'PhysicalDataModel', 'OpenApiSpec', 'DomainEventSpec',
+          'ImplementationPlan', 'UserStoryImplementationPlan', 'Code', 'UnitTest'
+        ]);
+
         // ... existing initialization of nodes/edges ...
         const initialNodes: Node[] = data.entities.map((entity) => {
           const isRoot = entity.kind === 'SoftwareApplication';
           const isAgent = AGENT_KINDS.has(entity.kind);
-          const isArtifact = entity.kind === 'Artifact';
-          const degree = degrees[entity.kind] || 0;
-          const isHub = degree >= 4; // Arbitrary threshold for "High Connectivity"
+          const isArtifact = ARTIFACT_KINDS.has(entity.kind);
 
           return {
             id: entity.kind,
@@ -153,7 +161,6 @@ const App: React.FC = () => {
                   {isRoot && <Box size={16} color="#58a6ff" />}
                   {isAgent && <Bot size={16} color="#7ee787" />}
                   {isArtifact && <FileText size={16} color="#79c0ff" />}
-                  {isHub && !isRoot && !isAgent && !isArtifact && <Network size={16} color="#d2a8ff" />}
                   <span>{entity.kind}</span>
                 </div>
               ),

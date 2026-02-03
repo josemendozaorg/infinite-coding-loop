@@ -553,7 +553,11 @@
                 "LogicalDataModel",
                 "PhysicalDataModel",
                 "OpenApiSpec",
-                "DomainEventSpec"
+                "DomainEventSpec",
+                "ImplementationPlan",
+                "UserStoryImplementationPlan",
+                "Code",
+                "UnitTest"
             ]
         },
         "RelationshipType": {
