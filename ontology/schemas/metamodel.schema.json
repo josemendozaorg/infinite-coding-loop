@@ -95,37 +95,37 @@
                 {
                     "source": "SoftwareApplication",
                     "target": "ProductManager",
-                    "relation": "assigned"
+                    "relation": "uses"
                 },
                 {
                     "source": "SoftwareApplication",
                     "target": "Architect",
-                    "relation": "assigned"
+                    "relation": "uses"
                 },
                 {
                     "source": "SoftwareApplication",
                     "target": "Developer",
-                    "relation": "assigned"
+                    "relation": "uses"
                 },
                 {
                     "source": "SoftwareApplication",
                     "target": "Tester",
-                    "relation": "assigned"
+                    "relation": "uses"
                 },
                 {
                     "source": "SoftwareApplication",
                     "target": "DevOps",
-                    "relation": "assigned"
+                    "relation": "uses"
                 },
                 {
                     "source": "SoftwareApplication",
                     "target": "ProjectManager",
-                    "relation": "assigned"
+                    "relation": "uses"
                 },
                 {
                     "source": "SoftwareApplication",
                     "target": "BusinessAnalyst",
-                    "relation": "assigned"
+                    "relation": "uses"
                 },
                 {
                     "source": "TDD",

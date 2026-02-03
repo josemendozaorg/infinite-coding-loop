@@ -271,9 +271,6 @@
         "Kind_CyclomaticLowComplexity": {
             "const": "CyclomaticLowComplexity"
         },
-        "Rel_Analyzes": {
-            "const": "analyzes"
-        },
         "Rel_Contains": {
             "const": "contains"
         },
@@ -289,21 +286,6 @@
         "Rel_Implements": {
             "const": "implements"
         },
-        "Rel_Mitigates": {
-            "const": "mitigates"
-        },
-        "Rel_Refines": {
-            "const": "refines"
-        },
-        "Rel_Specifies": {
-            "const": "specifies"
-        },
-        "Rel_Targets": {
-            "const": "targets"
-        },
-        "Rel_Triggers": {
-            "const": "triggers"
-        },
         "Rel_Uses": {
             "const": "uses"
         },
@@ -313,17 +295,8 @@
         "Rel_Requires": {
             "const": "requires"
         },
-        "Rel_Includes": {
-            "const": "includes"
-        },
-        "Rel_CanBe": {
-            "const": "canBe"
-        },
         "Rel_IsA": {
             "const": "isA"
-        },
-        "Rel_CanHave": {
-            "const": "canHave"
         },
         "Rel_Applies": {
             "const": "applies"
@@ -567,34 +540,16 @@
                     "$ref": "#/$defs/Rel_Contains"
                 },
                 {
-                    "$ref": "#/$defs/Rel_Refines"
-                },
-                {
                     "$ref": "#/$defs/Rel_Implements"
                 },
                 {
                     "$ref": "#/$defs/Rel_Verifies"
                 },
                 {
-                    "$ref": "#/$defs/Rel_Specifies"
-                },
-                {
                     "$ref": "#/$defs/Rel_Constrains"
                 },
                 {
-                    "$ref": "#/$defs/Rel_Triggers"
-                },
-                {
-                    "$ref": "#/$defs/Rel_Analyzes"
-                },
-                {
                     "$ref": "#/$defs/Rel_Defines"
-                },
-                {
-                    "$ref": "#/$defs/Rel_Mitigates"
-                },
-                {
-                    "$ref": "#/$defs/Rel_Targets"
                 },
                 {
                     "$ref": "#/$defs/Rel_Uses"
@@ -606,16 +561,7 @@
                     "$ref": "#/$defs/Rel_Requires"
                 },
                 {
-                    "$ref": "#/$defs/Rel_Includes"
-                },
-                {
-                    "$ref": "#/$defs/Rel_CanBe"
-                },
-                {
                     "$ref": "#/$defs/Rel_IsA"
-                },
-                {
-                    "$ref": "#/$defs/Rel_CanHave"
                 },
                 {
                     "$ref": "#/$defs/Rel_Applies"

@@ -1,5 +1,5 @@
 You are a System Analyst.
-Your task is to ANALYZE the current Software Application state:
+Your task is to USE and evaluate the current Software Application state:
 
 {{context}}
 

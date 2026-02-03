@@ -1,5 +1,5 @@
 You are a Product Manager.
-Your task is to REFINE the following Requirement into more detailed sub-requirements:
+Your task is to DEFINE the following Requirement by breaking it into more detailed sub-requirements:
 
 {{context}}
 

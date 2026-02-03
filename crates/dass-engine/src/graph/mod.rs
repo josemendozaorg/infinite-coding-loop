@@ -22,8 +22,8 @@ impl RelationCategory {
         match s {
             "creates" | "implements" => Self::Creation,
             "verifies" => Self::Verification,
-            "refines" | "improves" => Self::Refinement,
-            "uses" | "specifies" | "targets" | "contains" | "defines" | "constrains" => {
+            "improves" => Self::Refinement,
+            "uses" | "contains" | "defines" | "constrains" | "requires" | "isA" | "applies" => {
                 Self::Context
             }
             _ => Self::Other,
@@ -399,8 +399,8 @@ mod tests {
             "$defs": {
                 "GraphRules": {
                     "rules": [
-                        { "source": "Agent", "target": "Feature", "relation": "produces" },
-                        { "source": "Feature", "target": "Requirement", "relation": "has_part" }
+                        { "source": "Agent", "target": "Feature", "relation": "creates" },
+                        { "source": "Feature", "target": "Requirement", "relation": "contains" }
                     ]
                 }
             }
@@ -409,7 +409,7 @@ mod tests {
         let graph = DependencyGraph::load_from_metamodel(json, None).expect("Failed to load graph");
 
         // Query: Who produces a Feature?
-        let creators = graph.get_dependencies("Feature", "produces");
+        let creators = graph.get_dependencies("Feature", "creates");
         assert_eq!(creators, vec!["Agent"]);
 
         // Query: What verifies a Feature? (None in this graph)

@@ -182,11 +182,22 @@ const App: React.FC = () => {
           };
         });
 
-        const initialEdges: Edge[] = data.rules.map((rule, index) => ({
-          id: `e-${rule.source}-${rule.target}-${index}`,
-          source: rule.source,
-          target: rule.target,
-          label: rule.relation,
+        const edgeMap: Record<string, { source: string; target: string; relations: string[] }> = {};
+        data.rules.forEach((rule) => {
+          const key = `${rule.source}->${rule.target}`;
+          if (!edgeMap[key]) {
+            edgeMap[key] = { source: rule.source, target: rule.target, relations: [] };
+          }
+          if (!edgeMap[key].relations.includes(rule.relation)) {
+            edgeMap[key].relations.push(rule.relation);
+          }
+        });
+
+        const initialEdges: Edge[] = Object.values(edgeMap).map((value) => ({
+          id: `e-${value.source}-${value.target}`,
+          source: value.source,
+          target: value.target,
+          label: value.relations.sort().join(', '),
           animated: true,
           style: { stroke: '#58a6ff' },
           labelStyle: { fill: '#8b949e', fontSize: 10, fontWeight: 700 },
