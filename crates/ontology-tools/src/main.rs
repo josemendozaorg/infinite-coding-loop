@@ -19,19 +19,35 @@ struct Cli {
 enum Commands {
     /// Convert JSON Schema metamodel to Turtle ontology
     Convert {
-        #[arg(short, long, default_value = "ontology/schemas/metamodel.schema.json")]
+        #[arg(
+            short,
+            long,
+            default_value = "ontology-software-engineering/schemas/metamodel.schema.json"
+        )]
         input: PathBuf,
-        #[arg(short, long, default_value = "ontology/ontology.ttl")]
+        #[arg(
+            short,
+            long,
+            default_value = "ontology-software-engineering/ontology.ttl"
+        )]
         output: PathBuf,
     },
     /// Verify a Turtle file syntax
     Verify {
-        #[arg(short, long, default_value = "ontology/ontology.ttl")]
+        #[arg(
+            short,
+            long,
+            default_value = "ontology-software-engineering/ontology.ttl"
+        )]
         input: PathBuf,
     },
     /// Validate the graph topology of the metamodel
     Validate {
-        #[arg(short, long, default_value = "ontology/schemas/metamodel.schema.json")]
+        #[arg(
+            short,
+            long,
+            default_value = "ontology-software-engineering/schemas/metamodel.schema.json"
+        )]
         input: PathBuf,
     },
 }

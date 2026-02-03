@@ -2,17 +2,14 @@
     "$id": "https://infinite-coding-loop.dass/schemas/agent_config.schema.json",
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "Agent Configuration Wrapper",
-    "description": "Validation wrapper for static agent definitions, inheriting from base primitives.",
+    "description": "Validation wrapper for agent definitions, inheriting from meta-ontology.",
     "allOf": [
         {
-            "$ref": "base.schema.json#/$defs/AgentConfig"
+            "$ref": "https://infinite-coding-loop.dass/schemas/meta/agent.schema.json"
         },
         {
             "properties": {
                 "kind": {
-                    "$ref": "taxonomy.schema.json#/$defs/EntityKind"
-                },
-                "role": {
                     "$ref": "taxonomy.schema.json#/$defs/EntityKind"
                 }
             }

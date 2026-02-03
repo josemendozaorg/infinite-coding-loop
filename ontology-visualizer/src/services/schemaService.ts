@@ -2,7 +2,7 @@ import type { OntologyData, EntityKind, RelationshipRule } from '../types';
 
 // In a real app, these would be fetched from an API or read via File System API
 // For this demo, we'll try to use the raw files if possible or mock them if fetch fails
-const BASE_PATH = '/@fs/home/dev/repos/infinite-coding-loop/ontology/schemas';
+const BASE_PATH = '/@fs/home/dev/repos/infinite-coding-loop/ontology-software-engineering/schemas';
 
 async function loadJSON(path: string) {
     const response = await fetch(`${BASE_PATH}/${path}`);

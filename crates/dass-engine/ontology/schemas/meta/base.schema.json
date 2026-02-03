@@ -1,0 +1,56 @@
+{
+    "$id": "https://infinite-coding-loop.dass/schemas/meta/base.schema.json",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Meta-Ontology Base Primitives",
+    "description": "Foundational definitions for any ontology compatible with the DASS engine.",
+    "type": "object",
+    "$defs": {
+        "MetaEntity": {
+            "type": "object",
+            "title": "Meta-Entity",
+            "description": "A node in the graph, identified by its name.",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The unique name or kind identifier for this entity."
+                }
+            }
+        },
+        "MetaVerb": {
+            "type": "object",
+            "title": "Meta-Verb",
+            "description": "An action or relationship type in the graph.",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "The name of the relationship type (e.g. 'creates')."
+                }
+            }
+        },
+        "MetaRelationship": {
+            "type": "object",
+            "required": [
+                "source",
+                "target",
+                "type"
+            ],
+            "properties": {
+                "source": {
+                    "$ref": "#/$defs/MetaEntity"
+                },
+                "target": {
+                    "$ref": "#/$defs/MetaEntity"
+                },
+                "type": {
+                    "$ref": "#/$defs/MetaVerb"
+                }
+            }
+        }
+    }
+}

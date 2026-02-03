@@ -1,0 +1,62 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://infinite-coding-loop.dass/schemas/metamodel.schema.json",
+    "title": "Software Engineering Metamodel (Complete + Agents)",
+    "description": "Strict execution graph mirroring the Orchestrator logic with Agents. Extends meta-ontology.",
+    "allOf": [
+        {
+            "$ref": "https://infinite-coding-loop.dass/schemas/meta/ontology.schema.json"
+        }
+    ],
+    "properties": {
+        "entities": {
+            "items": {
+                "$ref": "taxonomy.schema.json"
+            }
+        },
+        "relationships": {
+            "items": {
+                "$ref": "#/$defs/Relationship"
+            }
+        }
+    },
+    "$defs": {
+        "Rule": {
+            "allOf": [
+                {
+                    "$ref": "https://infinite-coding-loop.dass/schemas/meta/ontology.schema.json#/$defs/GraphRule"
+                },
+                {
+                    "properties": {
+                        "source": {
+                            "$ref": "taxonomy.schema.json#/$defs/EntityKind"
+                        },
+                        "target": {
+                            "$ref": "taxonomy.schema.json#/$defs/EntityKind"
+                        },
+                        "relation": {
+                            "$ref": "taxonomy.schema.json#/$defs/RelationshipType"
+                        }
+                    }
+                }
+            ]
+        },
+        "Relationship": {
+            "allOf": [
+                {
+                    "$ref": "base.schema.json#/$defs/Relationship"
+                },
+                {
+                    "properties": {
+                        "type": {
+                            "$ref": "taxonomy.schema.json#/$defs/RelationshipType"
+                        }
+                    }
+                }
+            ]
+        },
+        "AgentDefinition": {
+            "$ref": "https://infinite-coding-loop.dass/schemas/meta/ontology.schema.json#/$defs/AgentDefinition"
+        }
+    }
+}

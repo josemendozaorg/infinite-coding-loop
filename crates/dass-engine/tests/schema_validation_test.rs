@@ -10,8 +10,10 @@ fn validate_all_schemas_and_configs() {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     // Navigate to workspace root from crates/dass-engine
     let workspace_root = Path::new(manifest_dir).parent().unwrap().parent().unwrap();
-    let schemas_dir = workspace_root.join("ontology/schemas");
-    let agents_dir = workspace_root.join("ontology/agents");
+    let domain_ontology_dir = workspace_root.join("ontology-software-engineering");
+    let schemas_dir = domain_ontology_dir.join("schemas");
+    let agents_dir = domain_ontology_dir.join("agents");
+    let engine_meta_dir = Path::new(manifest_dir).join("ontology/schemas/meta");
 
     // 1. Identify all schemas
     let mut schema_files = Vec::new();
@@ -30,8 +32,6 @@ fn validate_all_schemas_and_configs() {
         let schema_json: Value = serde_json::from_str(&content)
             .unwrap_or_else(|_| panic!("Failed to parse JSON in {:?}", schema_path));
 
-        // Use fully qualified path check
-        // If this still fails, verify dependency.
         if let Err(e) = jsonschema::JSONSchema::compile(&schema_json) {
             panic!("Schema invalid {:?}: {}", schema_path, e);
         }
@@ -40,13 +40,22 @@ fn validate_all_schemas_and_configs() {
     // B. Validate Agent Configs
     let mut options = jsonschema::JSONSchema::options();
 
-    // Pre-load base and taxonomy
+    // Pre-load base, taxonomy, and meta-schemas
     let base_path = schemas_dir.join("base.schema.json");
     let taxonomy_path = schemas_dir.join("taxonomy.schema.json");
+    let meta_base_path = engine_meta_dir.join("base.schema.json");
+    let meta_ontology_path = engine_meta_dir.join("ontology.schema.json");
+    let meta_agent_path = engine_meta_dir.join("agent.schema.json");
 
     let base_json: Value = serde_json::from_str(&fs::read_to_string(base_path).unwrap()).unwrap();
     let taxonomy_json: Value =
         serde_json::from_str(&fs::read_to_string(taxonomy_path).unwrap()).unwrap();
+    let meta_base_json: Value =
+        serde_json::from_str(&fs::read_to_string(meta_base_path).unwrap()).unwrap();
+    let meta_ontology_json: Value =
+        serde_json::from_str(&fs::read_to_string(meta_ontology_path).unwrap()).unwrap();
+    let meta_agent_json: Value =
+        serde_json::from_str(&fs::read_to_string(meta_agent_path).unwrap()).unwrap();
 
     options.with_document(
         "https://infinite-coding-loop.dass/schemas/base.schema.json".to_string(),
@@ -55,6 +64,18 @@ fn validate_all_schemas_and_configs() {
     options.with_document(
         "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json".to_string(),
         taxonomy_json,
+    );
+    options.with_document(
+        "https://infinite-coding-loop.dass/schemas/meta/base.schema.json".to_string(),
+        meta_base_json,
+    );
+    options.with_document(
+        "https://infinite-coding-loop.dass/schemas/meta/ontology.schema.json".to_string(),
+        meta_ontology_json,
+    );
+    options.with_document(
+        "https://infinite-coding-loop.dass/schemas/meta/agent.schema.json".to_string(),
+        meta_agent_json,
     );
 
     let config_schema_path = schemas_dir.join("agent_config.schema.json");

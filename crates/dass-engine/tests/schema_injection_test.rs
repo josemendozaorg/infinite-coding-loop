@@ -16,9 +16,9 @@ fn test_schema_injection_integration() {
             "GraphRules": {
                 "rules": [
                     {
-                        "source": "Architect",
-                        "relation": "creates",
-                        "target": "DesignSpec"
+                        "source": { "name": "Architect" },
+                        "relation": { "name": "creates" },
+                        "target": { "name": "DesignSpec" }
                     }
                 ]
             },
@@ -27,10 +27,17 @@ fn test_schema_injection_integration() {
     }"#;
 
     // 2. Load the Graph
-    // This assumes we are running from the workspace root where `spec/` is accessible.
-    // If running via `cargo test`, we usually are.
-    let graph =
-        DependencyGraph::load_from_metamodel(metamodel_json, None).expect("Failed to load graph");
+    // Build path relative to workspace root
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let workspace_root = std::path::Path::new(manifest_dir)
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+    let ontology_path = workspace_root.join("ontology-software-engineering");
+
+    let graph = DependencyGraph::load_from_metamodel(metamodel_json, Some(&ontology_path))
+        .expect("Failed to load graph");
 
     // 3. Verify Schema Loaded
     assert!(
@@ -67,14 +74,14 @@ fn test_source_differentiation() {
             "GraphRules": {
                 "rules": [
                     {
-                        "source": "ProductManager",
-                        "relation": "creates",
-                        "target": "Requirement"
+                        "source": { "name": "ProductManager" },
+                        "relation": { "name": "creates" },
+                        "target": { "name": "Requirement" }
                     },
                     {
-                        "source": "ProductManager",
-                        "relation": "refines",
-                        "target": "Requirement"
+                        "source": { "name": "ProductManager" },
+                        "relation": { "name": "refines" },
+                        "target": { "name": "Requirement" }
                     }
                 ]
             }
@@ -110,7 +117,7 @@ fn test_agent_loading_integration() {
             "AgentDefinitions": {
                 "agents": [
                     {
-                        "role": "ProductManager",
+                        "role": { "name": "ProductManager" },
                         "config_ref": "agents/product_manager.json"
                     }
                 ]

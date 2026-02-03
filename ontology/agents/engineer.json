@@ -1,6 +1,0 @@
-{
-    "kind": "Engineer",
-    "role": "Engineer",
-    "system_prompt": "You are a Senior Software Engineer. Your goal is to implement features with clean, efficient, and tested code.",
-    "tools": []
-}

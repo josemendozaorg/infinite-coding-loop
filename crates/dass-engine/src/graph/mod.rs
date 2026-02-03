@@ -1,5 +1,4 @@
 use anyhow::Result;
-use jsonschema::JSONSchema;
 use petgraph::graph::DiGraph;
 use petgraph::graph::NodeIndex;
 use serde::{Deserialize, Serialize};
@@ -62,25 +61,30 @@ pub struct AgentDefinitions {
     pub agents: Vec<AgentDefinition>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetaEntity {
+    pub name: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AgentDefinition {
-    pub role: String,
+    pub role: MetaEntity,
     pub config_ref: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Rule {
-    pub source: String, // Entity Kind or Agent Role
-    pub target: String, // Entity Kind
-    pub relation: String,
+    pub source: MetaEntity,
+    pub target: MetaEntity,
+    pub relation: MetaEntity,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RelationshipDef {
-    pub source_id: String,
-    pub target_id: String,
+    pub source_id: MetaEntity,
+    pub target_id: MetaEntity,
     #[serde(rename = "type")]
-    pub rel_type: String,
+    pub rel_type: MetaEntity,
 }
 
 // 2. The In-Memory Graph
@@ -122,22 +126,50 @@ impl DependencyGraph {
         let def: GraphDefinition = serde_json::from_str(json_content)?;
         let mut dg = Self::new();
 
-        let root = base_path.unwrap_or_else(|| std::path::Path::new("ontology"));
+        // 1. Load Meta-Schemas from engine's internal directory (CARGO_MANIFEST_DIR/ontology/schemas/meta)
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let engine_meta_root = std::path::Path::new(manifest_dir).join("ontology/schemas/meta");
+        let mut meta_files = Vec::new();
+        Self::find_json_files(&engine_meta_root, &mut meta_files);
+        for path in meta_files {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(id) = json.get("$id").and_then(|v| v.as_str()) {
+                        dg.schemas.insert(id.to_string(), content);
+                    }
+                }
+            }
+        }
 
-        // 1. Load All Entity Schemas systematically
-        let schema_dir = root.join("schemas/entities");
-        if let Ok(entries) = std::fs::read_dir(&schema_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                    if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
-                        // "feature.schema" -> "Feature" (Simplified: we need to map snake_case to CamelCase)
-                        // Better: just load what we can and we'll fix the mapping or use the filename
-                        if let Ok(content) = std::fs::read_to_string(&path) {
-                            // Trim ".schema" from stem
+        let root =
+            base_path.unwrap_or_else(|| std::path::Path::new("ontology-software-engineering"));
+
+        // 1. Load All Schemas recursively from schemas/
+        let schema_root = root.join("schemas");
+        let mut schema_files = Vec::new();
+        Self::find_json_files(&schema_root, &mut schema_files);
+
+        for path in schema_files {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                // Determine a key for the schema.
+                // If it's in schemas/entities/xxx.schema.json, the key is "xxx"
+                if let Some(parent) = path.parent() {
+                    if parent.ends_with("entities") {
+                        if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
                             let entity_kind_snake = file_stem.trim_end_matches(".schema");
-                            dg.schemas.insert(entity_kind_snake.to_string(), content);
+                            dg.schemas
+                                .insert(entity_kind_snake.to_string(), content.clone());
                         }
+                    }
+                }
+
+                // Also store by $id and title if present for resolution
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(id) = json.get("$id").and_then(|v| v.as_str()) {
+                        dg.schemas.insert(id.to_string(), content.clone());
+                    }
+                    if let Some(title) = json.get("title").and_then(|v| v.as_str()) {
+                        dg.schemas.insert(title.to_string(), content.clone());
                     }
                 }
             }
@@ -159,15 +191,27 @@ impl DependencyGraph {
             }
         }
 
+        // 3. Load Instances (Relationships)
+        if let Some(relationships) = def.relationships {
+            for rel in relationships {
+                let s_idx = dg.get_or_create_node(&rel.source_id.name);
+                let t_idx = dg.get_or_create_node(&rel.target_id.name);
+                dg.graph.add_edge(s_idx, t_idx, rel.rel_type.name.clone());
+            }
+        }
+
         if let Some(defs) = def.definitions {
             for rule in defs.graph_rules.rules {
-                let s_idx = dg.get_or_create_node(&rule.source);
-                let t_idx = dg.get_or_create_node(&rule.target);
-                dg.graph.add_edge(s_idx, t_idx, rule.relation.clone());
+                let source_str = rule.source.name.clone();
+                let target_str = rule.target.name.clone();
+                let relation_str = rule.relation.name.clone();
+
+                let s_idx = dg.get_or_create_node(&source_str);
+                let t_idx = dg.get_or_create_node(&target_str);
+                dg.graph.add_edge(s_idx, t_idx, relation_str.clone());
 
                 // Infer Prompt Path
-                let prompt_filename =
-                    format!("{}_{}_{}.md", rule.source, rule.relation, rule.target);
+                let prompt_filename = format!("{}_{}_{}.md", source_str, relation_str, target_str);
                 let p = root.join("prompts").join(&prompt_filename);
 
                 let paths_to_try = vec![
@@ -187,18 +231,14 @@ impl DependencyGraph {
                 }
 
                 if found {
-                    let key = (
-                        rule.source.clone(),
-                        rule.relation.clone(),
-                        rule.target.clone(),
-                    );
+                    let key = (source_str, relation_str, target_str);
                     dg.prompt_templates.insert(key, content);
                 }
             }
             // Load Agent Definitions
             if let Some(agent_defs) = defs.agents {
                 for agent_def in agent_defs.agents {
-                    let role = agent_def.role.clone();
+                    let role = agent_def.role.name.clone();
                     dg.agent_roles.insert(role.clone());
                     // config_ref is usually "agents/engineer.json" -> relative to ontology root?
                     // In previous code it was used as is.
@@ -295,7 +335,19 @@ impl DependencyGraph {
             .ok_or_else(|| anyhow::anyhow!("No schema found for artifact kind: {}", kind))?;
 
         let schema_json: serde_json::Value = serde_json::from_str(schema_content)?;
-        let compiled = JSONSchema::compile(&schema_json)
+
+        // Build validator with all known schemas for resolution
+        let mut options = jsonschema::JSONSchema::options();
+        for (id, content) in &self.schemas {
+            if id.starts_with("http") {
+                if let Ok(sub_json) = serde_json::from_str::<serde_json::Value>(content) {
+                    options.with_document(id.to_string(), sub_json);
+                }
+            }
+        }
+
+        let compiled = options
+            .compile(&schema_json)
             .map_err(|e| anyhow::anyhow!("Failed to compile JSON schema for {}: {}", kind, e))?;
 
         if let Err(errors) = compiled.validate(data) {
@@ -332,6 +384,21 @@ impl DependencyGraph {
             let idx = self.graph.add_node(kind.to_string());
             self.kind_map.insert(kind.to_string(), idx);
             idx
+        }
+    }
+
+    fn find_json_files(dir: &std::path::Path, results: &mut Vec<std::path::PathBuf>) {
+        if dir.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        Self::find_json_files(&path, results);
+                    } else if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                        results.push(path);
+                    }
+                }
+            }
         }
     }
 
@@ -399,8 +466,8 @@ mod tests {
             "$defs": {
                 "GraphRules": {
                     "rules": [
-                        { "source": "Agent", "target": "Feature", "relation": "creates" },
-                        { "source": "Feature", "target": "Requirement", "relation": "contains" }
+                        { "source": { "name": "Agent" }, "target": { "name": "Feature" }, "relation": { "name": "creates" } },
+                        { "source": { "name": "Feature" }, "target": { "name": "Requirement" }, "relation": { "name": "contains" } }
                     ]
                 }
             }
@@ -425,8 +492,8 @@ mod tests {
             "$defs": {
                 "GraphRules": {
                     "rules": [
-                        { "source": "A", "target": "B", "relation": "rel" },
-                        { "source": "C", "target": "D", "relation": "rel" }
+                        { "source": { "name": "A" }, "target": { "name": "B" }, "relation": { "name": "rel" } },
+                        { "source": { "name": "C" }, "target": { "name": "D" }, "relation": { "name": "rel" } }
                     ]
                 }
             }
@@ -445,9 +512,9 @@ mod tests {
             "$defs": {
                 "GraphRules": {
                     "rules": [
-                        { "source": "A", "target": "B", "relation": "rel" },
-                        { "source": "B", "target": "A", "relation": "rel" },
-                        { "source": "C", "target": "D", "relation": "rel" }
+                        { "source": { "name": "A" }, "target": { "name": "B" }, "relation": { "name": "rel" } },
+                        { "source": { "name": "B" }, "target": { "name": "A" }, "relation": { "name": "rel" } },
+                        { "source": { "name": "C" }, "target": { "name": "D" }, "relation": { "name": "rel" } }
                     ]
                 }
             }
