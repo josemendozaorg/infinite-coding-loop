@@ -61,7 +61,7 @@ struct Metamodel {
 #[derive(Deserialize, Debug)]
 struct Defs {
     #[serde(rename = "GraphRules")]
-    graph_rules: GraphRulesWrapper,
+    graph_rules: Option<GraphRulesWrapper>,
     #[serde(rename = "AgentDefinitions")]
     agent_definitions: Option<AgentDefinitionsWrapper>,
 }
@@ -146,50 +146,52 @@ fn convert(input_path: &PathBuf, output_path: &PathBuf) -> anyhow::Result<()> {
     let mut properties = HashSet::new();
 
     // Process Rules
-    for rule in metamodel.defs.graph_rules.rules {
-        let s_iri = format!("{}{}", BASE_IRI, rule.source);
-        let t_iri = format!("{}{}", BASE_IRI, rule.target);
-        let r_iri = format!("{}{}", BASE_IRI, rule.relation);
+    if let Some(graph_rules) = metamodel.defs.graph_rules {
+        for rule in graph_rules.rules {
+            let s_iri = format!("{}{}", BASE_IRI, rule.source);
+            let t_iri = format!("{}{}", BASE_IRI, rule.target);
+            let r_iri = format!("{}{}", BASE_IRI, rule.relation);
 
-        // Declare Source Class
-        if classes.insert(rule.source.clone()) {
-            formatter.format(&Triple {
-                subject: Subject::NamedNode(NamedNode { iri: &s_iri }),
-                predicate: rdf_type,
-                object: Term::NamedNode(owl_class),
-            })?;
-        }
+            // Declare Source Class
+            if classes.insert(rule.source.clone()) {
+                formatter.format(&Triple {
+                    subject: Subject::NamedNode(NamedNode { iri: &s_iri }),
+                    predicate: rdf_type,
+                    object: Term::NamedNode(owl_class),
+                })?;
+            }
 
-        // Declare Target Class
-        if classes.insert(rule.target.clone()) {
-            formatter.format(&Triple {
-                subject: Subject::NamedNode(NamedNode { iri: &t_iri }),
-                predicate: rdf_type,
-                object: Term::NamedNode(owl_class),
-            })?;
-        }
+            // Declare Target Class
+            if classes.insert(rule.target.clone()) {
+                formatter.format(&Triple {
+                    subject: Subject::NamedNode(NamedNode { iri: &t_iri }),
+                    predicate: rdf_type,
+                    object: Term::NamedNode(owl_class),
+                })?;
+            }
 
-        // Declare Property
-        if properties.insert(rule.relation.clone()) {
+            // Declare Property
+            if properties.insert(rule.relation.clone()) {
+                formatter.format(&Triple {
+                    subject: Subject::NamedNode(NamedNode { iri: &r_iri }),
+                    predicate: rdf_type,
+                    object: Term::NamedNode(owl_obj_prop),
+                })?;
+            }
+
+            // Domain and Range (Loose enforcement: just stating it applies)
             formatter.format(&Triple {
                 subject: Subject::NamedNode(NamedNode { iri: &r_iri }),
-                predicate: rdf_type,
-                object: Term::NamedNode(owl_obj_prop),
+                predicate: rdfs_domain,
+                object: Term::NamedNode(NamedNode { iri: &s_iri }),
+            })?;
+
+            formatter.format(&Triple {
+                subject: Subject::NamedNode(NamedNode { iri: &r_iri }),
+                predicate: rdfs_range,
+                object: Term::NamedNode(NamedNode { iri: &t_iri }),
             })?;
         }
-
-        // Domain and Range (Loose enforcement: just stating it applies)
-        formatter.format(&Triple {
-            subject: Subject::NamedNode(NamedNode { iri: &r_iri }),
-            predicate: rdfs_domain,
-            object: Term::NamedNode(NamedNode { iri: &s_iri }),
-        })?;
-
-        formatter.format(&Triple {
-            subject: Subject::NamedNode(NamedNode { iri: &r_iri }),
-            predicate: rdfs_range,
-            object: Term::NamedNode(NamedNode { iri: &t_iri }),
-        })?;
     }
 
     // Process Agents
@@ -246,9 +248,45 @@ fn validate_graph(input_path: &PathBuf) -> anyhow::Result<()> {
     println!("Validating graph topology of {:?}", input_path);
 
     let content = std::fs::read_to_string(input_path)?;
-    match DependencyGraph::load_from_metamodel(&content, None) {
+    // Derive base_path from input_path (ignoring "schemas" or "artifact/schema" intermediate dirs if possible)
+    // The convention is that `input_path` is usually `ontology/artifact/schema/metamodel.schema.json`.
+    // The base path should be `ontology/`.
+    // Let's try to infer it. If input has parent, use it.
+    let base_path = input_path.parent().and_then(|p| {
+        // If parent is "schemas" or "artifact/schema", go up?
+        // Since `load_from_metamodel` expects `base_path` to be the root containing `agent/`, `relationship/` etc.
+        // If input is `.../ontology-software-engineering/artifact/schema/metamodel.schema.json`
+        // Parent: `artifact/schema`
+        // Parent: `artifact`
+        // Parent: `ontology-software-engineering` (This is what we want)
+
+        // Simple heuristic: walk up until we see "agent" or "artifact" folders?
+        // Or just simpler: Pass the parent of the input file, and let the User specify the root?
+        // Or if the user passes `.../metamodel.schema.json`, and we assume standard structure.
+
+        // Let's try to assume standard simple structure first:
+        // If file is in `artifact/schema`, we go up 2 levels.
+        // If file is in `schemas` (legacy), we go up 1 level.
+        // If indeterminate, use parent.
+
+        let mut current = p;
+        if current.ends_with("schema") {
+            current = current.parent().unwrap_or(current);
+        }
+        if current.ends_with("artifact") {
+            current = current.parent().unwrap_or(current);
+        }
+        if current.ends_with("schemas") {
+            current = current.parent().unwrap_or(current);
+        }
+        Some(current)
+    });
+
+    println!("Using base path: {:?}", base_path);
+
+    match DependencyGraph::load_from_metamodel(&content, base_path) {
         Ok(_) => {
-            println!("✅ Graph topology is VALID (Single root, all reachable).");
+            println!("✅ Graph topology and Schema are VALID.");
             Ok(())
         }
         Err(e) => {

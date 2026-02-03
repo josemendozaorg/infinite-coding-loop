@@ -1,0 +1,34 @@
+{
+    "type": "object",
+    "properties": {
+        "files": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string"
+                    },
+                    "content": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "path",
+                    "content"
+                ]
+            }
+        },
+        "main_file": {
+            "type": "string"
+        },
+        "status": {
+            "type": "string"
+        }
+    },
+    "required": [
+        "files",
+        "main_file"
+    ],
+    "additionalProperties": true
+}

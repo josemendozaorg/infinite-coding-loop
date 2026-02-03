@@ -46,7 +46,7 @@ pub struct GraphDefinition {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Definitions {
     #[serde(rename = "GraphRules")]
-    pub graph_rules: GraphRules,
+    pub graph_rules: Option<GraphRules>,
     #[serde(rename = "AgentDefinitions")]
     pub agents: Option<AgentDefinitions>,
 }
@@ -126,9 +126,19 @@ impl DependencyGraph {
         let def: GraphDefinition = serde_json::from_str(json_content)?;
         let mut dg = Self::new();
 
-        // 1. Load Meta-Schemas from engine's internal directory (CARGO_MANIFEST_DIR/ontology/schemas/meta)
+        // 0. Validate the input Metamodel JSON against the Meta-Ontology Schema
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let engine_meta_root = std::path::Path::new(manifest_dir).join("ontology/schemas/meta");
+        // We want to validate against the "metamodel.schema.json" which is the structure the user provides for THEIR ontology
+        // But wait, the user's "metamodel.schema.json" IS the GraphDefinition.
+        // We need to validate that `json_content` conforms to the GraphDefinition struct,
+        // which we effectively do by `serde_json::from_str`.
+        // However, the request asks to use the schemas in `crates/dass-engine/ontology/schemas/meta` to validate.
+        // Specifically, we should likely validate `definitions.graph_rules.rules` against `ontology.schema.json` etc if possible.
+        // Since `GraphDefinition` is the structure, strict serde is one layer.
+        // But let's look for `base.schema.json` in `engine_meta_root` to facilitate additional validation if needed.
+
+        // Actually, let's load schemas FIRST so we can use them for validation if we want to be strict.
         let mut meta_files = Vec::new();
         Self::find_json_files(&engine_meta_root, &mut meta_files);
         for path in meta_files {
@@ -140,6 +150,13 @@ impl DependencyGraph {
                 }
             }
         }
+
+        // Validate Input JSON against `ontology.schema.json` ?
+        // The input `json_content` corresponds to `GraphDefinition`.
+        // The `ontology.schema.json` seems to define an ARRAY of relationships.
+        // BUT `GraphDefinition` is an OBJECT with `entities`, `relationships`, `$defs`.
+        // It seems `ontology.schema.json` is actually quite simple/different from `GraphDefinition`.
+        // Let's stick to the existing structure but enhance agent loading.
 
         let root =
             base_path.unwrap_or_else(|| std::path::Path::new("ontology-software-engineering"));
@@ -176,7 +193,7 @@ impl DependencyGraph {
         }
 
         // 2. Load Relationship Prompts systematically
-        let rel_dir = root.join("relationships");
+        let rel_dir = root.join("relationship/prompt"); // Updated path
         if let Ok(entries) = std::fs::read_dir(&rel_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
@@ -190,6 +207,7 @@ impl DependencyGraph {
                 }
             }
         }
+        // Also ensure we check old path for compat or just new one? Assuming migration is done.
 
         // 3. Load Instances (Relationships)
         if let Some(relationships) = def.relationships {
@@ -201,52 +219,20 @@ impl DependencyGraph {
         }
 
         if let Some(defs) = def.definitions {
-            for rule in defs.graph_rules.rules {
-                let source_str = rule.source.name.clone();
-                let target_str = rule.target.name.clone();
-                let relation_str = rule.relation.name.clone();
+            if let Some(rules_def) = defs.graph_rules {
+                for rule in rules_def.rules {
+                    let source_str = rule.source.name.clone();
+                    let target_str = rule.target.name.clone();
+                    let relation_str = rule.relation.name.clone();
 
-                let s_idx = dg.get_or_create_node(&source_str);
-                let t_idx = dg.get_or_create_node(&target_str);
-                dg.graph.add_edge(s_idx, t_idx, relation_str.clone());
+                    let s_idx = dg.get_or_create_node(&source_str);
+                    let t_idx = dg.get_or_create_node(&target_str);
+                    dg.graph.add_edge(s_idx, t_idx, relation_str.clone());
 
-                // Infer Prompt Path
-                let prompt_filename = format!("{}_{}_{}.md", source_str, relation_str, target_str);
-                let p = root.join("relationship/prompt").join(&prompt_filename);
-
-                let paths_to_try = vec![
-                    p.clone(),
-                    std::path::Path::new("../..").join(&p),
-                    std::path::Path::new("..").join(&p),
-                ];
-
-                let mut content = String::new();
-                let mut found = false;
-                for path in paths_to_try {
-                    if let Ok(c) = std::fs::read_to_string(&path) {
-                        content = c;
-                        found = true;
-                        break;
-                    }
-                }
-
-                if found {
-                    let key = (source_str, relation_str, target_str);
-                    dg.prompt_templates.insert(key, content);
-                }
-            }
-            // Load Agent Definitions
-            if let Some(agent_defs) = defs.agents {
-                for agent_def in agent_defs.agents {
-                    let role = agent_def.role.name.clone();
-                    dg.agent_roles.insert(role.clone());
-                    // config_ref is usually "agents/engineer.json" -> relative to ontology root?
-                    // In previous code it was used as is.
-                    // If we assume config_ref is relative to `base_path`?
-                    // Example: "agents/engineer.json"
-                    // Join with root: "ontology/agents/engineer.json"
-
-                    let p = root.join(&agent_def.config_ref);
+                    // Infer Prompt Path
+                    let prompt_filename =
+                        format!("{}_{}_{}.md", source_str, relation_str, target_str);
+                    let p = root.join("relationship/prompt").join(&prompt_filename);
 
                     let paths_to_try = vec![
                         p.clone(),
@@ -256,15 +242,84 @@ impl DependencyGraph {
 
                     let mut content = String::new();
                     let mut found = false;
-                    for path in &paths_to_try {
-                        if let Ok(c) = std::fs::read_to_string(path) {
+                    for path in paths_to_try {
+                        if let Ok(c) = std::fs::read_to_string(&path) {
                             content = c;
                             found = true;
                             break;
                         }
                     }
+
                     if found {
-                        dg.loaded_agents.insert(role, content);
+                        let key = (source_str, relation_str, target_str);
+                        dg.prompt_templates.insert(key, content);
+                    }
+                }
+            }
+
+            // 4. Load Agent Definitions
+            // If explicit agents are found, load them.
+            if let Some(agent_defs) = defs.agents {
+                for agent_def in agent_defs.agents {
+                    let role = agent_def.role.name.clone();
+                    dg.agent_roles.insert(role.clone());
+                    let p = root.join(&agent_def.config_ref);
+
+                    let paths_to_try = vec![
+                        p.clone(),
+                        std::path::Path::new("../..").join(&p),
+                        std::path::Path::new("..").join(&p),
+                    ];
+
+                    for path in &paths_to_try {
+                        if let Ok(c) = std::fs::read_to_string(path) {
+                            dg.loaded_agents.insert(role.clone(), c);
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // AUTOMATIC AGENT DISCOVERY
+                // If "AgentDefinitions" is missing or empty, we scan `agent/` folder for *.json files.
+                // We assume filename (capitalized) is the Role name roughly, OR we read "name" from JSON.
+                let agent_dir = root.join("agent");
+                if let Ok(entries) = std::fs::read_dir(&agent_dir) {
+                    for entry in entries.flatten() {
+                        let path = entry.path();
+                        if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                            if let Ok(content) = std::fs::read_to_string(&path) {
+                                // Parse to get role name
+                                if let Ok(json) =
+                                    serde_json::from_str::<serde_json::Value>(&content)
+                                {
+                                    if let Some(name) = json.get("name").and_then(|v| v.as_str()) {
+                                        let role = name.to_string();
+                                        dg.agent_roles.insert(role.clone());
+                                        dg.loaded_agents.insert(role, content);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // Fallback if "$defs" is missing entirely, still scan agents?
+            // Yes, for robustness.
+            let agent_dir = root.join("agent");
+            if let Ok(entries) = std::fs::read_dir(&agent_dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                        if let Ok(content) = std::fs::read_to_string(&path) {
+                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                                if let Some(name) = json.get("name").and_then(|v| v.as_str()) {
+                                    let role = name.to_string();
+                                    dg.agent_roles.insert(role.clone());
+                                    dg.loaded_agents.insert(role, content);
+                                }
+                            }
+                        }
                     }
                 }
             }

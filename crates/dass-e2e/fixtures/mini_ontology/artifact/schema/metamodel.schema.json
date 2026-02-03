@@ -1,0 +1,65 @@
+{
+    "entities": [],
+    "relationships": [],
+    "$defs": {
+        "GraphRules": {
+            "rules": [
+                {
+                    "source": {
+                        "name": "ProductManager"
+                    },
+                    "target": {
+                        "name": "Requirement"
+                    },
+                    "relation": {
+                        "name": "creates"
+                    }
+                },
+                {
+                    "source": {
+                        "name": "Engineer"
+                    },
+                    "target": {
+                        "name": "Requirement"
+                    },
+                    "relation": {
+                        "name": "verifies"
+                    }
+                },
+                {
+                    "source": {
+                        "name": "Engineer"
+                    },
+                    "target": {
+                        "name": "Requirement"
+                    },
+                    "relation": {
+                        "name": "refines"
+                    }
+                },
+                {
+                    "source": {
+                        "name": "Engineer"
+                    },
+                    "target": {
+                        "name": "Code"
+                    },
+                    "relation": {
+                        "name": "implements"
+                    }
+                },
+                {
+                    "source": {
+                        "name": "Engineer"
+                    },
+                    "target": {
+                        "name": "Code"
+                    },
+                    "relation": {
+                        "name": "verifies"
+                    }
+                }
+            ]
+        }
+    }
+}

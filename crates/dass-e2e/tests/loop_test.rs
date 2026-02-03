@@ -49,7 +49,7 @@ async fn test_end_to_end_execution() -> Result<()> {
     // 1. Setup paths & content
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let fixtures_dir = manifest_dir.join("fixtures/mini_ontology");
-    let schema_path = fixtures_dir.join("schemas/metamodel.schema.json");
+    let schema_path = fixtures_dir.join("artifact/schema/metamodel.schema.json");
     let schema_content = std::fs::read_to_string(&schema_path)?;
 
     // Use a unique work dir for this test run inside the repo to avoid workspace validation issues
