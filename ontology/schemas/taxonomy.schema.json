@@ -66,6 +66,9 @@
             "$ref": "./entities/agent.schema.json"
         },
         {
+            "$ref": "./entities/artifact.schema.json"
+        },
+        {
             "$ref": "./entities/architecture_component.schema.json"
         },
         {
@@ -523,6 +526,34 @@
                 {
                     "$ref": "#/$defs/Kind_CyclomaticLowComplexity"
                 }
+            ]
+        },
+        "ArtifactType": {
+            "type": "string",
+            "enum": [
+                "SourceFile",
+                "DesignSpec",
+                "Plan",
+                "TestCase",
+                "TestResult",
+                "Standard",
+                "Observation",
+                "Persona",
+                "TechnologyStack",
+                "Tool",
+                "ArchitecturePattern",
+                "ProjectStructure",
+                "ArchitectureComponent",
+                "Command",
+                "DataModel",
+                "UserStory",
+                "AcceptanceCriteria",
+                "UIDesign",
+                "SoftwareArchitecture",
+                "LogicalDataModel",
+                "PhysicalDataModel",
+                "OpenApiSpec",
+                "DomainEventSpec"
             ]
         },
         "RelationshipType": {
