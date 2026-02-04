@@ -1,8 +1,22 @@
 ## Ideas
 
+[] Allow ontology visualizer to load an ontology from a file. We need to see what we leave for the playwright tests.
+
+[] Ontology visualizer should be able to edit and save an ontology and allow to download it or copy the raw json to clipboard.
+
+[] We should be able to run an ontology graph from the ontology visualizer and follow the execution and the see prompts of each step and what the agent did because every node should have a separate commit.
+
+[] We need now just to define a JSON that complies with the ontology.schema.json. We do not need more schemas, isn't it? And then, the dass-engine and antology-tools would just load the JSON instanc, validate it against the ontology.schema.json. The JSON instance of the ontology.schema.json would be Graph execution itself.
+
+[] Perhaps it could still be a taxonomy and a metamodel schemas with restrictions for Software Engineering ontology to guide the definition of the final JSON ontology instance to input to dass-engine, so that the antology-visualizar is not fully free-style definiing entities and relationships, but rather guided.
+
+[X] Validate the taxonomy and the metamodel with the base meta schemas in dass-engine. The ontology-tools crate should be able to validate the taxonomy and the metamodel with the base meta schemas in dass-engine. The dass-engine crate should validate at the beginning the taxonomy and the metamodel with the base meta schemas in dass-engine.
+
+[] Use OpenCode SDK instead of using the "opencode --prompt" inside the AI CLI agent. 
+
 [ ] We need to increase the metamodel with more entities, more relationships, more rules and constraints.
 
-[ ] Do We need to define the execution graph? Because what we are building now in taxonomy and metamodel is the ground truth, the constitution, the guardrails, the rules and constraints, but also the logical path to build software that the agent would follow. Based on the taxonomy and the metamodel, infinite loop will ask questions to the User to decide the path to follow in the Graph defined in the metamodel. For example, the first graph root node is "SoftwareApplication". Then there are several paths to follow. The user is prompted to choose what kind of software applicaiton. Also the system suggests a recommended option with some arguments. The user can suggest a fully autonomous YOLO approach that the agent just decides himself on the way and just reports the choices made, and then the User could adjust the choises. The type of Software Application, the architecture Style, the technology stack, the database type, and then based on the taxonomy and the metamodel, the system would follow the execution graph, and this could be follow in a UI, this could be nice. If the SoftwareApplication already exists and the user just wants to add a feature, or fix a Bug, or increase test coverage, this can be offered upfront to the user, and then the Graph would start from there, but we would need to fullfil first all what a feature requires according to the metamodel.
+[ ] Do We need to define the execution graph? Because what we are building now in taxonomy and metamodel is the ground truth, the constitution, the guardrails, the rules and constraints, but also the logical path to build software that the agent would follow. Based on the taxonomy and the metamodel, infinite loop will ask questions to the User to decide the path to follow in the Graph defined in the metamodel. For example, the first graph root node is "SoftwareApplication". Then there are several paths to follow. The user is prompted to choose what kind of software application. Also the system suggests a recommended option with some arguments. The user can suggest a fully autonomous YOLO approach that the agent just decides himself on the way and just reports the choices made, and then the User could adjust the choises. The type of Software Application, the architecture Style, the technology stack, the database type, and then based on the taxonomy and the metamodel, the system would follow the execution graph, and this could be follow in a UI, this could be nice. If the SoftwareApplication already exists and the user just wants to add a feature, or fix a Bug, or increase test coverage, this can be offered upfront to the user, and then the Graph would start from there, but we would need to fullfil first all what a feature requires according to the metamodel.
 
 [] We need to define the taxonomy and metamodel in a way that is easy to understand and use. The taxonomy in JSON schema seems to complicated. Let's try to use YAML instead. It is more human readable and it is supported by most of the tools.
 
