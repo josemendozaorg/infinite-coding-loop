@@ -12,11 +12,46 @@ import type { Connection, Edge, Node } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Save, FileJson, Share2, AlignCenter, Box, Bot, FileText } from 'lucide-react';
 import { loadOntology } from './services/schemaService';
+import { Handle, Position } from 'reactflow';
 
 
 const nodeWidth = 180;
 
-// Custom Concentric Layout for compact visualization
+const CustomNode = ({ data }: { data: any }) => {
+  const isRoot = data.kind === 'SoftwareApplication';
+  const isAgent = data.kind === 'Agent';
+  const isArtifact = data.kind === 'Artifact';
+
+  return (
+    <div className="glass-panel" style={{
+      background: 'rgba(22, 27, 34, 0.8)',
+      color: '#c9d1d9',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      borderRadius: '8px',
+      padding: '10px',
+      width: nodeWidth,
+      textAlign: 'center',
+      position: 'relative'
+    }}>
+      <Handle type="target" position={Position.Left} style={{ background: '#555' }} />
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+        {isRoot && <Box size={16} color="#58a6ff" />}
+        {isAgent && <Bot size={16} color="#7ee787" />}
+        {isArtifact && <FileText size={16} color="#79c0ff" />}
+        <span style={{ fontWeight: 500, fontSize: '0.9rem' }}>{data.label}</span>
+        {data.hasHidden && <span style={{ fontSize: '10px', marginLeft: '4px' }}>➕</span>}
+      </div>
+
+      <Handle type="source" position={Position.Right} style={{ background: '#555' }} />
+    </div>
+  );
+};
+
+const nodeTypes = {
+  custom: CustomNode,
+};
+
 // Custom Left-to-Right Layered Layout
 const getLeftToRightLayout = (nodes: Node[], edges: Edge[], rootId = 'SoftwareApplication') => {
   // ... (keep existing layout logic)
@@ -125,86 +160,12 @@ const App: React.FC = () => {
       try {
         const data = await loadOntology();
 
-        // Calculate degrees
-        const degrees: Record<string, number> = {};
-        data.rules.forEach(r => {
-          degrees[r.source] = (degrees[r.source] || 0) + 1;
-          degrees[r.target] = (degrees[r.target] || 0) + 1;
-        });
+        // Calculate degrees for default view if needed, or rely on layout
+        // For now, we trust the nodes/edges from service are correct.
 
-        const AGENT_KINDS = new Set([
-          'Agent', 'Architect', 'Engineer', 'Manager', 'ProductManager', 'QA',
-          'ProductOwner', 'Developer', 'DevOps', 'ProjectManager', 'BusinessAnalyst'
-        ]);
+        const initialNodes = data.nodes;
+        const initialEdges = data.edges;
 
-        const ARTIFACT_KINDS = new Set([
-          'Artifact',
-          'SourceFile', 'DesignSpec', 'Plan', 'TestCase', 'TestResult', 'Standard',
-          'Observation', 'Persona', 'TechnologyStack', 'Tool', 'ArchitecturePattern',
-          'ProjectStructure', 'ArchitectureComponent', 'Command', 'DataModel',
-          'UserStory', 'AcceptanceCriteria', 'UIDesign', 'SoftwareArchitecture',
-          'LogicalDataModel', 'PhysicalDataModel', 'OpenApiSpec', 'DomainEventSpec',
-          'ImplementationPlan', 'UserStoryImplementationPlan', 'Code', 'UnitTest'
-        ]);
-
-        // ... existing initialization of nodes/edges ...
-        const initialNodes: Node[] = data.entities.map((entity) => {
-          const isRoot = entity.kind === 'SoftwareApplication';
-          const isAgent = AGENT_KINDS.has(entity.kind);
-          const isArtifact = ARTIFACT_KINDS.has(entity.kind);
-
-          return {
-            id: entity.kind,
-            data: {
-              label: (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                  {isRoot && <Box size={16} color="#58a6ff" />}
-                  {isAgent && <Bot size={16} color="#7ee787" />}
-                  {isArtifact && <FileText size={16} color="#79c0ff" />}
-                  <span>{entity.kind}</span>
-                </div>
-              ),
-              description: entity.description
-            },
-            position: { x: 0, y: 0 },
-            sourcePosition: 'right' as any,
-            targetPosition: 'left' as any,
-            className: 'glass-panel',
-            style: {
-              background: 'rgba(22, 27, 34, 0.8)',
-              color: '#c9d1d9',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              borderRadius: '8px',
-              padding: '10px',
-              width: nodeWidth,
-              textAlign: 'center' as const
-            }
-          };
-        });
-
-        const edgeMap: Record<string, { source: string; target: string; relations: string[] }> = {};
-        data.rules.forEach((rule) => {
-          const key = `${rule.source}->${rule.target}`;
-          if (!edgeMap[key]) {
-            edgeMap[key] = { source: rule.source, target: rule.target, relations: [] };
-          }
-          if (!edgeMap[key].relations.includes(rule.relation)) {
-            edgeMap[key].relations.push(rule.relation);
-          }
-        });
-
-        const initialEdges: Edge[] = Object.values(edgeMap).map((value) => ({
-          id: `e-${value.source}-${value.target}`,
-          source: value.source,
-          target: value.target,
-          label: value.relations.sort().join(', '),
-          animated: true,
-          style: { stroke: '#58a6ff' },
-          labelStyle: { fill: '#8b949e', fontSize: 10, fontWeight: 700 },
-          labelBgStyle: { fill: '#161b22', fillOpacity: 0.7 }
-        }));
-
-        // Calculate full layout once
         // Calculate full layout once
         const layouted = getLeftToRightLayout(initialNodes, initialEdges);
         setInitialLayout(layouted);
@@ -230,28 +191,22 @@ const App: React.FC = () => {
     // 1. Apply Exploration Mode
     if (searchMode) {
       activeNodes = activeNodes.filter(n => visibleNodeIds.has(n.id)).map(node => {
-        // Check if has hidden neighbors
-        const allNeighbors = initialLayout.edges
-          .filter(e => e.source === node.id || e.target === node.id)
-          .map(e => e.source === node.id ? e.target : e.source);
+        // Check if has hidden OUTGOING neighbors
+        const outgoingNeighbors = initialLayout.edges
+          .filter(e => e.source === node.id)
+          .map(e => e.target);
 
-        const hasHidden = allNeighbors.some(nid => !visibleNodeIds.has(nid));
+        const hasHidden = outgoingNeighbors.some(nid => !visibleNodeIds.has(nid));
 
-        // Clone node to avoid mutating initialLayout directly
+        // Clone node and update data for CustomNode
         return {
           ...node,
           data: {
             ...node.data,
-            label: (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                {node.data.label}
-                {hasHidden && <span style={{ fontSize: '10px', marginLeft: '4px' }}>➕</span>}
-              </div>
-            )
+            hasHidden: hasHidden
           }
         };
       });
-      activeEdges = activeEdges.filter(e => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target));
       activeEdges = activeEdges.filter(e => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target));
     }
 
@@ -265,8 +220,7 @@ const App: React.FC = () => {
       activeNodes = activeNodes.filter(node => connectedNodeIds.has(node.id));
     }
 
-    // 3. Re-Layout with Concentric
-    // We strictly use Concentric now as requested for compactness
+    // ... (rest of the logic)
     const layouted = getLeftToRightLayout(activeNodes, activeEdges);
     setNodes(layouted.nodes);
     setEdges(layouted.edges);
@@ -287,22 +241,28 @@ const App: React.FC = () => {
 
   const onLayout = useCallback(() => {
     // Trigger re-render which triggers layout effect
-    // For now, simple force update isn't needed as effect handles state, 
-    // but we can re-set nodes to trigger animation if needed.
     if (initialLayout) {
-      setNodes([...nodes]);
-      // Force re-layout in effect? No, effect depends on state.
-      // Actually, if we moved nodes manually, this resets them.
       const layouted = getLeftToRightLayout(nodes, edges);
       setNodes(layouted.nodes);
     }
-  }, [nodes, edges, initialLayout]);
+  }, [nodes, edges, initialLayout, setNodes]);
 
   const onNodeClick = (_: React.MouseEvent, node: Node) => {
     setSelectedNode(node);
     setIsPanelOpen(true);
 
     if (searchMode && initialLayout) {
+      const getDescendants = (id: string, visited = new Set<string>()): string[] => {
+        const descendants: string[] = [];
+        initialLayout.edges.forEach(e => {
+          if (e.source === id && !visited.has(e.target)) {
+            visited.add(e.target);
+            descendants.push(e.target, ...getDescendants(e.target, visited));
+          }
+        });
+        return descendants;
+      };
+
       // Find OUTGOING neighbors (children) in full graph
       const childrenIds = new Set<string>();
       initialLayout.edges.forEach(e => {
@@ -312,11 +272,13 @@ const App: React.FC = () => {
       if (childrenIds.size === 0) return; // Leaf node
 
       const newIds = new Set(visibleNodeIds);
-
       const allChildrenVisible = Array.from(childrenIds).every(id => visibleNodeIds.has(id));
 
       if (allChildrenVisible) {
-        childrenIds.forEach(id => newIds.delete(id));
+        // RECURSIVE DELETE
+        const toDelete = new Set([node.id, ...getDescendants(node.id)]);
+        toDelete.delete(node.id); // Keep the clicked node itself visible
+        toDelete.forEach(id => newIds.delete(id));
       } else {
         childrenIds.forEach(id => newIds.add(id));
       }
@@ -384,6 +346,7 @@ const App: React.FC = () => {
             onConnect={onConnect}
             onNodeClick={onNodeClick}
             onInit={onInit}
+            nodeTypes={nodeTypes}
             fitView
           >
             <Background color="#161b22" gap={20} />

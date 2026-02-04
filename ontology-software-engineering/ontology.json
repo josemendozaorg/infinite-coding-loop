@@ -1,0 +1,398 @@
+[
+  {
+    "source": {
+      "name": "SoftwareApplication"
+    },
+    "target": {
+      "name": "ProductManager"
+    },
+    "type": {
+      "name": "uses"
+    }
+  },
+  {
+    "source": {
+      "name": "SoftwareApplication"
+    },
+    "target": {
+      "name": "Architect"
+    },
+    "type": {
+      "name": "uses"
+    }
+  },
+  {
+    "source": {
+      "name": "SoftwareApplication"
+    },
+    "target": {
+      "name": "Developer"
+    },
+    "type": {
+      "name": "uses"
+    }
+  },
+  {
+    "source": {
+      "name": "SoftwareApplication"
+    },
+    "target": {
+      "name": "Tester"
+    },
+    "type": {
+      "name": "uses"
+    }
+  },
+  {
+    "source": {
+      "name": "SoftwareApplication"
+    },
+    "target": {
+      "name": "DevOps"
+    },
+    "type": {
+      "name": "uses"
+    }
+  },
+  {
+    "source": {
+      "name": "SoftwareApplication"
+    },
+    "target": {
+      "name": "ProjectManager"
+    },
+    "type": {
+      "name": "uses"
+    }
+  },
+  {
+    "source": {
+      "name": "SoftwareApplication"
+    },
+    "target": {
+      "name": "BusinessAnalyst"
+    },
+    "type": {
+      "name": "uses"
+    }
+  },
+  {
+    "source": {
+      "name": "TDD"
+    },
+    "target": {
+      "name": "Methodology"
+    },
+    "type": {
+      "name": "isA"
+    }
+  },
+  {
+    "source": {
+      "name": "BDD"
+    },
+    "target": {
+      "name": "Methodology"
+    },
+    "type": {
+      "name": "isA"
+    }
+  },
+  {
+    "source": {
+      "name": "DDD"
+    },
+    "target": {
+      "name": "Methodology"
+    },
+    "type": {
+      "name": "isA"
+    }
+  },
+  {
+    "source": {
+      "name": "Feature"
+    },
+    "target": {
+      "name": "UserStory"
+    },
+    "type": {
+      "name": "requires"
+    }
+  },
+  {
+    "source": {
+      "name": "UserStory"
+    },
+    "target": {
+      "name": "AcceptanceCriteria"
+    },
+    "type": {
+      "name": "requires"
+    }
+  },
+  {
+    "source": {
+      "name": "UserStory"
+    },
+    "target": {
+      "name": "ImplementationPlan"
+    },
+    "type": {
+      "name": "requires"
+    }
+  },
+  {
+    "source": {
+      "name": "TestCase"
+    },
+    "target": {
+      "name": "UnitTest"
+    },
+    "type": {
+      "name": "requires"
+    }
+  },
+  {
+    "source": {
+      "name": "UnitTest"
+    },
+    "target": {
+      "name": "SuccessfulTestResult"
+    },
+    "type": {
+      "name": "requires"
+    }
+  },
+  {
+    "source": {
+      "name": "BusinessAnalyst"
+    },
+    "target": {
+      "name": "Feature"
+    },
+    "type": {
+      "name": "verifies"
+    }
+  },
+  {
+    "source": {
+      "name": "Developer"
+    },
+    "target": {
+      "name": "Code"
+    },
+    "type": {
+      "name": "creates"
+    }
+  },
+  {
+    "source": {
+      "name": "Developer"
+    },
+    "target": {
+      "name": "Code"
+    },
+    "type": {
+      "name": "verifies"
+    }
+  },
+  {
+    "source": {
+      "name": "Developer"
+    },
+    "target": {
+      "name": "UserStory"
+    },
+    "type": {
+      "name": "implements"
+    }
+  },
+  {
+    "source": {
+      "name": "Developer"
+    },
+    "target": {
+      "name": "UnitTest"
+    },
+    "type": {
+      "name": "implements"
+    }
+  },
+  {
+    "source": {
+      "name": "Developer"
+    },
+    "target": {
+      "name": "UnitTest"
+    },
+    "type": {
+      "name": "verifies"
+    }
+  },
+  {
+    "source": {
+      "name": "Developer"
+    },
+    "target": {
+      "name": "UnitTest"
+    },
+    "type": {
+      "name": "improves"
+    }
+  },
+  {
+    "source": {
+      "name": "Developer"
+    },
+    "target": {
+      "name": "Code"
+    },
+    "type": {
+      "name": "improves"
+    }
+  },
+  {
+    "source": {
+      "name": "Code"
+    },
+    "target": {
+      "name": "CyclomaticLowComplexity"
+    },
+    "type": {
+      "name": "requires"
+    }
+  },
+  {
+    "source": {
+      "name": "Code"
+    },
+    "target": {
+      "name": "CodingStyle"
+    },
+    "type": {
+      "name": "requires"
+    }
+  },
+  {
+    "source": {
+      "name": "Code"
+    },
+    "target": {
+      "name": "CodingPractice"
+    },
+    "type": {
+      "name": "requires"
+    }
+  },
+  {
+    "source": {
+      "name": "KISS"
+    },
+    "target": {
+      "name": "CodingPractice"
+    },
+    "type": {
+      "name": "isA"
+    }
+  },
+  {
+    "source": {
+      "name": "DRY"
+    },
+    "target": {
+      "name": "CodingPractice"
+    },
+    "type": {
+      "name": "isA"
+    }
+  },
+  {
+    "source": {
+      "name": "Developer"
+    },
+    "target": {
+      "name": "CodingStyle"
+    },
+    "type": {
+      "name": "applies"
+    }
+  },
+  {
+    "source": {
+      "name": "Developer"
+    },
+    "target": {
+      "name": "CodingPractice"
+    },
+    "type": {
+      "name": "applies"
+    }
+  },
+  {
+    "source": {
+      "name": "GoogleCodingStyle"
+    },
+    "target": {
+      "name": "CodingStyle"
+    },
+    "type": {
+      "name": "isA"
+    }
+  },
+  {
+    "source": {
+      "name": "Architect"
+    },
+    "target": {
+      "name": "CodingStyle"
+    },
+    "type": {
+      "name": "defines"
+    }
+  },
+  {
+    "source": {
+      "name": "Architect"
+    },
+    "target": {
+      "name": "QualityMetric"
+    },
+    "type": {
+      "name": "defines"
+    }
+  },
+  {
+    "source": {
+      "name": "Architect"
+    },
+    "target": {
+      "name": "ArchitectureStyle"
+    },
+    "type": {
+      "name": "defines"
+    }
+  },
+  {
+    "source": {
+      "name": "Microservices"
+    },
+    "target": {
+      "name": "ArchitectureStyle"
+    },
+    "type": {
+      "name": "isA"
+    }
+  },
+  {
+    "source": {
+      "name": "CyclomaticLowComplexity"
+    },
+    "target": {
+      "name": "QualityMetric"
+    },
+    "type": {
+      "name": "isA"
+    }
+  }
+]

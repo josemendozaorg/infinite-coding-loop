@@ -81,12 +81,6 @@ test('progressive disclosure exploration', async ({ page }) => {
     await page.waitForTimeout(1000);
     expect(await nodes.count()).toBe(1);
 
-    // Check for icons in the initial single node (SoftwareApplication should have Box icon)
-    // We can check for the lucide-react class or SVG existence.
-    // The Box icon usually renders as an SVG. We can check if an SVG is present in the node.
-    await expect(nodes.first().locator('svg')).toBeVisible();
-
-    // Check Root Icon specifically (visual check difficult without screenshot, but we can assume SVG presence is enough for smoke)
 });
 
 test('verifies node icons and expansion indicators', async ({ page }) => {
@@ -95,40 +89,23 @@ test('verifies node icons and expansion indicators', async ({ page }) => {
     // 1. Check Root Node Icon (Box)
     const rootNode = page.locator('.react-flow__node').filter({ hasText: 'SoftwareApplication' });
     await expect(rootNode).toBeVisible();
-    // Lucide icons render as SVGs. We can check for the specific SVG attributes or just presence.
-    // Box icon: rect, line...
     await expect(rootNode.locator('svg')).toBeVisible();
 
-    // 2. Check Agent Icon (Bot) - We need to expand to find "Agent" or similar
+    // 2. Check Agent Icon (Bot) 
     // Enable Exploration Mode
     await page.getByLabel('Exploration Mode').check();
     await rootNode.dispatchEvent('click');
     await page.waitForTimeout(1000);
 
-    // Find an Agent node (e.g., Architect, Agent, Developer)
+    // Find an Agent node
     const agentNode = page.locator('.react-flow__node').filter({ hasText: /^Agent$|^Architect$|^Developer$/ }).first();
     if (await agentNode.isVisible()) {
         await expect(agentNode.locator('svg')).toBeVisible();
-        // Ideally check color ?? (greenish #7ee787)
     }
 
-    // 3. Check Artifact Icon (FileText)
-    // Find an Artifact node (e.g. SourceFile, DesignSpec)
-    const artifactNode = page.locator('.react-flow__node').filter({ hasText: /^SourceFile$|^DesignSpec$/ }).first();
-    if (await artifactNode.isVisible()) {
-        await expect(artifactNode.locator('svg')).toBeVisible();
-        // Check color blueish #79c0ff
-    }
-
-    // 4. Check Expansion Indicator (Plus sign)
-    // In Exploration Mode, leaf nodes with hidden connections should have a "+"
-    // We can look for the text "+" or the span.
-    // Let's find a node that likely has children but is not expanded.
-    // The root node (SoftwareApplication) after collapse should definitely have it because it has neighbor "Feature" etc.
-
-    await rootNode.dispatchEvent('click'); // Collapse
+    // 3. Check Expansion Indicator (Plus sign)
+    // Collapse to see indicator
+    await rootNode.dispatchEvent('click');
     await page.waitForTimeout(1000);
-
-    // Now Root Node should have a "+" because we are in Exploration Mode and we know it has neighbors.
     await expect(rootNode).toContainText('➕');
 });

@@ -22,7 +22,7 @@ enum Commands {
         #[arg(
             short,
             long,
-            default_value = "ontology-software-engineering/schemas/metamodel.schema.json"
+            default_value = "ontology-software-engineering/ontology.json"
         )]
         input: PathBuf,
         #[arg(
@@ -46,46 +46,23 @@ enum Commands {
         #[arg(
             short,
             long,
-            default_value = "ontology-software-engineering/schemas/metamodel.schema.json"
+            default_value = "ontology-software-engineering/ontology.json"
         )]
         input: PathBuf,
     },
 }
 
 #[derive(Deserialize, Debug)]
-struct Metamodel {
-    #[serde(rename = "$defs")]
-    defs: Defs,
+struct MetaRelationship {
+    source: MetaEntity,
+    target: MetaEntity,
+    #[serde(rename = "type")]
+    rel_type: MetaEntity,
 }
 
 #[derive(Deserialize, Debug)]
-struct Defs {
-    #[serde(rename = "GraphRules")]
-    graph_rules: Option<GraphRulesWrapper>,
-    #[serde(rename = "AgentDefinitions")]
-    agent_definitions: Option<AgentDefinitionsWrapper>,
-}
-
-#[derive(Deserialize, Debug)]
-struct GraphRulesWrapper {
-    rules: Vec<Rule>,
-}
-
-#[derive(Deserialize, Debug)]
-struct AgentDefinitionsWrapper {
-    agents: Vec<Agent>,
-}
-
-#[derive(Deserialize, Debug)]
-struct Rule {
-    source: String,
-    target: String,
-    relation: String,
-}
-
-#[derive(Deserialize, Debug)]
-struct Agent {
-    role: String,
+struct MetaEntity {
+    name: String,
 }
 
 const BASE_IRI: &str = "https://infinite-coding-loop.dass/ontology/";
@@ -112,7 +89,7 @@ fn convert(input_path: &PathBuf, output_path: &PathBuf) -> anyhow::Result<()> {
     println!("Reading schema from {:?}", input_path);
     let file = File::open(input_path)?;
     let reader = BufReader::new(file);
-    let metamodel: Metamodel = serde_json::from_reader(reader)?;
+    let relationships: Vec<MetaRelationship> = serde_json::from_reader(reader)?;
 
     println!("Writing ontology to {:?}", output_path);
     if let Some(parent) = output_path.parent() {
@@ -121,9 +98,6 @@ fn convert(input_path: &PathBuf, output_path: &PathBuf) -> anyhow::Result<()> {
     let outfile = File::create(output_path)?;
     let writer = BufWriter::new(outfile);
     let mut formatter = TurtleFormatter::new(writer);
-
-    // Track declared classes/properties to avoid duplicates logic if needed,
-    // but TurtleFormatter handles writing stream. We just emit triples.
 
     // Common Namespaces
     let rdf_type = NamedNode {
@@ -145,74 +119,54 @@ fn convert(input_path: &PathBuf, output_path: &PathBuf) -> anyhow::Result<()> {
     let mut classes = HashSet::new();
     let mut properties = HashSet::new();
 
-    // Process Rules
-    if let Some(graph_rules) = metamodel.defs.graph_rules {
-        for rule in graph_rules.rules {
-            let s_iri = format!("{}{}", BASE_IRI, rule.source);
-            let t_iri = format!("{}{}", BASE_IRI, rule.target);
-            let r_iri = format!("{}{}", BASE_IRI, rule.relation);
+    for rel in relationships {
+        let s_name = rel.source.name;
+        let t_name = rel.target.name;
+        let r_name = rel.rel_type.name;
 
-            // Declare Source Class
-            if classes.insert(rule.source.clone()) {
-                formatter.format(&Triple {
-                    subject: Subject::NamedNode(NamedNode { iri: &s_iri }),
-                    predicate: rdf_type,
-                    object: Term::NamedNode(owl_class),
-                })?;
-            }
+        let s_iri = format!("{}{}", BASE_IRI, s_name);
+        let t_iri = format!("{}{}", BASE_IRI, t_name);
+        let r_iri = format!("{}{}", BASE_IRI, r_name);
 
-            // Declare Target Class
-            if classes.insert(rule.target.clone()) {
-                formatter.format(&Triple {
-                    subject: Subject::NamedNode(NamedNode { iri: &t_iri }),
-                    predicate: rdf_type,
-                    object: Term::NamedNode(owl_class),
-                })?;
-            }
-
-            // Declare Property
-            if properties.insert(rule.relation.clone()) {
-                formatter.format(&Triple {
-                    subject: Subject::NamedNode(NamedNode { iri: &r_iri }),
-                    predicate: rdf_type,
-                    object: Term::NamedNode(owl_obj_prop),
-                })?;
-            }
-
-            // Domain and Range (Loose enforcement: just stating it applies)
+        // Declare Source Class
+        if classes.insert(s_name.clone()) {
             formatter.format(&Triple {
-                subject: Subject::NamedNode(NamedNode { iri: &r_iri }),
-                predicate: rdfs_domain,
-                object: Term::NamedNode(NamedNode { iri: &s_iri }),
-            })?;
-
-            formatter.format(&Triple {
-                subject: Subject::NamedNode(NamedNode { iri: &r_iri }),
-                predicate: rdfs_range,
-                object: Term::NamedNode(NamedNode { iri: &t_iri }),
+                subject: Subject::NamedNode(NamedNode { iri: &s_iri }),
+                predicate: rdf_type,
+                object: Term::NamedNode(owl_class),
             })?;
         }
-    }
 
-    // Process Agents
-    if let Some(agent_defs) = metamodel.defs.agent_definitions {
-        for agent in agent_defs.agents {
-            let a_iri = format!("{}{}", BASE_IRI, agent.role);
-
-            // Agent is likely a Class in our metamodel (e.g. Architect creates Design),
-            // but also can be viewed as an instance depending on interpretation.
-            // For now, consistent with schema, they are source nodes, so Classes.
-            // If we want actual agents as instances, we would differentiate.
-            // Based on schema: "source": "Architect". So Architect is a Class of Nodes.
-
-            if classes.insert(agent.role.clone()) {
-                formatter.format(&Triple {
-                    subject: Subject::NamedNode(NamedNode { iri: &a_iri }),
-                    predicate: rdf_type,
-                    object: Term::NamedNode(owl_class),
-                })?;
-            }
+        // Declare Target Class
+        if classes.insert(t_name.clone()) {
+            formatter.format(&Triple {
+                subject: Subject::NamedNode(NamedNode { iri: &t_iri }),
+                predicate: rdf_type,
+                object: Term::NamedNode(owl_class),
+            })?;
         }
+
+        // Declare Property
+        if properties.insert(r_name.clone()) {
+            formatter.format(&Triple {
+                subject: Subject::NamedNode(NamedNode { iri: &r_iri }),
+                predicate: rdf_type,
+                object: Term::NamedNode(owl_obj_prop),
+            })?;
+        }
+
+        // Domain and Range
+        formatter.format(&Triple {
+            subject: Subject::NamedNode(NamedNode { iri: &r_iri }),
+            predicate: rdfs_domain,
+            object: Term::NamedNode(NamedNode { iri: &s_iri }),
+        })?;
+
+        formatter.format(&Triple {
+            subject: Subject::NamedNode(NamedNode { iri: &r_iri }),
+            predicate: rdfs_range,
+            object: Term::NamedNode(NamedNode { iri: &t_iri }),
+        })?;
     }
 
     formatter.finish()?;

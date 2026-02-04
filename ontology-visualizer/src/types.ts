@@ -1,3 +1,7 @@
+import type { Node, Edge } from 'reactflow';
+
+export type { Node, Edge };
+
 export interface EntityKind {
     kind: string;
     description?: string;
@@ -11,8 +15,9 @@ export interface RelationshipRule {
 }
 
 export interface OntologyData {
-    entities: EntityKind[];
-    rules: RelationshipRule[];
+    nodes: Node[];
+    edges: Edge[];
+    raw?: any;
 }
 
 export interface NodeData {

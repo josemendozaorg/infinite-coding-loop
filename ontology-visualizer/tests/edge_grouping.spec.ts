@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Edge Grouping', () => {
     test('should group multiple relationships between same nodes into a single edge', async ({ page }) => {
         // Navigate to the visualizer
-        await page.goto('http://localhost:5173');
+        await page.goto('/');
 
         // Wait for the graph to load
         await page.waitForSelector('.react-flow__renderer');

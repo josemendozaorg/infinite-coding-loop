@@ -37,8 +37,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         app_name: String,
         work_dir: std::path::PathBuf,
     ) -> Result<Self> {
-        let metamodel_json =
-            include_str!("../../../ontology-software-engineering/artifact/schema/metamodel.schema.json");
+        let metamodel_json = include_str!("../../../ontology-software-engineering/ontology.json");
         Self::new_with_metamodel(client, app_id, app_name, work_dir, metamodel_json, None).await
     }
 
