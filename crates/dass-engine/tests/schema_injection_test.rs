@@ -9,22 +9,13 @@ fn test_schema_injection_integration() {
     // But since the template loading relies on file existence, we might need a temporary file or reuse an existing one.
     // However, existing ones have been modified to contain {{schema}}.
 
-    let metamodel_json = r#"{
-        "entities": [],
-        "relationships": [],
-        "$defs": {
-            "GraphRules": {
-                "rules": [
-                    {
-                        "source": { "name": "Architect" },
-                        "relation": { "name": "creates" },
-                        "target": { "name": "DesignSpec" }
-                    }
-                ]
-            },
-            "AgentDefinitions": { "agents": [] }
+    let metamodel_json = r#"[
+        {
+            "source": { "name": "Architect" },
+            "type": { "name": "creates" },
+            "target": { "name": "DesignSpec" }
         }
-    }"#;
+    ]"#;
 
     // 2. Load the Graph
     // Build path relative to workspace root
@@ -67,30 +58,30 @@ fn test_schema_injection_integration() {
 
 #[test]
 fn test_source_differentiation() {
-    let metamodel_json = r#"{
-        "entities": [],
-        "relationships": [],
-        "$defs": {
-            "GraphRules": {
-                "rules": [
-                    {
-                        "source": { "name": "ProductManager" },
-                        "relation": { "name": "creates" },
-                        "target": { "name": "Requirement" }
-                    },
-                    {
-                        "source": { "name": "ProductManager" },
-                        "relation": { "name": "refines" },
-                        "target": { "name": "Requirement" }
-                    }
-                ]
-            }
+    let metamodel_json = r#"[
+        {
+            "source": { "name": "ProductManager" },
+            "type": { "name": "creates" },
+            "target": { "name": "Requirement" }
+        },
+        {
+            "source": { "name": "ProductManager" },
+            "type": { "name": "refines" },
+            "target": { "name": "Requirement" }
         }
-    }"#;
+    ]"#;
+
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let workspace_root = std::path::Path::new(manifest_dir)
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+    let ontology_path = workspace_root.join("ontology-software-engineering");
 
     // Load graph
-    let graph =
-        DependencyGraph::load_from_metamodel(metamodel_json, None).expect("Failed to load graph");
+    let graph = DependencyGraph::load_from_metamodel(metamodel_json, Some(&ontology_path))
+        .expect("Failed to load graph");
 
     // Verify PM creates gets PM creates prompt
     let creates_template = graph
@@ -109,30 +100,24 @@ fn test_source_differentiation() {
 
 #[test]
 fn test_agent_loading_integration() {
-    let metamodel_json = r#"{
-        "entities": [],
-        "relationships": [],
-        "$defs": {
-            "GraphRules": { "rules": [] },
-            "AgentDefinitions": {
-                "agents": [
-                    {
-                        "role": { "name": "ProductManager" },
-                        "config_ref": "agent/system_prompt/product_manager.md"
-                    }
-                ]
-            }
-        }
-    }"#;
+    let metamodel_json = "[]";
 
-    let graph =
-        DependencyGraph::load_from_metamodel(metamodel_json, None).expect("Failed to load graph");
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let workspace_root = std::path::Path::new(manifest_dir)
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+    let ontology_path = workspace_root.join("ontology-software-engineering");
+
+    let graph = DependencyGraph::load_from_metamodel(metamodel_json, Some(&ontology_path))
+        .expect("Failed to load graph");
 
     assert!(
-        graph.loaded_agents.contains_key("ProductManager"),
-        "ProductManager agent should be loaded"
+        graph.loaded_agents.contains_key("product_manager"),
+        "product_manager agent should be loaded"
     );
-    let config = graph.loaded_agents.get("ProductManager").unwrap();
+    let config = graph.loaded_agents.get("product_manager").unwrap();
     assert!(
         config.contains("Product Manager"),
         "Config content should be loaded"

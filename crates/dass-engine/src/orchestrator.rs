@@ -20,7 +20,7 @@ pub struct Orchestrator<C: AiCliClient + Clone + Send + Sync + 'static> {
     pub app_name: String,
     pub work_dir: Option<String>,
     // New Graph Components
-    executor: InMemoryExecutor,
+    pub executor: InMemoryExecutor,
     // Tracking produced artifacts (State)
     pub artifacts: HashMap<String, serde_json::Value>, // EntityKind -> Last Produced Value
     pub verification_feedback: HashMap<String, String>, // Target -> Feedback
@@ -109,10 +109,10 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             return Ok(());
         }
 
-        // Feed initial input as a "Requirement" (In a real system, this would be a "SoftwareApplication" signal)
+        // Feed initial input as a "SoftwareApplication" signal to start the orchestration
         self.artifacts.insert(
-            "FeatureIdea".to_string(),
-            serde_json::json!({ "goal": initial_goal }),
+            "SoftwareApplication".to_string(),
+            serde_json::json!({ "name": self.app_name.clone(), "goal": initial_goal }),
         );
 
         // 2. Generic Execution Loop (State Machine)
@@ -127,7 +127,10 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
 
             let next_actions = self.identify_next_actions();
             if next_actions.is_empty() {
-                ui.log_info("No more actions identified. Flow complete.");
+                ui.log_info(&format!(
+                    "No more actions identified. Current artifacts: {:?}",
+                    self.artifacts.keys().collect::<Vec<_>>()
+                ));
                 break;
             }
 
@@ -136,7 +139,12 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                     "Dispatched Action: {} {} {}",
                     action.agent, action.relation, action.target
                 ));
-                self.execute_action(action).await?;
+                self.execute_action(action, ui).await?;
+            }
+
+            if !ui.confirm("Proceed to next iteration?").await? {
+                ui.log_info("Iteration paused by user.");
+                break;
             }
         }
 
@@ -144,7 +152,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         Ok(())
     }
 
-    fn identify_next_actions(&self) -> Vec<ActionPlan> {
+    pub fn identify_next_actions(&self) -> Vec<ActionPlan> {
         let mut plans = Vec::new();
 
         for edge_idx in self.executor.graph.graph.edge_indices() {
@@ -211,11 +219,23 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         }
     }
 
-    async fn execute_action(&mut self, action: ActionPlan) -> Result<()> {
+    async fn execute_action(
+        &mut self,
+        action: ActionPlan,
+        ui: &impl crate::interaction::UserInteraction,
+    ) -> Result<()> {
         let agent_role = AgentRole::from(action.agent.as_str());
 
         // Find Input Context (Simplified: take all existing artifacts for now)
-        let mut context = serde_json::to_string_pretty(&self.artifacts).unwrap_or_default();
+        // In a more advanced version, we'd filter based on Context relations in the graph
+        let mut context_map = HashMap::new();
+        for (kind, val) in &self.artifacts {
+            // Log what we are retrieving for context
+            ui.log_info(&format!("  [Context] Retrieving: {}", kind));
+            context_map.insert(kind.clone(), val.clone());
+        }
+
+        let mut context = serde_json::to_string_pretty(&context_map).unwrap_or_default();
 
         // If refining, inject feedback
         if action.category == RelationCategory::Refinement {
@@ -305,9 +325,11 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             }
             _ => {
                 // Other or Context categories - should not be triggered by scheduler normally
-                self.artifacts.insert(action.target.clone(), result);
+                self.artifacts.insert(action.target.clone(), result.clone());
             }
         }
+
+        ui.render_artifact(&action.target, self.artifacts.get(&action.target).unwrap());
 
         Ok(())
     }

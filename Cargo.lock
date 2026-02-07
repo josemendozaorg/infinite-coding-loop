@@ -422,6 +422,7 @@ dependencies = [
  "dialoguer",
  "indicatif",
  "serde_json",
+ "tempfile",
  "tokio",
  "uuid",
 ]

@@ -26,10 +26,43 @@
       "name": "SoftwareApplication"
     },
     "target": {
-      "name": "Developer"
+      "name": "Engineer"
     },
     "type": {
       "name": "uses"
+    }
+  },
+  {
+    "source": {
+      "name": "ProductManager"
+    },
+    "target": {
+      "name": "Requirement"
+    },
+    "type": {
+      "name": "creates"
+    }
+  },
+  {
+    "source": {
+      "name": "Architect"
+    },
+    "target": {
+      "name": "DesignSpec"
+    },
+    "type": {
+      "name": "creates"
+    }
+  },
+  {
+    "source": {
+      "name": "Engineer"
+    },
+    "target": {
+      "name": "Plan"
+    },
+    "type": {
+      "name": "creates"
     }
   },
   {
@@ -188,7 +221,7 @@
   },
   {
     "source": {
-      "name": "Developer"
+      "name": "Engineer"
     },
     "target": {
       "name": "Code"
@@ -199,7 +232,7 @@
   },
   {
     "source": {
-      "name": "Developer"
+      "name": "Engineer"
     },
     "target": {
       "name": "UserStory"
@@ -210,7 +243,7 @@
   },
   {
     "source": {
-      "name": "Developer"
+      "name": "Engineer"
     },
     "target": {
       "name": "UnitTest"
@@ -221,7 +254,7 @@
   },
   {
     "source": {
-      "name": "Developer"
+      "name": "Engineer"
     },
     "target": {
       "name": "UnitTest"
@@ -232,7 +265,7 @@
   },
   {
     "source": {
-      "name": "Developer"
+      "name": "Engineer"
     },
     "target": {
       "name": "UnitTest"
@@ -243,7 +276,7 @@
   },
   {
     "source": {
-      "name": "Developer"
+      "name": "Engineer"
     },
     "target": {
       "name": "Code"
@@ -309,7 +342,7 @@
   },
   {
     "source": {
-      "name": "Developer"
+      "name": "Engineer"
     },
     "target": {
       "name": "CodingStyle"
@@ -320,7 +353,7 @@
   },
   {
     "source": {
-      "name": "Developer"
+      "name": "Engineer"
     },
     "target": {
       "name": "CodingPractice"

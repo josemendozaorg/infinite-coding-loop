@@ -86,34 +86,23 @@ impl UserInteraction for CliInteraction {
         // Could be used for timing or spinner cleanup if we managed global state
     }
 
-    fn render_requirements(&self, reqs: &[Value]) {
-        println!("\n{}:", style("Requirements").bold().green());
-        for req in reqs {
-            if let Some(story) = req.get("user_story").and_then(|v| v.as_str()) {
-                println!("  • {}", story);
-            } else {
-                println!("  • {:?}", req);
-            }
-        }
-    }
-
-    fn render_spec(&self, spec: &Value) {
-        println!("\n{}:", style("Feature Spec").bold().green());
-        if let Some(id) = spec.get("id").and_then(|v| v.as_str()) {
-            println!("  ID: {}", id);
-        } else {
-            println!("  Spec: {:?}", spec);
-        }
-    }
-
-    fn render_plan(&self, plan: &Value) {
-        println!("\n{}:", style("Implementation Plan").bold().green());
-        if let Some(steps) = plan.get("tasks").and_then(|v| v.as_array()) {
-            for (i, step) in steps.iter().enumerate() {
-                println!("  {}. {:?}", i + 1, step);
+    fn render_artifact(&self, kind: &str, data: &Value) {
+        println!("\n{}:", style(kind).bold().green());
+        if let Some(obj) = data.as_object() {
+            for (key, val) in obj {
+                if val.is_string() {
+                    println!("  {}: {}", style(key).dim(), val.as_str().unwrap());
+                } else if val.is_array() {
+                    println!("  {}:", style(key).dim());
+                    for item in val.as_array().unwrap() {
+                        println!("    • {:?}", item);
+                    }
+                } else {
+                    println!("  {}: {:?}", style(key).dim(), val);
+                }
             }
         } else {
-            println!("  Plan: {:?}", plan);
+            println!("  {:?}", data);
         }
     }
 

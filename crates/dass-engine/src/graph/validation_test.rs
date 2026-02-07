@@ -25,13 +25,7 @@ mod tests {
         )
         .expect("Failed to write schema");
 
-        let metamodel = json!({
-            "entities": [],
-            "relationships": [],
-            "$defs": {
-                "GraphRules": { "rules": [] }
-            }
-        });
+        let metamodel = json!([]);
 
         let dg = DependencyGraph::load_from_metamodel(&metamodel.to_string(), Some(dir.path()))
             .expect("Failed to load graph");

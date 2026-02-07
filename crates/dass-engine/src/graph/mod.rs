@@ -40,7 +40,12 @@ pub struct MetaRelationship {
     pub source: MetaEntity,
     pub target: MetaEntity,
     #[serde(rename = "type")]
-    pub rel_type: MetaEntity,
+    pub rel_type: MetaVerb,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MetaVerb {
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,16 +98,52 @@ impl DependencyGraph {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let engine_meta_root = std::path::Path::new(manifest_dir).join("ontology/schemas/meta");
 
-        // Load Schema defs for validation logic (Optional but kept for robustness)
+        // Load Meta Schemas for validation
         let mut meta_files = Vec::new();
         Self::find_json_files(&engine_meta_root, &mut meta_files);
         for path in meta_files {
             if let Ok(content) = std::fs::read_to_string(&path) {
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                     if let Some(id) = json.get("$id").and_then(|v| v.as_str()) {
-                        dg.schemas.insert(id.to_string(), content);
+                        dg.schemas.insert(id.to_string(), content.clone());
+                    }
+                    if let Some(title) = json.get("title").and_then(|v| v.as_str()) {
+                        dg.schemas.insert(title.to_string(), content);
                     }
                 }
+            }
+        }
+
+        // Validate metamodel against ontology.schema.json
+        if let Some(schema_content) = dg
+            .schemas
+            .get("https://infinite-coding-loop.dass/schemas/meta/ontology.schema.json")
+        {
+            let schema_json: serde_json::Value = serde_json::from_str(schema_content)?;
+            let mut options = jsonschema::JSONSchema::options();
+            // Add base.schema.json to options for resolution
+            if let Some(base_content) = dg
+                .schemas
+                .get("https://infinite-coding-loop.dass/schemas/meta/base.schema.json")
+            {
+                let base_json: serde_json::Value = serde_json::from_str(base_content)?;
+                options.with_document(
+                    "https://infinite-coding-loop.dass/schemas/meta/base.schema.json".to_string(),
+                    base_json,
+                );
+            }
+
+            let compiled = options
+                .compile(&schema_json)
+                .map_err(|e| anyhow::anyhow!("Failed to compile Meta-Ontology schema: {}", e))?;
+
+            let instance: serde_json::Value = serde_json::from_str(json_content)?;
+            if let Err(errors) = compiled.validate(&instance) {
+                let error_msg = errors.map(|e| e.to_string()).collect::<Vec<_>>().join(", ");
+                return Err(anyhow::anyhow!(
+                    "Metamodel validation against Meta-Ontology failed: {}",
+                    error_msg
+                ));
             }
         }
 
@@ -273,6 +314,27 @@ impl DependencyGraph {
     }
 
     pub fn validate_meta_ontology(&self) -> Result<()> {
+        // Ensure all nodes are known either as Agents or Artifacts (have a schema)
+        for node_idx in self.graph.node_indices() {
+            let name = &self.graph[node_idx];
+            let is_agent = self.is_agent(name);
+            let has_schema = self.schemas.contains_key(name)
+                || self.schemas.contains_key(&Self::to_snake_case(name))
+                || self
+                    .schemas
+                    .keys()
+                    .any(|k| k.to_lowercase() == name.to_lowercase());
+
+            if !is_agent && !has_schema && name != "SoftwareApplication" {
+                // For now, log a warning or return error?
+                // The meta-ontology says they should be specialized.
+                println!(
+                    "Warning: Entity '{}' is neither an Agent nor has a known Artifact schema",
+                    name
+                );
+            }
+        }
+
         for edge in self.graph.edge_indices() {
             let (source_idx, target_idx) = self.graph.edge_endpoints(edge).unwrap();
             let source = &self.graph[source_idx];
@@ -280,11 +342,25 @@ impl DependencyGraph {
             let relation = self.graph.edge_weight(edge).unwrap();
             let category = RelationCategory::from_str(relation);
 
-            // Meta-Rule: If the source is an Agent, ensure the target is NOT also an Agent
-            // unless it's a team/org relationship (Other category for now).
-            if self.is_agent(source) {
-                if self.is_agent(target) && category != RelationCategory::Other {
-                    // Potential violation
+            // Rule: Agent -(Creation)-> Artifact
+            if self.is_agent(source) && category == RelationCategory::Creation {
+                if self.is_agent(target) {
+                    return Err(anyhow::anyhow!(
+                        "Agent '{}' cannot 'create' another Agent '{}'",
+                        source,
+                        target
+                    ));
+                }
+            }
+
+            // Rule: Agent -(Verification)-> Artifact
+            if self.is_agent(source) && category == RelationCategory::Verification {
+                if self.is_agent(target) {
+                    return Err(anyhow::anyhow!(
+                        "Agent '{}' cannot 'verify' another Agent '{}'",
+                        source,
+                        target
+                    ));
                 }
             }
         }
@@ -293,6 +369,8 @@ impl DependencyGraph {
 
     pub fn is_agent(&self, kind: &str) -> bool {
         self.agent_roles.contains(kind)
+            || self.agent_roles.contains(&kind.to_lowercase())
+            || self.agent_roles.contains(&Self::to_snake_case(kind))
     }
 
     pub fn validate_artifact(&self, kind: &str, data: &serde_json::Value) -> Result<()> {
@@ -430,18 +508,10 @@ mod tests {
 
     #[test]
     fn test_load_and_query_graph() {
-        let json = r#"{
-            "entities": [],
-            "relationships": [],
-            "$defs": {
-                "GraphRules": {
-                    "rules": [
-                        { "source": { "name": "Agent" }, "target": { "name": "Feature" }, "relation": { "name": "creates" } },
-                        { "source": { "name": "Feature" }, "target": { "name": "Requirement" }, "relation": { "name": "contains" } }
-                    ]
-                }
-            }
-        }"#;
+        let json = r#"[
+            { "source": { "name": "Agent" }, "target": { "name": "Feature" }, "type": { "name": "creates" } },
+            { "source": { "name": "Feature" }, "target": { "name": "Requirement" }, "type": { "name": "contains" } }
+        ]"#;
 
         let graph = DependencyGraph::load_from_metamodel(json, None).expect("Failed to load graph");
 
@@ -456,18 +526,10 @@ mod tests {
 
     #[test]
     fn test_invalid_topology_multiple_roots() {
-        let json = r#"{
-            "entities": [],
-            "relationships": [],
-            "$defs": {
-                "GraphRules": {
-                    "rules": [
-                        { "source": { "name": "A" }, "target": { "name": "B" }, "relation": { "name": "rel" } },
-                        { "source": { "name": "C" }, "target": { "name": "D" }, "relation": { "name": "rel" } }
-                    ]
-                }
-            }
-        }"#;
+        let json = r#"[
+            { "source": { "name": "A" }, "target": { "name": "B" }, "type": { "name": "rel" } },
+            { "source": { "name": "C" }, "target": { "name": "D" }, "type": { "name": "rel" } }
+        ]"#;
 
         let result = DependencyGraph::load_from_metamodel(json, None);
         // Multiple roots are now allowed
@@ -476,19 +538,11 @@ mod tests {
 
     #[test]
     fn test_invalid_topology_unreachable() {
-        let json = r#"{
-            "entities": [],
-            "relationships": [],
-            "$defs": {
-                "GraphRules": {
-                    "rules": [
-                        { "source": { "name": "A" }, "target": { "name": "B" }, "relation": { "name": "rel" } },
-                        { "source": { "name": "B" }, "target": { "name": "A" }, "relation": { "name": "rel" } },
-                        { "source": { "name": "C" }, "target": { "name": "D" }, "relation": { "name": "rel" } }
-                    ]
-                }
-            }
-        }"#;
+        let json = r#"[
+            { "source": { "name": "A" }, "target": { "name": "B" }, "type": { "name": "rel" } },
+            { "source": { "name": "B" }, "target": { "name": "A" }, "type": { "name": "rel" } },
+            { "source": { "name": "C" }, "target": { "name": "D" }, "type": { "name": "rel" } }
+        ]"#;
 
         let result = DependencyGraph::load_from_metamodel(json, None);
         // Unreachable nodes/cycles are now allowed

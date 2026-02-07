@@ -22,14 +22,8 @@ pub trait UserInteraction {
     /// Indicate that a step has completed.
     fn end_step(&self, name: &str);
 
-    /// Display the analyzed requirements.
-    fn render_requirements(&self, reqs: &[Value]);
-
-    /// Display the generated specification.
-    fn render_spec(&self, spec: &Value);
-
-    /// Display the generated plan.
-    fn render_plan(&self, plan: &Value);
+    /// Display a produced or retrieved artifact generically.
+    fn render_artifact(&self, kind: &str, data: &Value);
 
     /// Log general information.
     fn log_info(&self, msg: &str);
