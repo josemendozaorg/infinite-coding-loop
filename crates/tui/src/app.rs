@@ -363,7 +363,12 @@ impl App {
                                 AiProvider::Gemini => Arc::new(LLMPlanner {
                                     executor: CliExecutor::new(
                                         "gemini".to_string(),
-                                        vec!["--yolo".to_string(), "--allowed-tools".to_string(), "run_shell_command".to_string()],
+                                        vec![
+                                            "--approval-mode".to_string(),
+                                            "yolo".to_string(),
+                                            "--allowed-tools".to_string(),
+                                            "run_shell_command".to_string(),
+                                        ],
                                     ),
                                 }),
                                 AiProvider::Claude => Arc::new(LLMPlanner {

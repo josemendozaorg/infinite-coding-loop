@@ -19,7 +19,7 @@ async fn test_ai_cli_file_generation() -> Result<()> {
     // Prompt the AI to create a specific file in the current directory
     let prompt = "Create a file named 'hello.txt' containing the text 'Hello from AI CLI' in the current directory.";
 
-    // We call prompt. Since we use --yolo, the AI CLI (gemini) should execute the file creation.
+    // We call prompt. Since we use --approval-mode yolo, the AI CLI (gemini) should execute the file creation.
     let response = client.prompt(prompt).await?;
     println!("AI Response: {}", response);
 

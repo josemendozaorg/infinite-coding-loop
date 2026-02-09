@@ -412,14 +412,13 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         entity_type: Option<&str>,
     ) -> String {
         let is_code = entity_type == Some("Code");
-        let work_dir = self.work_dir.as_deref().unwrap_or(".");
 
         let mut base = format!("{}\n\nPlease generate the {} artifact.", prompt, target);
 
         base.push_str("\n\n**Tool-Driven Persistence Required**:\n");
         base.push_str(&format!(
-            "1. You MUST use your tools (e.g., `write_file`) to persist the {} content to the file `{}` in directory `{}`.\n",
-            target, filename, work_dir
+            "1. You MUST use your tools (e.g., `write_file`) to persist the {} content to the file `{}` in the current directory.\n",
+            target, filename
         ));
         base.push_str(
             "2. Do NOT just output the text; you are responsible for the file creation.\n",

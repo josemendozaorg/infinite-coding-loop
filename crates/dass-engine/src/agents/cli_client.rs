@@ -53,37 +53,48 @@ impl AiCliClient for ShellCliClient {
         // Command: sh -c 'cd "$1" && shift && exec "$@"' -- <work_dir> <executable> -p <prompt> ...
         let work_dir = self.work_dir.clone();
         let executable = self.executable.clone();
-        let prompt_text = prompt_text.to_string();
+        let prompt_text_owned = prompt_text.to_string();
         let yolo = self.yolo;
         let model = self.model.clone();
 
+        // We always use approval-mode yolo for child processes to prevent hanging on interactive prompts.
+        let mut cmd = Command::new(&executable);
+        cmd.current_dir(&work_dir);
+        if let Some(ref m) = model {
+            cmd.arg("-m").arg(m);
+        }
+        cmd.arg("--approval-mode").arg("yolo");
+        cmd.arg(&prompt_text_owned);
+
+        eprintln!(
+            "\n{}",
+            console::style("--- AI CLI PROMPT ---").bold().yellow()
+        );
+        eprintln!("WorkDir: {}", work_dir);
+        eprintln!("Command: {:?}", cmd);
+        eprintln!("Engine YOLO (Auto-Confirm): {}", yolo);
+        eprintln!("Prompt Length: {} chars", prompt_text.len());
+        eprintln!(
+            "{}\n",
+            console::style("----------------------").bold().yellow()
+        );
+
         // Run the blocking Command in a blocking task to avoid panicking the runtime
-        let output = tokio::task::spawn_blocking(move || {
-            let mut cmd = Command::new(&executable);
-            cmd.current_dir(&work_dir);
-
-            if let Some(ref m) = model {
-                cmd.arg("-m").arg(m);
-            }
-
-            if yolo {
-                cmd.arg("--approval-mode").arg("yolo");
-            }
-
-            // The prompt is now a positional argument at the end
-            cmd.arg(&prompt_text);
-
-            cmd.output()
-        })
-        .await??;
+        let output = tokio::task::spawn_blocking(move || cmd.output()).await??;
 
         if !output.status.success() {
+            eprintln!(
+                "{}: {}",
+                console::style("AI CLI FAILED").bold().red(),
+                output.status
+            );
             return Err(anyhow::anyhow!(
                 "AI CLI failed: {}",
                 String::from_utf8_lossy(&output.stderr)
             ));
         }
 
+        eprintln!("{}", console::style("AI CLI SUCCESS").bold().green());
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         eprintln!("[DEBUG] Model Output: {}", stdout); // Log for user visibility
         Ok(stdout)

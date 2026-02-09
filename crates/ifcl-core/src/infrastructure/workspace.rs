@@ -1,4 +1,5 @@
 use std::fs;
+use std::io;
 use std::path::Path;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -42,6 +43,11 @@ pub fn validate_workspace_path(path_str: &str) -> WorkspaceStatus {
     }
 }
 
+pub fn check_mobile_directory_exists(base_path: &Path) -> Result<bool, io::Error> {
+    let mobile_path = base_path.join("mobile");
+    Ok(mobile_path.exists() && mobile_path.is_dir())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -72,5 +78,25 @@ mod tests {
             WorkspaceStatus::Invalid(_) => (),
             _ => panic!("Expected invalid status for /root"),
         }
+    }
+
+    #[test]
+    fn test_check_mobile_directory_exists_true() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("mobile")).unwrap();
+        assert!(check_mobile_directory_exists(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn test_check_mobile_directory_exists_false() {
+        let dir = tempdir().unwrap();
+        assert!(!check_mobile_directory_exists(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn test_check_mobile_directory_exists_not_a_dir() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("mobile"), "this is a file").unwrap();
+        assert!(!check_mobile_directory_exists(dir.path()).unwrap());
     }
 }

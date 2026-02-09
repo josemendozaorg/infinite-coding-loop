@@ -1,6 +1,9 @@
 ## Ideas
 
-[] THIS IS A BIG PROBLEM: Show the prompt for every agent. The AI CLI is not create the Documents still.
+[] It is creating files now. But it is getting stuck in the #3 iteration.
+   Also, it is not asking every time for approval. It seems that it implemented one YOLO for our tool and one YOLO for the AI CLI.
+
+[X] THIS IS A BIG PROBLEM: Show the prompt for every agent. The AI CLI is not create the Documents still.
 
 [] I am not following. Wait a second. Why are we actually parsing the JSON/YAML output whatsover? The application is constantly failing at this. 
   "The AI is outputting multiple JSON code blocks (likely one for the "preview" and one for the "persistence" action), "

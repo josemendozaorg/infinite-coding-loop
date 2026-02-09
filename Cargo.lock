@@ -447,6 +447,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
+ "console",
  "jsonschema",
  "petgraph",
  "serde",

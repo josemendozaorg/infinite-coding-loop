@@ -1,6 +1,6 @@
 use tui::app::App;
-use tui::state::AppState;
 use tui::cli::CliArgs;
+use tui::state::AppState;
 use tui::ui; // If used
 
 use anyhow::Result;
@@ -76,7 +76,7 @@ async fn main() -> Result<()> {
         Some("gemini") => Arc::new(LLMPlanner {
             executor: CliExecutor::new(
                 "gemini".to_string(),
-                vec!["--yolo".to_string()],
+                vec!["--approval-mode".to_string(), "yolo".to_string()],
             ),
         }),
         Some("claude") => Arc::new(LLMPlanner {
@@ -175,31 +175,37 @@ async fn main() -> Result<()> {
 
             if let Some((mid, tid, worker_name)) = pending_task {
                 let w_lower = worker_name.to_lowercase();
-                let worker: Box<dyn ifcl_core::Worker> = if w_lower.contains("gemini") || w_lower.contains("planner") {
-                    Box::new(AiGenericWorker::new(
-                        worker_name.clone(),
-                        WorkerRole::Coder,
-                        Box::new(AiCliAgent::new(
-                            "gemini".to_string(),
-                            None,
-                            vec!["--yolo".to_string(), "--allowed-tools".to_string(), "run_shell_command".to_string()],
-                        )),
-                    ))
-                } else if w_lower.contains("claude") {
-                    Box::new(AiGenericWorker::new(
-                        worker_name.clone(),
-                        WorkerRole::Coder,
-                        Box::new(AiCliAgent::new("claude".to_string(), None, vec![])),
-                    ))
-                } else if w_lower.contains("opencode") {
-                    Box::new(AiGenericWorker::new(
-                        worker_name.clone(),
-                        WorkerRole::Coder,
-                        Box::new(AiCliAgent::new("opencode".to_string(), None, vec![])),
-                    ))
-                } else {
-                    Box::new(CliWorker::new(&worker_name, WorkerRole::Coder))
-                };
+                let worker: Box<dyn ifcl_core::Worker> =
+                    if w_lower.contains("gemini") || w_lower.contains("planner") {
+                        Box::new(AiGenericWorker::new(
+                            worker_name.clone(),
+                            WorkerRole::Coder,
+                            Box::new(AiCliAgent::new(
+                                "gemini".to_string(),
+                                None,
+                                vec![
+                                    "--approval-mode".to_string(),
+                                    "yolo".to_string(),
+                                    "--allowed-tools".to_string(),
+                                    "run_shell_command".to_string(),
+                                ],
+                            )),
+                        ))
+                    } else if w_lower.contains("claude") {
+                        Box::new(AiGenericWorker::new(
+                            worker_name.clone(),
+                            WorkerRole::Coder,
+                            Box::new(AiCliAgent::new("claude".to_string(), None, vec![])),
+                        ))
+                    } else if w_lower.contains("opencode") {
+                        Box::new(AiGenericWorker::new(
+                            worker_name.clone(),
+                            WorkerRole::Coder,
+                            Box::new(AiCliAgent::new("opencode".to_string(), None, vec![])),
+                        ))
+                    } else {
+                        Box::new(CliWorker::new(&worker_name, WorkerRole::Coder))
+                    };
 
                 let result = orchestrator
                     .execute_task(Arc::clone(&bus), mid, tid, worker.as_ref())
@@ -220,23 +226,20 @@ async fn main() -> Result<()> {
                                         timestamp: Utc::now(),
                                         worker_id: "system".to_string(),
                                         event_type: "Log".to_string(),
-                                        payload: serde_json::to_string(
-                                            &ifcl_core::LogPayload {
-                                                level: "WARN".to_string(),
-                                                message: format!(
-                                                    "⚠️ Retrying Task (Attempt {}/3)",
-                                                    count
-                                                ),
-                                            },
-                                        )
+                                        payload: serde_json::to_string(&ifcl_core::LogPayload {
+                                            level: "WARN".to_string(),
+                                            message: format!(
+                                                "⚠️ Retrying Task (Attempt {}/3)",
+                                                count
+                                            ),
+                                        })
                                         .unwrap(),
                                     })
                                     .await;
                                 let _ = orchestrator
                                     .update_task_status(mid, tid, TaskStatus::Pending)
                                     .await;
-                                tokio::time::sleep(tokio::time::Duration::from_millis(500))
-                                    .await;
+                                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
                             } else {
                                 let _ = bus.publish(Event {
                                      id: Uuid::new_v4(),
@@ -284,9 +287,8 @@ async fn main() -> Result<()> {
                                             payload: serde_json::to_string(
                                                 &ifcl_core::LogPayload {
                                                     level: "INFO".to_string(),
-                                                    message:
-                                                        "🧠 Delegating to Planner Worker..."
-                                                            .to_string(),
+                                                    message: "🧠 Delegating to Planner Worker..."
+                                                        .to_string(),
                                                 },
                                             )
                                             .unwrap(),
@@ -511,31 +513,37 @@ async fn main() -> Result<()> {
                 let orch_exec = Arc::clone(&orch_runner);
                 let w_lower = worker_name.to_lowercase();
 
-                let worker: Box<dyn ifcl_core::Worker> = if w_lower.contains("gemini") || w_lower.contains("planner") {
-                    Box::new(AiGenericWorker::new(
-                        worker_name.clone(),
-                        WorkerRole::Coder,
-                        Box::new(AiCliAgent::new(
-                            "gemini".to_string(),
-                            None,
-                            vec!["--yolo".to_string(), "--allowed-tools".to_string(), "run_shell_command".to_string()],
-                        )),
-                    ))
-                } else if w_lower.contains("claude") {
-                    Box::new(AiGenericWorker::new(
-                        worker_name.clone(),
-                        WorkerRole::Coder,
-                        Box::new(AiCliAgent::new("claude".to_string(), None, vec![])),
-                    ))
-                } else if w_lower.contains("opencode") {
-                    Box::new(AiGenericWorker::new(
-                        worker_name.clone(),
-                        WorkerRole::Coder,
-                        Box::new(AiCliAgent::new("opencode".to_string(), None, vec![])),
-                    ))
-                } else {
-                    Box::new(CliWorker::new(&worker_name, WorkerRole::Coder))
-                };
+                let worker: Box<dyn ifcl_core::Worker> =
+                    if w_lower.contains("gemini") || w_lower.contains("planner") {
+                        Box::new(AiGenericWorker::new(
+                            worker_name.clone(),
+                            WorkerRole::Coder,
+                            Box::new(AiCliAgent::new(
+                                "gemini".to_string(),
+                                None,
+                                vec![
+                                    "--approval-mode".to_string(),
+                                    "yolo".to_string(),
+                                    "--allowed-tools".to_string(),
+                                    "run_shell_command".to_string(),
+                                ],
+                            )),
+                        ))
+                    } else if w_lower.contains("claude") {
+                        Box::new(AiGenericWorker::new(
+                            worker_name.clone(),
+                            WorkerRole::Coder,
+                            Box::new(AiCliAgent::new("claude".to_string(), None, vec![])),
+                        ))
+                    } else if w_lower.contains("opencode") {
+                        Box::new(AiGenericWorker::new(
+                            worker_name.clone(),
+                            WorkerRole::Coder,
+                            Box::new(AiCliAgent::new("opencode".to_string(), None, vec![])),
+                        ))
+                    } else {
+                        Box::new(CliWorker::new(&worker_name, WorkerRole::Coder))
+                    };
 
                 let result = orch_exec
                     .execute_task(bus_exec.clone(), mid, tid, worker.as_ref())

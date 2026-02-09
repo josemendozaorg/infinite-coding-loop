@@ -12,7 +12,7 @@ use serde_json::Value;
 #[command(version, about, long_about = None)]
 struct Args {
     /// Skip confirmation prompts (auto-accept)
-    #[arg(short, long, alias = "yolo")]
+    #[arg(short, long)]
     yes: bool,
 
     /// Model to use (default: "gemini-2.5-flash")
