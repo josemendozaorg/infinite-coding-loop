@@ -1,10 +1,12 @@
 [
   {
     "source": {
-      "name": "SoftwareApplication"
+      "name": "SoftwareApplication",
+      "type": "Other"
     },
     "target": {
-      "name": "ProductManager"
+      "name": "ProductManager",
+      "type": "Agent"
     },
     "type": {
       "name": "uses"
@@ -12,10 +14,12 @@
   },
   {
     "source": {
-      "name": "SoftwareApplication"
+      "name": "SoftwareApplication",
+      "type": "Other"
     },
     "target": {
-      "name": "Architect"
+      "name": "Architect",
+      "type": "Agent"
     },
     "type": {
       "name": "uses"
@@ -23,10 +27,12 @@
   },
   {
     "source": {
-      "name": "SoftwareApplication"
+      "name": "SoftwareApplication",
+      "type": "Other"
     },
     "target": {
-      "name": "Developer"
+      "name": "Engineer",
+      "type": "Agent"
     },
     "type": {
       "name": "uses"
@@ -34,54 +40,155 @@
   },
   {
     "source": {
-      "name": "SoftwareApplication"
+      "name": "Architect",
+      "type": "Agent"
     },
     "target": {
-      "name": "Tester"
+      "name": "ArchitectureStyle",
+      "type": "Other"
     },
     "type": {
-      "name": "uses"
+      "name": "defines"
     }
   },
   {
     "source": {
-      "name": "SoftwareApplication"
+      "name": "Architect",
+      "type": "Agent"
     },
     "target": {
-      "name": "DevOps"
+      "name": "Microservices",
+      "type": "Other"
     },
     "type": {
-      "name": "uses"
+      "name": "defines"
     }
   },
   {
     "source": {
-      "name": "SoftwareApplication"
+      "name": "Architect",
+      "type": "Agent"
     },
     "target": {
-      "name": "ProjectManager"
+      "name": "DDD",
+      "type": "Other"
     },
     "type": {
-      "name": "uses"
+      "name": "defines"
     }
   },
   {
     "source": {
-      "name": "SoftwareApplication"
+      "name": "Architect",
+      "type": "Agent"
     },
     "target": {
-      "name": "BusinessAnalyst"
+      "name": "Methodology",
+      "type": "Other"
     },
     "type": {
-      "name": "uses"
+      "name": "defines"
     }
   },
   {
     "source": {
-      "name": "TDD"
+      "name": "Architect",
+      "type": "Agent"
     },
     "target": {
-      "name": "Methodology"
+      "name": "QualityMetric",
+      "type": "Other"
+    },
+    "type": {
+      "name": "defines"
+    }
+  },
+  {
+    "source": {
+      "name": "Engineer",
+      "type": "Agent"
+    },
+    "target": {
+      "name": "TDD",
+      "type": "Other"
+    },
+    "type": {
+      "name": "defines"
+    }
+  },
+  {
+    "source": {
+      "name": "Engineer",
+      "type": "Agent"
+    },
+    "target": {
+      "name": "CodingStyle",
+      "type": "Other"
+    },
+    "type": {
+      "name": "defines"
+    }
+  },
+  {
+    "source": {
+      "name": "Engineer",
+      "type": "Agent"
+    },
+    "target": {
+      "name": "GoogleCodingStyle",
+      "type": "Other"
+    },
+    "type": {
+      "name": "defines"
+    }
+  },
+  {
+    "source": {
+      "name": "Engineer",
+      "type": "Agent"
+    },
+    "target": {
+      "name": "CodingPractice",
+      "type": "Other"
+    },
+    "type": {
+      "name": "defines"
+    }
+  },
+  {
+    "source": {
+      "name": "Engineer",
+      "type": "Agent"
+    },
+    "target": {
+      "name": "DRY",
+      "type": "Other"
+    },
+    "type": {
+      "name": "defines"
+    }
+  },
+  {
+    "source": {
+      "name": "Engineer",
+      "type": "Agent"
+    },
+    "target": {
+      "name": "KISS",
+      "type": "Other"
+    },
+    "type": {
+      "name": "defines"
+    }
+  },
+  {
+    "source": {
+      "name": "Microservices",
+      "type": "Other"
+    },
+    "target": {
+      "name": "ArchitectureStyle",
+      "type": "Other"
     },
     "type": {
       "name": "isA"
@@ -89,10 +196,12 @@
   },
   {
     "source": {
-      "name": "BDD"
+      "name": "TDD",
+      "type": "Other"
     },
     "target": {
-      "name": "Methodology"
+      "name": "Methodology",
+      "type": "Other"
     },
     "type": {
       "name": "isA"
@@ -100,10 +209,12 @@
   },
   {
     "source": {
-      "name": "DDD"
+      "name": "DDD",
+      "type": "Other"
     },
     "target": {
-      "name": "Methodology"
+      "name": "Methodology",
+      "type": "Other"
     },
     "type": {
       "name": "isA"
@@ -111,76 +222,51 @@
   },
   {
     "source": {
-      "name": "Feature"
+      "name": "GoogleCodingStyle",
+      "type": "Other"
     },
     "target": {
-      "name": "UserStory"
+      "name": "CodingStyle",
+      "type": "Other"
     },
     "type": {
-      "name": "requires"
+      "name": "isA"
     }
   },
   {
     "source": {
-      "name": "UserStory"
+      "name": "DRY",
+      "type": "Other"
     },
     "target": {
-      "name": "AcceptanceCriteria"
+      "name": "CodingPractice",
+      "type": "Other"
     },
     "type": {
-      "name": "requires"
+      "name": "isA"
     }
   },
   {
     "source": {
-      "name": "UserStory"
+      "name": "KISS",
+      "type": "Other"
     },
     "target": {
-      "name": "ImplementationPlan"
+      "name": "CodingPractice",
+      "type": "Other"
     },
     "type": {
-      "name": "requires"
+      "name": "isA"
     }
   },
   {
     "source": {
-      "name": "TestCase"
+      "name": "ProductManager",
+      "type": "Agent"
     },
     "target": {
-      "name": "UnitTest"
-    },
-    "type": {
-      "name": "requires"
-    }
-  },
-  {
-    "source": {
-      "name": "UnitTest"
-    },
-    "target": {
-      "name": "SuccessfulTestResult"
-    },
-    "type": {
-      "name": "requires"
-    }
-  },
-  {
-    "source": {
-      "name": "BusinessAnalyst"
-    },
-    "target": {
-      "name": "Feature"
-    },
-    "type": {
-      "name": "verifies"
-    }
-  },
-  {
-    "source": {
-      "name": "Developer"
-    },
-    "target": {
-      "name": "Code"
+      "name": "Requirement",
+      "type": "Document"
     },
     "type": {
       "name": "creates"
@@ -188,21 +274,272 @@
   },
   {
     "source": {
-      "name": "Developer"
+      "name": "ProductManager",
+      "type": "Agent"
     },
     "target": {
-      "name": "Code"
+      "name": "Feature",
+      "type": "Document"
     },
     "type": {
-      "name": "verifies"
+      "name": "creates"
     }
   },
   {
     "source": {
-      "name": "Developer"
+      "name": "Feature",
+      "type": "Document"
     },
     "target": {
-      "name": "UserStory"
+      "name": "Requirement",
+      "type": "Document"
+    },
+    "type": {
+      "name": "requires"
+    }
+  },
+  {
+    "source": {
+      "name": "ProductManager",
+      "type": "Agent"
+    },
+    "target": {
+      "name": "UserStory",
+      "type": "Document"
+    },
+    "type": {
+      "name": "creates"
+    }
+  },
+  {
+    "source": {
+      "name": "UserStory",
+      "type": "Document"
+    },
+    "target": {
+      "name": "Feature",
+      "type": "Document"
+    },
+    "type": {
+      "name": "requires"
+    }
+  },
+  {
+    "source": {
+      "name": "ProductManager",
+      "type": "Agent"
+    },
+    "target": {
+      "name": "AcceptanceCriteria",
+      "type": "Document"
+    },
+    "type": {
+      "name": "creates"
+    }
+  },
+  {
+    "source": {
+      "name": "AcceptanceCriteria",
+      "type": "Document"
+    },
+    "target": {
+      "name": "UserStory",
+      "type": "Document"
+    },
+    "type": {
+      "name": "requires"
+    }
+  },
+  {
+    "source": {
+      "name": "Architect",
+      "type": "Agent"
+    },
+    "target": {
+      "name": "DesignSpec",
+      "type": "Document"
+    },
+    "type": {
+      "name": "creates"
+    }
+  },
+  {
+    "source": {
+      "name": "DesignSpec",
+      "type": "Document"
+    },
+    "target": {
+      "name": "Requirement",
+      "type": "Document"
+    },
+    "type": {
+      "name": "requires"
+    }
+  },
+  {
+    "source": {
+      "name": "DesignSpec",
+      "type": "Document"
+    },
+    "target": {
+      "name": "UserStory",
+      "type": "Document"
+    },
+    "type": {
+      "name": "requires"
+    }
+  },
+  {
+    "source": {
+      "name": "DesignSpec",
+      "type": "Document"
+    },
+    "target": {
+      "name": "ArchitectureStyle",
+      "type": "Other"
+    },
+    "type": {
+      "name": "uses"
+    }
+  },
+  {
+    "source": {
+      "name": "DesignSpec",
+      "type": "Document"
+    },
+    "target": {
+      "name": "Microservices",
+      "type": "Other"
+    },
+    "type": {
+      "name": "uses"
+    }
+  },
+  {
+    "source": {
+      "name": "DesignSpec",
+      "type": "Document"
+    },
+    "target": {
+      "name": "DDD",
+      "type": "Other"
+    },
+    "type": {
+      "name": "uses"
+    }
+  },
+  {
+    "source": {
+      "name": "Engineer",
+      "type": "Agent"
+    },
+    "target": {
+      "name": "ImplementationPlan",
+      "type": "Document"
+    },
+    "type": {
+      "name": "creates"
+    }
+  },
+  {
+    "source": {
+      "name": "ImplementationPlan",
+      "type": "Document"
+    },
+    "target": {
+      "name": "DesignSpec",
+      "type": "Document"
+    },
+    "type": {
+      "name": "requires"
+    }
+  },
+  {
+    "source": {
+      "name": "ImplementationPlan",
+      "type": "Document"
+    },
+    "target": {
+      "name": "UserStory",
+      "type": "Document"
+    },
+    "type": {
+      "name": "requires"
+    }
+  },
+  {
+    "source": {
+      "name": "ImplementationPlan",
+      "type": "Document"
+    },
+    "target": {
+      "name": "TDD",
+      "type": "Other"
+    },
+    "type": {
+      "name": "uses"
+    }
+  },
+  {
+    "source": {
+      "name": "ImplementationPlan",
+      "type": "Document"
+    },
+    "target": {
+      "name": "Methodology",
+      "type": "Other"
+    },
+    "type": {
+      "name": "uses"
+    }
+  },
+  {
+    "source": {
+      "name": "Engineer",
+      "type": "Agent"
+    },
+    "target": {
+      "name": "UnitTest",
+      "type": "Document"
+    },
+    "type": {
+      "name": "creates"
+    }
+  },
+  {
+    "source": {
+      "name": "UnitTest",
+      "type": "Document"
+    },
+    "target": {
+      "name": "ImplementationPlan",
+      "type": "Document"
+    },
+    "type": {
+      "name": "requires"
+    }
+  },
+  {
+    "source": {
+      "name": "UnitTest",
+      "type": "Document"
+    },
+    "target": {
+      "name": "AcceptanceCriteria",
+      "type": "Document"
+    },
+    "type": {
+      "name": "requires"
+    }
+  },
+  {
+    "source": {
+      "name": "Engineer",
+      "type": "Agent"
+    },
+    "target": {
+      "name": "Code",
+      "type": "Code"
     },
     "type": {
       "name": "implements"
@@ -210,21 +547,90 @@
   },
   {
     "source": {
-      "name": "Developer"
+      "name": "Code",
+      "type": "Code"
     },
     "target": {
-      "name": "UnitTest"
+      "name": "ImplementationPlan",
+      "type": "Document"
     },
     "type": {
-      "name": "implements"
+      "name": "requires"
     }
   },
   {
     "source": {
-      "name": "Developer"
+      "name": "Code",
+      "type": "Code"
     },
     "target": {
-      "name": "UnitTest"
+      "name": "DesignSpec",
+      "type": "Document"
+    },
+    "type": {
+      "name": "requires"
+    }
+  },
+  {
+    "source": {
+      "name": "Code",
+      "type": "Code"
+    },
+    "target": {
+      "name": "GoogleCodingStyle",
+      "type": "Other"
+    },
+    "type": {
+      "name": "uses"
+    }
+  },
+  {
+    "source": {
+      "name": "Code",
+      "type": "Code"
+    },
+    "target": {
+      "name": "CodingStyle",
+      "type": "Other"
+    },
+    "type": {
+      "name": "uses"
+    }
+  },
+  {
+    "source": {
+      "name": "Code",
+      "type": "Code"
+    },
+    "target": {
+      "name": "QualityMetric",
+      "type": "Other"
+    },
+    "type": {
+      "name": "uses"
+    }
+  },
+  {
+    "source": {
+      "name": "Code",
+      "type": "Code"
+    },
+    "target": {
+      "name": "CodingPractice",
+      "type": "Other"
+    },
+    "type": {
+      "name": "uses"
+    }
+  },
+  {
+    "source": {
+      "name": "Engineer",
+      "type": "Agent"
+    },
+    "target": {
+      "name": "Code",
+      "type": "Code"
     },
     "type": {
       "name": "verifies"
@@ -232,167 +638,15 @@
   },
   {
     "source": {
-      "name": "Developer"
+      "name": "Engineer",
+      "type": "Agent"
     },
     "target": {
-      "name": "UnitTest"
+      "name": "UnitTest",
+      "type": "Document"
     },
     "type": {
-      "name": "improves"
-    }
-  },
-  {
-    "source": {
-      "name": "Developer"
-    },
-    "target": {
-      "name": "Code"
-    },
-    "type": {
-      "name": "improves"
-    }
-  },
-  {
-    "source": {
-      "name": "Code"
-    },
-    "target": {
-      "name": "CyclomaticLowComplexity"
-    },
-    "type": {
-      "name": "requires"
-    }
-  },
-  {
-    "source": {
-      "name": "Code"
-    },
-    "target": {
-      "name": "CodingStyle"
-    },
-    "type": {
-      "name": "requires"
-    }
-  },
-  {
-    "source": {
-      "name": "Code"
-    },
-    "target": {
-      "name": "CodingPractice"
-    },
-    "type": {
-      "name": "requires"
-    }
-  },
-  {
-    "source": {
-      "name": "KISS"
-    },
-    "target": {
-      "name": "CodingPractice"
-    },
-    "type": {
-      "name": "isA"
-    }
-  },
-  {
-    "source": {
-      "name": "DRY"
-    },
-    "target": {
-      "name": "CodingPractice"
-    },
-    "type": {
-      "name": "isA"
-    }
-  },
-  {
-    "source": {
-      "name": "Developer"
-    },
-    "target": {
-      "name": "CodingStyle"
-    },
-    "type": {
-      "name": "applies"
-    }
-  },
-  {
-    "source": {
-      "name": "Developer"
-    },
-    "target": {
-      "name": "CodingPractice"
-    },
-    "type": {
-      "name": "applies"
-    }
-  },
-  {
-    "source": {
-      "name": "GoogleCodingStyle"
-    },
-    "target": {
-      "name": "CodingStyle"
-    },
-    "type": {
-      "name": "isA"
-    }
-  },
-  {
-    "source": {
-      "name": "Architect"
-    },
-    "target": {
-      "name": "CodingStyle"
-    },
-    "type": {
-      "name": "defines"
-    }
-  },
-  {
-    "source": {
-      "name": "Architect"
-    },
-    "target": {
-      "name": "QualityMetric"
-    },
-    "type": {
-      "name": "defines"
-    }
-  },
-  {
-    "source": {
-      "name": "Architect"
-    },
-    "target": {
-      "name": "ArchitectureStyle"
-    },
-    "type": {
-      "name": "defines"
-    }
-  },
-  {
-    "source": {
-      "name": "Microservices"
-    },
-    "target": {
-      "name": "ArchitectureStyle"
-    },
-    "type": {
-      "name": "isA"
-    }
-  },
-  {
-    "source": {
-      "name": "CyclomaticLowComplexity"
-    },
-    "target": {
-      "name": "QualityMetric"
-    },
-    "type": {
-      "name": "isA"
+      "name": "verifies"
     }
   }
 ]

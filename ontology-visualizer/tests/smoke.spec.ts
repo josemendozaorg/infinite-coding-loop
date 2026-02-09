@@ -98,7 +98,7 @@ test('verifies node icons and expansion indicators', async ({ page }) => {
     await page.waitForTimeout(1000);
 
     // Find an Agent node
-    const agentNode = page.locator('.react-flow__node').filter({ hasText: /^Agent$|^Architect$|^Developer$/ }).first();
+    const agentNode = page.locator('.react-flow__node').filter({ hasText: /^Agent$|^Architect$|^Developer$|^Engineer$/ }).first();
     if (await agentNode.isVisible()) {
         await expect(agentNode.locator('svg')).toBeVisible();
     }

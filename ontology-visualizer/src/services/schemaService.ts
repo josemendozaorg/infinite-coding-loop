@@ -1,5 +1,8 @@
 import type { OntologyData, Node, Edge } from '../types';
 import { MarkerType } from 'reactflow';
+import Ajv from 'ajv/dist/2020';
+
+const ajv = new Ajv({ useDefaults: true });
 
 // In a real app, these would be fetched from an API or read via File System API
 // For this demo, we'll try to use the raw files if possible or mock them if fetch fails
@@ -15,15 +18,40 @@ async function loadJSON(path: string) {
 
 export async function loadOntology(): Promise<OntologyData> {
     try {
-        const ontology = await loadJSON('ontology.json');
+        const [ontology, ontologySchema, baseSchema] = await Promise.all([
+            loadJSON('ontology.json'),
+            loadJSON('schemas/meta/ontology.schema.json'),
+            loadJSON('schemas/meta/base.schema.json')
+        ]);
+
+        // Defensive schema registration
+        if (!ajv.getSchema("base.schema.json")) {
+            ajv.addSchema(baseSchema, "base.schema.json");
+        }
+
+        // Use the $id from the schema if available, otherwise compile directly
+        const schemaId = ontologySchema.$id || "ontology.schema.json";
+        let validate = ajv.getSchema(schemaId);
+        if (!validate) {
+            validate = ajv.compile(ontologySchema);
+        }
+
+        if (!validate(ontology)) {
+            console.error('[loadOntology] Validation failed:', validate.errors);
+            const errorMsg = validate.errors?.map(e => `${e.instancePath} ${e.message}`).join(', ');
+            throw new Error(`Ontology validation failed: ${errorMsg}`);
+        }
+
+        const processedNodes = processOntologyNodes(ontology as any[]);
+        const processedEdges = processOntologyEdges(ontology as any[]);
 
         return {
-            nodes: processOntologyNodes(ontology),
-            edges: processOntologyEdges(ontology),
+            nodes: processedNodes,
+            edges: processedEdges,
             raw: { ontology }
         };
     } catch (error) {
-        console.error('Failed to load ontology:', error);
+        console.error('[loadOntology] Error:', error);
         return {
             nodes: [],
             edges: [],
@@ -33,36 +61,37 @@ export async function loadOntology(): Promise<OntologyData> {
 }
 
 function processOntologyNodes(ontology: any[]): Node[] {
-    const nodeSet = new Set<string>();
+    const nodeSet = new Map<string, string>(); // Name -> Kind/Type
 
     ontology.forEach((rel: any) => {
-        if (rel.source?.name) nodeSet.add(rel.source.name);
-        if (rel.target?.name) nodeSet.add(rel.target.name);
+        if (rel.source?.name) {
+            // Use the type defined in the ontology instance
+            // Assuming required by schema
+            const type = rel.source.type || 'Other';
+            if (!nodeSet.has(rel.source.name) || type !== 'Other') {
+                nodeSet.set(rel.source.name, type);
+            }
+        }
+        if (rel.target?.name) {
+            const type = rel.target.type || 'Other';
+            if (!nodeSet.has(rel.target.name) || type !== 'Other') {
+                nodeSet.set(rel.target.name, type);
+            }
+        }
     });
 
-    const AGENT_KINDS = new Set([
-        'Agent', 'Architect', 'Engineer', 'Manager', 'ProductManager', 'QA',
-        'ProductOwner', 'Developer', 'DevOps', 'ProjectManager', 'BusinessAnalyst', 'Tester'
-    ]);
+    return Array.from(nodeSet.entries()).map(([name, kind]) => {
+        let displayKind = 'Entity';
 
-    const ARTIFACT_KINDS = new Set([
-        'Artifact',
-        'SourceFile', 'DesignSpec', 'Plan', 'TestCase', 'TestResult', 'Standard',
-        'Observation', 'Persona', 'TechnologyStack', 'Tool', 'ArchitecturePattern',
-        'ProjectStructure', 'ArchitectureComponent', 'Command', 'DataModel',
-        'UserStory', 'AcceptanceCriteria', 'UIDesign', 'SoftwareArchitecture',
-        'LogicalDataModel', 'PhysicalDataModel', 'OpenApiSpec', 'DomainEventSpec',
-        'ImplementationPlan', 'UserStoryImplementationPlan', 'Code', 'UnitTest',
-        'Feature', 'SuccessfulTestResult', 'QualityMetric', 'ArchitectureStyle'
-    ]);
-
-    return Array.from(nodeSet).map(name => {
-        let kind = 'Entity';
-        if (name === 'SoftwareApplication') kind = 'SoftwareApplication';
-        else if (AGENT_KINDS.has(name)) kind = 'Agent';
-        else if (ARTIFACT_KINDS.has(name)) kind = 'Artifact';
-        // Add a catch-all for practices/styles to look like artifacts
-        else if (['TDD', 'DDD', 'BDD', 'CodingStyle', 'CodingPractice', 'KISS', 'DRY', 'CyclomaticLowComplexity', 'GoogleCodingStyle', 'Microservices'].includes(name)) kind = 'Artifact';
+        if (name === 'SoftwareApplication') {
+            displayKind = 'SoftwareApplication';
+        } else if (kind === 'Agent') {
+            displayKind = 'Agent';
+        } else if (['Document', 'Code', 'Other'].includes(kind)) {
+            // Map Document, Code, and Other (concepts/methodologies) to Artifact for visualization
+            // 'Other' includes definitions like TDD, Methodology which are visualized as artifacts/concepts
+            displayKind = 'Artifact';
+        }
 
         return {
             id: name,
@@ -70,7 +99,8 @@ function processOntologyNodes(ontology: any[]): Node[] {
             position: { x: 0, y: 0 },
             data: {
                 label: name,
-                kind: kind
+                kind: displayKind,
+                originalType: kind
             }
         };
     });
