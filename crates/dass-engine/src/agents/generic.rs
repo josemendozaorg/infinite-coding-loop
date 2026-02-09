@@ -22,22 +22,43 @@ impl<C: AiCliClient> GenericAgent<C> {
     }
 
     fn clean_response(&self, input: &str) -> String {
-        // 1. Try to find markdown code blocks
-        if let Some(start) = input.find("```") {
-            let after = &input[start + 3..];
-            // Skip language identifier (e.g. "json", "yaml")
-            let start_content = if let Some(newline) = after.find('\n') {
-                newline + 1
-            } else {
-                0
-            };
+        let mut end_search_pos = input.len();
 
-            // Allow for ```` to handle nested blocks? No, standard is ```
-            if let Some(end) = after[start_content..].find("```") {
-                return after[start_content..start_content + end].trim().to_string();
+        while let Some(end) = input[..end_search_pos].rfind("```") {
+            let mut start_search_pos = end;
+            while let Some(start) = input[..start_search_pos].rfind("```") {
+                let after_start = &input[start + 3..];
+
+                // Skip language identifier (e.g., "json\n", "yaml\n")
+                // Only skip if it's a single word followed by a newline
+                let mut content_start_offset = 0;
+                if let Some(newline_pos) = after_start.find('\n') {
+                    let first_line = &after_start[..newline_pos].trim();
+                    // Alphanumeric + underscores is typical for language tags
+                    if !first_line.is_empty()
+                        && first_line.chars().all(|c| c.is_alphanumeric() || c == '_')
+                    {
+                        content_start_offset = newline_pos + 1;
+                    }
+                }
+
+                if start + 3 + content_start_offset < end {
+                    let content = input[start + 3 + content_start_offset..end].trim();
+
+                    // Check if it's valid JSON or YAML
+                    let is_json = serde_json::from_str::<Value>(content).is_ok();
+                    let is_yaml = serde_yaml::from_str::<Value>(content).is_ok();
+
+                    if is_json || is_yaml {
+                        return content.to_string(); // Found the largest valid block ending here!
+                    }
+                }
+                start_search_pos = start;
             }
+            // If no start worked for this 'end', move end back
+            end_search_pos = end;
         }
-        // Fallback: assume the whole response is the content if no code blocks
+
         input.trim().to_string()
     }
 }
@@ -59,7 +80,7 @@ impl<C: AiCliClient + Send + Sync> Agent for GenericAgent<C> {
             prompt
         };
 
-        let response = self.client.prompt(&full_prompt)?;
+        let response = self.client.prompt(&full_prompt).await?;
         let cleaned = self.clean_response(&response);
 
         // Try parsing as JSON first
@@ -78,5 +99,53 @@ impl<C: AiCliClient + Send + Sync> Agent for GenericAgent<C> {
             "Failed to parse response as JSON or YAML. Response: {}",
             cleaned
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct MockClient;
+    #[async_trait]
+    impl AiCliClient for MockClient {
+        async fn prompt(&self, _p: &str) -> Result<String> {
+            Ok("".into())
+        }
+    }
+
+    #[test]
+    fn test_clean_response_multi_block() {
+        let agent = GenericAgent::new(MockClient, "ProductManager".into(), "".into());
+
+        let multi = r#"Here is a preview:
+```json
+{"preview": true}
+```
+Now here is the real one:
+```json
+{"real": "deal"}
+```
+Some final text."#;
+        let cleaned = agent.clean_response(multi);
+        assert_eq!(cleaned, r#"{"real": "deal"}"#);
+    }
+
+    #[test]
+    fn test_clean_response_nested() {
+        let agent = GenericAgent::new(MockClient, "ProductManager".into(), "".into());
+
+        let nested = r#"```json
+{
+  "data": "Here is some nested json: ```json {\"test\": 1} ```"
+}
+```"#;
+        let cleaned = agent.clean_response(nested);
+        assert_eq!(
+            cleaned,
+            r#"{
+  "data": "Here is some nested json: ```json {\"test\": 1} ```"
+}"#
+        );
     }
 }

@@ -2,9 +2,13 @@ use anyhow::Result;
 use std::process::Command;
 
 /// Abstract interface for an AI CLI Client (e.g., gemini, claude).
-pub trait AiCliClient {
+use async_trait::async_trait;
+
+/// Abstract interface for an AI CLI Client (e.g., gemini, claude).
+#[async_trait]
+pub trait AiCliClient: Send + Sync {
     /// Sends a prompt to the AI and returns the response.
-    fn prompt(&self, prompt_text: &str) -> Result<String>;
+    async fn prompt(&self, prompt_text: &str) -> Result<String>;
 }
 
 /// A real implementation that calls a CLI command (default: gemini).
@@ -42,27 +46,38 @@ impl ShellCliClient {
     }
 }
 
+#[async_trait]
 impl AiCliClient for ShellCliClient {
-    fn prompt(&self, prompt_text: &str) -> Result<String> {
+    async fn prompt(&self, prompt_text: &str) -> Result<String> {
         // We execute via sh -c to ensure we can cd to the workdir before running the AI CLI.
         // Command: sh -c 'cd "$1" && shift && exec "$@"' -- <work_dir> <executable> -p <prompt> ...
-        let mut cmd = Command::new("sh");
-        cmd.arg("-c").arg("cd \"$1\" && shift && exec \"$@\"");
-        cmd.arg("--");
-        cmd.arg(&self.work_dir);
-        cmd.arg(&self.executable);
+        let work_dir = self.work_dir.clone();
+        let executable = self.executable.clone();
+        let prompt_text = prompt_text.to_string();
+        let yolo = self.yolo;
+        let model = self.model.clone();
 
-        cmd.arg("-p").arg(prompt_text);
+        // Run the blocking Command in a blocking task to avoid panicking the runtime
+        let output = tokio::task::spawn_blocking(move || {
+            let mut cmd = Command::new("sh");
+            cmd.arg("-c").arg("cd \"$1\" && shift && exec \"$@\"");
+            cmd.arg("--");
+            cmd.arg(&work_dir);
+            cmd.arg(&executable);
 
-        if self.yolo {
-            cmd.arg("--yolo");
-        }
+            cmd.arg("-p").arg(&prompt_text);
 
-        if let Some(ref m) = self.model {
-            cmd.arg("--model").arg(m);
-        }
+            if yolo {
+                cmd.arg("--yolo");
+            }
 
-        let output = cmd.output()?;
+            if let Some(ref m) = model {
+                cmd.arg("--model").arg(m);
+            }
+
+            cmd.output()
+        })
+        .await??;
 
         if !output.status.success() {
             return Err(anyhow::anyhow!(
@@ -97,8 +112,9 @@ pub mod mocks {
         }
     }
 
+    #[async_trait]
     impl AiCliClient for MockCliClient {
-        fn prompt(&self, _prompt: &str) -> Result<String> {
+        async fn prompt(&self, _prompt: &str) -> Result<String> {
             let mut guard = self.responses.lock().unwrap();
             if let Some(res) = guard.pop_front() {
                 Ok(res)

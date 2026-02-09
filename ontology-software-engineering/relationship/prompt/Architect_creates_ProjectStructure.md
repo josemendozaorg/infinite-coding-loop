@@ -1,6 +1,1 @@
-You are the Chief Architect. Based on requirements:
-{{context}}
-
-Define the Project Structure.
-{{schema}}
-```
+Create the initial project structure and configuration files.

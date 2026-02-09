@@ -5,7 +5,7 @@
     "description": "Foundational definitions for any ontology compatible with the DASS engine.",
     "type": "object",
     "$defs": {
-        "MetaEntity": {
+        "EntityMetadata": {
             "type": "object",
             "title": "Meta-Entity",
             "description": "A node in the graph, identified by its name.",
@@ -16,6 +16,17 @@
                 "name": {
                     "type": "string",
                     "description": "The unique name or kind identifier for this entity."
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "Agent",
+                        "Document",
+                        "Code",
+                        "Other"
+                    ],
+                    "default": "Other",
+                    "description": "The functional classification of this entity."
                 }
             }
         },
@@ -42,10 +53,10 @@
             ],
             "properties": {
                 "source": {
-                    "$ref": "#/$defs/MetaEntity"
+                    "$ref": "#/$defs/EntityMetadata"
                 },
                 "target": {
-                    "$ref": "#/$defs/MetaEntity"
+                    "$ref": "#/$defs/EntityMetadata"
                 },
                 "type": {
                     "$ref": "#/$defs/MetaVerb"

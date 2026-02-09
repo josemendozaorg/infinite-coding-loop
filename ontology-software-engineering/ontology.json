@@ -1,10 +1,12 @@
 [
   {
     "source": {
-      "name": "SoftwareApplication"
+      "name": "SoftwareApplication",
+      "type": "Other"
     },
     "target": {
-      "name": "ProductManager"
+      "name": "ProductManager",
+      "type": "Agent"
     },
     "type": {
       "name": "uses"
@@ -12,10 +14,12 @@
   },
   {
     "source": {
-      "name": "SoftwareApplication"
+      "name": "SoftwareApplication",
+      "type": "Other"
     },
     "target": {
-      "name": "Architect"
+      "name": "Architect",
+      "type": "Agent"
     },
     "type": {
       "name": "uses"
@@ -23,10 +27,12 @@
   },
   {
     "source": {
-      "name": "SoftwareApplication"
+      "name": "SoftwareApplication",
+      "type": "Other"
     },
     "target": {
-      "name": "Engineer"
+      "name": "Engineer",
+      "type": "Agent"
     },
     "type": {
       "name": "uses"
@@ -34,10 +40,12 @@
   },
   {
     "source": {
-      "name": "ProductManager"
+      "name": "ProductManager",
+      "type": "Agent"
     },
     "target": {
-      "name": "Requirement"
+      "name": "Requirement",
+      "type": "Document"
     },
     "type": {
       "name": "creates"
@@ -45,10 +53,12 @@
   },
   {
     "source": {
-      "name": "Architect"
+      "name": "Architect",
+      "type": "Agent"
     },
     "target": {
-      "name": "DesignSpec"
+      "name": "DesignSpec",
+      "type": "Document"
     },
     "type": {
       "name": "creates"
@@ -56,10 +66,12 @@
   },
   {
     "source": {
-      "name": "Engineer"
+      "name": "Engineer",
+      "type": "Agent"
     },
     "target": {
-      "name": "Plan"
+      "name": "Plan",
+      "type": "Document"
     },
     "type": {
       "name": "creates"
@@ -67,10 +79,12 @@
   },
   {
     "source": {
-      "name": "SoftwareApplication"
+      "name": "SoftwareApplication",
+      "type": "Other"
     },
     "target": {
-      "name": "Tester"
+      "name": "Tester",
+      "type": "Agent"
     },
     "type": {
       "name": "uses"
@@ -78,10 +92,12 @@
   },
   {
     "source": {
-      "name": "SoftwareApplication"
+      "name": "SoftwareApplication",
+      "type": "Other"
     },
     "target": {
-      "name": "DevOps"
+      "name": "DevOps",
+      "type": "Agent"
     },
     "type": {
       "name": "uses"
@@ -89,10 +105,12 @@
   },
   {
     "source": {
-      "name": "SoftwareApplication"
+      "name": "SoftwareApplication",
+      "type": "Other"
     },
     "target": {
-      "name": "ProjectManager"
+      "name": "ProjectManager",
+      "type": "Agent"
     },
     "type": {
       "name": "uses"
@@ -100,10 +118,12 @@
   },
   {
     "source": {
-      "name": "SoftwareApplication"
+      "name": "SoftwareApplication",
+      "type": "Other"
     },
     "target": {
-      "name": "BusinessAnalyst"
+      "name": "BusinessAnalyst",
+      "type": "Agent"
     },
     "type": {
       "name": "uses"
@@ -111,10 +131,12 @@
   },
   {
     "source": {
-      "name": "TDD"
+      "name": "TDD",
+      "type": "Other"
     },
     "target": {
-      "name": "Methodology"
+      "name": "Methodology",
+      "type": "Other"
     },
     "type": {
       "name": "isA"
@@ -122,10 +144,12 @@
   },
   {
     "source": {
-      "name": "BDD"
+      "name": "BDD",
+      "type": "Other"
     },
     "target": {
-      "name": "Methodology"
+      "name": "Methodology",
+      "type": "Other"
     },
     "type": {
       "name": "isA"
@@ -133,10 +157,12 @@
   },
   {
     "source": {
-      "name": "DDD"
+      "name": "DDD",
+      "type": "Other"
     },
     "target": {
-      "name": "Methodology"
+      "name": "Methodology",
+      "type": "Other"
     },
     "type": {
       "name": "isA"
@@ -144,10 +170,12 @@
   },
   {
     "source": {
-      "name": "Feature"
+      "name": "Feature",
+      "type": "Document"
     },
     "target": {
-      "name": "UserStory"
+      "name": "UserStory",
+      "type": "Document"
     },
     "type": {
       "name": "requires"
@@ -155,10 +183,12 @@
   },
   {
     "source": {
-      "name": "UserStory"
+      "name": "UserStory",
+      "type": "Document"
     },
     "target": {
-      "name": "AcceptanceCriteria"
+      "name": "AcceptanceCriteria",
+      "type": "Document"
     },
     "type": {
       "name": "requires"
@@ -166,10 +196,12 @@
   },
   {
     "source": {
-      "name": "UserStory"
+      "name": "UserStory",
+      "type": "Document"
     },
     "target": {
-      "name": "ImplementationPlan"
+      "name": "ImplementationPlan",
+      "type": "Document"
     },
     "type": {
       "name": "requires"
@@ -177,10 +209,12 @@
   },
   {
     "source": {
-      "name": "TestCase"
+      "name": "TestCase",
+      "type": "Document"
     },
     "target": {
-      "name": "UnitTest"
+      "name": "UnitTest",
+      "type": "Document"
     },
     "type": {
       "name": "requires"
@@ -188,10 +222,12 @@
   },
   {
     "source": {
-      "name": "UnitTest"
+      "name": "UnitTest",
+      "type": "Document"
     },
     "target": {
-      "name": "SuccessfulTestResult"
+      "name": "SuccessfulTestResult",
+      "type": "Other"
     },
     "type": {
       "name": "requires"
@@ -199,10 +235,12 @@
   },
   {
     "source": {
-      "name": "BusinessAnalyst"
+      "name": "BusinessAnalyst",
+      "type": "Agent"
     },
     "target": {
-      "name": "Feature"
+      "name": "Feature",
+      "type": "Document"
     },
     "type": {
       "name": "verifies"
@@ -210,10 +248,12 @@
   },
   {
     "source": {
-      "name": "Developer"
+      "name": "Developer",
+      "type": "Other"
     },
     "target": {
-      "name": "Code"
+      "name": "Code",
+      "type": "Code"
     },
     "type": {
       "name": "creates"
@@ -221,10 +261,12 @@
   },
   {
     "source": {
-      "name": "Engineer"
+      "name": "Engineer",
+      "type": "Agent"
     },
     "target": {
-      "name": "Code"
+      "name": "Code",
+      "type": "Code"
     },
     "type": {
       "name": "verifies"
@@ -232,10 +274,12 @@
   },
   {
     "source": {
-      "name": "Engineer"
+      "name": "Engineer",
+      "type": "Agent"
     },
     "target": {
-      "name": "UserStory"
+      "name": "UserStory",
+      "type": "Document"
     },
     "type": {
       "name": "implements"
@@ -243,10 +287,12 @@
   },
   {
     "source": {
-      "name": "Engineer"
+      "name": "Engineer",
+      "type": "Agent"
     },
     "target": {
-      "name": "UnitTest"
+      "name": "UnitTest",
+      "type": "Document"
     },
     "type": {
       "name": "implements"
@@ -254,10 +300,12 @@
   },
   {
     "source": {
-      "name": "Engineer"
+      "name": "Engineer",
+      "type": "Agent"
     },
     "target": {
-      "name": "UnitTest"
+      "name": "UnitTest",
+      "type": "Document"
     },
     "type": {
       "name": "verifies"
@@ -265,10 +313,12 @@
   },
   {
     "source": {
-      "name": "Engineer"
+      "name": "Engineer",
+      "type": "Agent"
     },
     "target": {
-      "name": "UnitTest"
+      "name": "UnitTest",
+      "type": "Document"
     },
     "type": {
       "name": "improves"
@@ -276,10 +326,12 @@
   },
   {
     "source": {
-      "name": "Engineer"
+      "name": "Engineer",
+      "type": "Agent"
     },
     "target": {
-      "name": "Code"
+      "name": "Code",
+      "type": "Code"
     },
     "type": {
       "name": "improves"
@@ -287,10 +339,12 @@
   },
   {
     "source": {
-      "name": "Code"
+      "name": "Code",
+      "type": "Code"
     },
     "target": {
-      "name": "CyclomaticLowComplexity"
+      "name": "CyclomaticLowComplexity",
+      "type": "Other"
     },
     "type": {
       "name": "requires"
@@ -298,10 +352,12 @@
   },
   {
     "source": {
-      "name": "Code"
+      "name": "Code",
+      "type": "Code"
     },
     "target": {
-      "name": "CodingStyle"
+      "name": "CodingStyle",
+      "type": "Other"
     },
     "type": {
       "name": "requires"
@@ -309,10 +365,12 @@
   },
   {
     "source": {
-      "name": "Code"
+      "name": "Code",
+      "type": "Code"
     },
     "target": {
-      "name": "CodingPractice"
+      "name": "CodingPractice",
+      "type": "Other"
     },
     "type": {
       "name": "requires"
@@ -320,10 +378,12 @@
   },
   {
     "source": {
-      "name": "KISS"
+      "name": "KISS",
+      "type": "Other"
     },
     "target": {
-      "name": "CodingPractice"
+      "name": "CodingPractice",
+      "type": "Other"
     },
     "type": {
       "name": "isA"
@@ -331,10 +391,12 @@
   },
   {
     "source": {
-      "name": "DRY"
+      "name": "DRY",
+      "type": "Other"
     },
     "target": {
-      "name": "CodingPractice"
+      "name": "CodingPractice",
+      "type": "Other"
     },
     "type": {
       "name": "isA"
@@ -342,10 +404,12 @@
   },
   {
     "source": {
-      "name": "Engineer"
+      "name": "Engineer",
+      "type": "Agent"
     },
     "target": {
-      "name": "CodingStyle"
+      "name": "CodingStyle",
+      "type": "Other"
     },
     "type": {
       "name": "applies"
@@ -353,10 +417,12 @@
   },
   {
     "source": {
-      "name": "Engineer"
+      "name": "Engineer",
+      "type": "Agent"
     },
     "target": {
-      "name": "CodingPractice"
+      "name": "CodingPractice",
+      "type": "Other"
     },
     "type": {
       "name": "applies"
@@ -364,10 +430,12 @@
   },
   {
     "source": {
-      "name": "GoogleCodingStyle"
+      "name": "GoogleCodingStyle",
+      "type": "Other"
     },
     "target": {
-      "name": "CodingStyle"
+      "name": "CodingStyle",
+      "type": "Other"
     },
     "type": {
       "name": "isA"
@@ -375,10 +443,12 @@
   },
   {
     "source": {
-      "name": "Architect"
+      "name": "Architect",
+      "type": "Agent"
     },
     "target": {
-      "name": "CodingStyle"
+      "name": "CodingStyle",
+      "type": "Other"
     },
     "type": {
       "name": "defines"
@@ -386,10 +456,12 @@
   },
   {
     "source": {
-      "name": "Architect"
+      "name": "Architect",
+      "type": "Agent"
     },
     "target": {
-      "name": "QualityMetric"
+      "name": "QualityMetric",
+      "type": "Other"
     },
     "type": {
       "name": "defines"
@@ -397,10 +469,12 @@
   },
   {
     "source": {
-      "name": "Architect"
+      "name": "Architect",
+      "type": "Agent"
     },
     "target": {
-      "name": "ArchitectureStyle"
+      "name": "ArchitectureStyle",
+      "type": "Other"
     },
     "type": {
       "name": "defines"
@@ -408,10 +482,12 @@
   },
   {
     "source": {
-      "name": "Microservices"
+      "name": "Microservices",
+      "type": "Other"
     },
     "target": {
-      "name": "ArchitectureStyle"
+      "name": "ArchitectureStyle",
+      "type": "Other"
     },
     "type": {
       "name": "isA"
@@ -419,10 +495,12 @@
   },
   {
     "source": {
-      "name": "CyclomaticLowComplexity"
+      "name": "CyclomaticLowComplexity",
+      "type": "Other"
     },
     "target": {
-      "name": "QualityMetric"
+      "name": "QualityMetric",
+      "type": "Other"
     },
     "type": {
       "name": "isA"

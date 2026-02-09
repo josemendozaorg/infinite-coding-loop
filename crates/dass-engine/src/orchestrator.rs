@@ -226,16 +226,60 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
     ) -> Result<()> {
         let agent_role = AgentRole::from(action.agent.as_str());
 
-        // Find Input Context (Simplified: take all existing artifacts for now)
+        // Find Input Context
         // In a more advanced version, we'd filter based on Context relations in the graph
         let mut context_map = HashMap::new();
+        let mut reference_instructions = String::new();
+
         for (kind, val) in &self.artifacts {
-            // Log what we are retrieving for context
             ui.log_info(&format!("  [Context] Retrieving: {}", kind));
-            context_map.insert(kind.clone(), val.clone());
+
+            // Check if this artifact is "Code" type (Reference-Based)
+            let is_code = self
+                .executor
+                .graph
+                .node_types
+                .get(kind)
+                .map(|t| t == "Code")
+                .unwrap_or(false);
+
+            if is_code {
+                // Parse as Reference Artifact (files array)
+                if let Some(files) = val.get("files").and_then(|f| f.as_array()) {
+                    let file_list: Vec<String> = files
+                        .iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect();
+
+                    context_map.insert(kind.clone(), serde_json::json!({
+                        "summary": format!("Reference-based artifact. Contains {} files.", file_list.len()),
+                        "files": file_list
+                    }));
+
+                    reference_instructions.push_str(&format!(
+                        "\n\n[REFERENCE ARTIFACT: {}]\nThis artifact contains references to files on disk. available files:\n", 
+                        kind
+                    ));
+                    for f in &file_list {
+                        reference_instructions.push_str(&format!("- {}\n", f));
+                    }
+                    reference_instructions.push_str(&format!(
+                        "Use your `read_file` tool to inspect the content of these files as needed. Do NOT guess the content.\n"
+                    ));
+                } else {
+                    // Fallback if schema doesn't match expected reference format
+                    context_map.insert(kind.clone(), val.clone());
+                }
+            } else {
+                // Default: Value-Based Artifact
+                context_map.insert(kind.clone(), val.clone());
+            }
         }
 
         let mut context = serde_json::to_string_pretty(&context_map).unwrap_or_default();
+        if !reference_instructions.is_empty() {
+            context.push_str(&reference_instructions);
+        }
 
         // If refining, inject feedback
         if action.category == RelationCategory::Refinement {
@@ -255,17 +299,36 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                 )
             });
 
-        let final_prompt = prompt_template
-            .replace("{{source_content}}", &context)
+        let mut final_prompt = prompt_template
             .replace("{{source}}", &action.agent)
             .replace("{{relation}}", &action.relation)
             .replace("{{target}}", &action.target);
 
-        let enhanced_prompt = self.enhance_prompt(
-            final_prompt,
-            &action.target,
-            &format!("{}.json", action.target.to_lowercase()),
-        );
+        // Validating if the prompt template contains {{source_content}} or {{input}}
+        // If not, we append the context automatically.
+        if final_prompt.contains("{{source_content}}") {
+            final_prompt = final_prompt.replace("{{source_content}}", &context);
+        } else if final_prompt.contains("{{input}}") {
+            // Legacy support or specific alias
+            final_prompt = final_prompt.replace("{{input}}", &context);
+        } else if !context.is_empty() {
+            final_prompt = format!("{}\n\n### Context / Input:\n{}", final_prompt, context);
+        }
+
+        let filename = if action.category == RelationCategory::Verification {
+            format!("{}_verification.json", action.target.to_lowercase())
+        } else {
+            format!("{}.json", action.target.to_lowercase())
+        };
+
+        let entity_type = self
+            .executor
+            .graph
+            .node_types
+            .get(&action.target)
+            .map(|s| s.as_str());
+        let enhanced_prompt =
+            self.enhance_prompt(final_prompt, &action.target, &filename, entity_type);
 
         let task = Task {
             id: format!("task_{}_{}", action.relation, action.target),
@@ -300,11 +363,18 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             }
             RelationCategory::Refinement | RelationCategory::Creation => {
                 // Validate Result against Schema (only for artifacts, not necessarily for verification reports yet)
-                if let Err(e) = self
-                    .executor
-                    .graph
-                    .validate_artifact(&action.target, &result)
-                {
+                // We spawn blocking because jsonschema compilation/validation can trigger blocking operations (e.g. if refs are resolved)
+                // or simply be computationally expensive, which effectively blocks the async runtime if taking too long.
+                let graph = self.executor.graph.clone();
+                let target = action.target.clone();
+                let result_clone = result.clone();
+
+                let validation_result = tokio::task::spawn_blocking(move || {
+                    graph.validate_artifact(&target, &result_clone)
+                })
+                .await?;
+
+                if let Err(e) = validation_result {
                     return Err(anyhow::anyhow!(
                         "Artifact validation failed for {}: {}. Result: {}",
                         action.target,
@@ -334,10 +404,40 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         Ok(())
     }
 
-    fn enhance_prompt(&self, prompt: String, target: &str, filename: &str) -> String {
-        format!(
-            "{}\n\n**CRITICAL**: You MUST use your file-writing tool to save this {} to `{}` in the current directory. After saving, output ONLY the {} content in a code block.",
-            prompt, target, filename, target
-        )
+    fn enhance_prompt(
+        &self,
+        prompt: String,
+        target: &str,
+        filename: &str,
+        entity_type: Option<&str>,
+    ) -> String {
+        let is_code = entity_type == Some("Code");
+        let work_dir = self.work_dir.as_deref().unwrap_or(".");
+
+        let mut base = format!(
+            "{}\n\nPlease create or modify the {} artifact.",
+            prompt, target
+        );
+
+        base.push_str("\n\n**Persistence Instructions**:\n");
+        base.push_str(&format!(
+            "1. You MUST create or update the following file: `{}` in the directory: `{}`\n",
+            filename, work_dir
+        ));
+        base.push_str("2. Use your tools to persist this content to disk. Do NOT just output the text; ensure the file is written.\n");
+
+        if is_code {
+            base.push_str("\n**Output Rules**:\n");
+            base.push_str("1. Return a JSON object with a `files` key containing the list of filenames you created or modified.\n");
+            base.push_str("2. Example: `{\"files\": [\"main.rs\", \"Cargo.toml\"], \"main_file\": \"main.rs\"}`\n");
+        } else {
+            base.push_str(&format!(
+                "\n**Output Rules**:\n1. Output the {} content in a strict JSON code block.\n",
+                target
+            ));
+            base.push_str("2. IMPORTANT: Do NOT nest triple-backticks (```) inside any JSON string values. If you need to include code or schemas, provide them as plain text or use alternative formatting.");
+        }
+
+        base
     }
 }

@@ -1,5 +1,1 @@
-Design a Feature Spec for '{{input}}'. Reqs:
-{{context}}
-
-{{schema}}
-```
+Create a Design Specification based on the requirements and context.

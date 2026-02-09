@@ -1,6 +1,1 @@
-You are the Chief Architect. Based on requirements:
-{{context}}
-
-Define the Project Structure.
-{{schema}}
-```
+Define the architectural style and patterns for the project.

@@ -51,10 +51,12 @@ pub struct MetaVerb {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetaEntity {
     pub name: String,
+    #[serde(rename = "type")]
+    pub entity_type: Option<String>,
 }
 
 // 2. The In-Memory Graph
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DependencyGraph {
     pub graph: DiGraph<String, String>, // Node=Entity, Edge=Relation
     pub kind_map: HashMap<String, NodeIndex>,
@@ -64,6 +66,7 @@ pub struct DependencyGraph {
     pub schemas: HashMap<String, String>,              // Key: Entity, Value: Schema Content
     pub loaded_agents: HashMap<String, String>,        // Key: Role, Value: JSON Content
     pub agent_roles: std::collections::HashSet<String>, // Roles defined in the metamodel
+    pub node_types: HashMap<String, String>, // Key: Entity Name, Value: Type (e.g. "Code", "Agent")
 }
 
 impl Default for DependencyGraph {
@@ -82,6 +85,7 @@ impl DependencyGraph {
             schemas: HashMap::new(),
             loaded_agents: HashMap::new(),
             agent_roles: std::collections::HashSet::new(),
+            node_types: HashMap::new(),
         }
     }
 
@@ -112,6 +116,21 @@ impl DependencyGraph {
                     }
                 }
             }
+        }
+
+        // ALIAS HACK: The domain ontology (e.g. Requirement.schema.json) refers to "../base.schema.json",
+        // which resolves to "https://infinite-coding-loop.dass/schemas/base.schema.json".
+        // But the actual file has ID "https://infinite-coding-loop.dass/schemas/meta/base.schema.json".
+        // We register the alias so resolution works.
+        if let Some(content) = dg
+            .schemas
+            .get("https://infinite-coding-loop.dass/schemas/meta/base.schema.json")
+            .cloned()
+        {
+            dg.schemas.insert(
+                "https://infinite-coding-loop.dass/schemas/base.schema.json".to_string(),
+                content,
+            );
         }
 
         // Validate metamodel against ontology.schema.json
@@ -157,20 +176,34 @@ impl DependencyGraph {
 
         for path in schema_files {
             if let Ok(content) = std::fs::read_to_string(&path) {
-                if let Some(parent) = path.parent() {
-                    if parent.ends_with("schema") {
-                        if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
-                            let entity_kind_snake = file_stem.trim_end_matches(".schema");
-                            dg.schemas
-                                .insert(entity_kind_snake.to_string(), content.clone());
-                        }
-                    }
+                // Infer entity name from filename
+                if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    // Typical pattern: "entity_name.schema.json" -> "EntityName" (if we could, but here we just store snake case key)
+                    // The validate_artifact method tries both Original and snake_case, so snake_case key is good.
+                    let entity_kind_snake = file_stem.trim_end_matches(".schema");
+
+                    // Store strict key
+                    dg.schemas
+                        .insert(entity_kind_snake.to_string(), content.clone());
+
+                    // Also store CamelCase if title depends on it?
+                    // No, reliance is on `validate_artifact` converting Kind -> Snake.
+
+                    // BUT, `validate_topology` checks keys directly against Node Name (CamelCase).
+                    // So we must convert snake to Camel or store both?
+                    // Let's store a normalized "CamelCase" version if possible?
+                    // Hard to convert snake to Camel without logic.
+                    // Easier to store the file_stem as key? "user_story"
+
+                    // Let's rely on parsing the Title from JSON if available, or just the filename map.
                 }
+
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
                     if let Some(id) = json.get("$id").and_then(|v| v.as_str()) {
                         dg.schemas.insert(id.to_string(), content.clone());
                     }
                     if let Some(title) = json.get("title").and_then(|v| v.as_str()) {
+                        // Title is usually CamelCase (e.g. "UserStory")
                         dg.schemas.insert(title.to_string(), content.clone());
                     }
                 }
@@ -202,6 +235,14 @@ impl DependencyGraph {
             let s_idx = dg.get_or_create_node(&source_str);
             let t_idx = dg.get_or_create_node(&target_str);
             dg.graph.add_edge(s_idx, t_idx, relation_str.clone());
+
+            // Capture Node Types
+            if let Some(t) = rel.source.entity_type {
+                dg.node_types.insert(source_str.clone(), t);
+            }
+            if let Some(t) = rel.target.entity_type {
+                dg.node_types.insert(target_str.clone(), t);
+            }
 
             // Infer Prompt Path
             let prompt_filename = format!("{}_{}_{}.md", source_str, relation_str, target_str);
@@ -236,21 +277,20 @@ impl DependencyGraph {
         // We should support both or check what's there.
         // Let's assume the new standard: Scan `agent/system_prompt/*.md` and use filename as Role.
 
-        let agent_dir = root.join("agent/system_prompt"); // updated path based on history
+        let agent_dir = root.join("agent/system_prompt");
         if let Ok(entries) = std::fs::read_dir(&agent_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.extension().and_then(|s| s.to_str()) == Some("md") {
                     if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
-                        let role = file_stem.to_string(); // e.g. "Architect"
+                        // file_stem is usually "Role" (e.g. "Architect") or "Role_system_prompt"
+                        // Current format seems to be just "Architect.md"?
+                        // Let's assume filename is the Role.
+                        let role = file_stem.to_string();
                         dg.agent_roles.insert(role.clone());
                         if let Ok(content) = std::fs::read_to_string(&path) {
-                            // System prompt is the content
-                            // We wrap it in JSON simply so the Executor generic agent can read it "as config"
-                            // or we change GenericAgent to take raw string.
-                            // Currently GenericAgent expects config with "system_prompt" field?
-                            // Orchestrator::new_with_metamodel deserializes config as JSON to get system_prompt.
-                            // So we should wrap it.
+                            // Construct a JSON config compatible with GenericAgent
+                            // GenericAgent expects a JSON with "system_prompt" field.
                             let config_wrapper = serde_json::json!({
                                 "name": role,
                                 "system_prompt": content
@@ -317,6 +357,8 @@ impl DependencyGraph {
         // Ensure all nodes are known either as Agents or Artifacts (have a schema)
         for node_idx in self.graph.node_indices() {
             let name = &self.graph[node_idx];
+
+            // Check implicit or explicit types
             let is_agent = self.is_agent(name);
             let has_schema = self.schemas.contains_key(name)
                 || self.schemas.contains_key(&Self::to_snake_case(name))
@@ -325,12 +367,15 @@ impl DependencyGraph {
                     .keys()
                     .any(|k| k.to_lowercase() == name.to_lowercase());
 
-            if !is_agent && !has_schema && name != "SoftwareApplication" {
-                // For now, log a warning or return error?
-                // The meta-ontology says they should be specialized.
+            // Check if explicitly typed as "Other" or "Code" (which might not have schema yet? Code should have schema now)
+            let node_type = self.node_types.get(name).map(|s| s.as_str());
+            let is_other = node_type == Some("Other");
+
+            // If it's not an agent, not an artifact (no schema), and NOT explicitly "Other", then warn.
+            if !is_agent && !has_schema && !is_other && name != "SoftwareApplication" {
                 println!(
-                    "Warning: Entity '{}' is neither an Agent nor has a known Artifact schema",
-                    name
+                    "Warning: Entity '{}' is neither an Agent nor has a known Artifact schema (Type: {:?})",
+                    name, node_type
                 );
             }
         }
@@ -399,6 +444,37 @@ impl DependencyGraph {
             .map_err(|e| anyhow::anyhow!("Failed to compile JSON schema for {}: {}", kind, e))?;
 
         if let Err(errors) = compiled.validate(data) {
+            // Support for Array of Artifacts:
+            // If the data is an Array, and the schema failed (presumably because it expects an Object),
+            // try validating each item in the array against the schema.
+            if let Some(arr) = data.as_array() {
+                if !arr.is_empty() {
+                    let mut all_valid = true;
+                    let mut array_errors = Vec::new();
+
+                    for (i, item) in arr.iter().enumerate() {
+                        if let Err(item_errors) = compiled.validate(item) {
+                            all_valid = false;
+                            let msg = item_errors
+                                .map(|e| e.to_string())
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            array_errors.push(format!("Item {}: {}", i, msg));
+                        }
+                    }
+
+                    if all_valid {
+                        return Ok(());
+                    } else {
+                        return Err(anyhow::anyhow!(
+                            "Artifact validation failed for Array of {}: {}",
+                            kind,
+                            array_errors.join("; ")
+                        ));
+                    }
+                }
+            }
+
             let error_msgs: Vec<String> = errors.map(|e| e.to_string()).collect();
             return Err(anyhow::anyhow!(
                 "Artifact validation failed for {}: {}",
@@ -477,6 +553,28 @@ impl DependencyGraph {
                 template = template.replace("{{schema}}", schema_content);
             } else {
                 template = format!("{}\n\nOutput Schema:\n{}", template, schema_content);
+            }
+
+            // Inject Base Schema if available (to resolve $ref visibility for LLM)
+            if let Some(base_schema) = self
+                .schemas
+                .get("https://infinite-coding-loop.dass/schemas/base.schema.json")
+            {
+                template = format!(
+                    "{}\n\nBase Schema Definitions (Reference):\n{}",
+                    template, base_schema
+                );
+            }
+
+            // Inject Taxonomy Schema to clarify "Kind_*" values
+            if let Some(taxonomy_schema) = self
+                .schemas
+                .get("https://infinite-coding-loop.dass/schemas/taxonomy.schema.json")
+            {
+                template = format!(
+                    "{}\n\nTaxonomy (Valid Kinds):\n{}",
+                    template, taxonomy_schema
+                );
             }
         }
 

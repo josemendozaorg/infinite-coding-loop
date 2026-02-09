@@ -1,7 +1,0 @@
-{
-    "$id": "https://infinite-coding-loop.dass/schemas/meta/artifact.schema.json",
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "title": "Meta-Artifact",
-    "description": "An artifact is a specialization of MetaEntity representing tangible outputs produced by agents.",
-    "$ref": "base.schema.json#/$defs/MetaEntity"
-}

@@ -1,33 +1,6 @@
 use anyhow::Result;
-use async_trait::async_trait;
-use dass_engine::{
-    agents::cli_client::ShellCliClient, interaction::UserInteraction, orchestrator::Orchestrator,
-};
-use serde_json::Value;
+use dass_engine::{agents::cli_client::ShellCliClient, orchestrator::Orchestrator};
 use tempfile::tempdir;
-
-struct TestInteraction;
-
-#[async_trait]
-impl UserInteraction for TestInteraction {
-    async fn ask_user(&self, _prompt: &str) -> Result<String> {
-        Ok("test input".to_string())
-    }
-    async fn ask_for_feature(&self, _prompt: &str) -> Result<String> {
-        Ok("Create a calculator app".to_string())
-    }
-    async fn confirm(&self, _prompt: &str) -> Result<bool> {
-        Ok(true)
-    }
-    async fn select_option(&self, _prompt: &str, _options: &[String]) -> Result<usize> {
-        Ok(0)
-    }
-    fn render_artifact(&self, _kind: &str, _data: &Value) {}
-    fn start_step(&self, _name: &str) {}
-    fn end_step(&self, _name: &str) {}
-    fn log_info(&self, _msg: &str) {}
-    fn log_error(&self, _msg: &str) {}
-}
 
 #[tokio::test]
 async fn test_orchestration_cycle() -> Result<()> {
@@ -64,8 +37,6 @@ async fn test_orchestration_cycle() -> Result<()> {
         "SoftwareApplication".to_string(),
         serde_json::json!({ "name": "TestApp", "goal": "Create a calculator app" }),
     );
-
-    let ui = TestInteraction;
 
     // We expect the first iteration to identify ProductManager -> creates -> Requirement
     // and attempt to call the AI. Since we don't want to call real AI in tests,

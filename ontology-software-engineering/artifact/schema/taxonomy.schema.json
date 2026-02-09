@@ -1,0 +1,176 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://infinite-coding-loop.dass/schemas/taxonomy.schema.json",
+    "title": "Taxonomy",
+    "description": "Taxonomy of Kinds for the Software Engineering Ontology.",
+    "$defs": {
+        "Kind_AcceptanceCriteria": {
+            "type": "string",
+            "enum": [
+                "Kind_AcceptanceCriteria"
+            ]
+        },
+        "Kind_ArchitectureComponent": {
+            "type": "string",
+            "enum": [
+                "Kind_ArchitectureComponent"
+            ]
+        },
+        "Kind_ArchitecturePattern": {
+            "type": "string",
+            "enum": [
+                "Kind_ArchitecturePattern"
+            ]
+        },
+        "Kind_Artifact": {
+            "type": "string",
+            "enum": [
+                "Kind_Artifact"
+            ]
+        },
+        "Kind_ChangeRequest": {
+            "type": "string",
+            "enum": [
+                "Kind_ChangeRequest"
+            ]
+        },
+        "Kind_Code": {
+            "type": "string",
+            "enum": [
+                "Kind_Code"
+            ]
+        },
+        "Kind_Command": {
+            "type": "string",
+            "enum": [
+                "Kind_Command"
+            ]
+        },
+        "Kind_DataModel": {
+            "type": "string",
+            "enum": [
+                "Kind_DataModel"
+            ]
+        },
+        "Kind_DesignSpec": {
+            "type": "string",
+            "enum": [
+                "Kind_DesignSpec"
+            ]
+        },
+        "Kind_DomainEntity": {
+            "type": "string",
+            "enum": [
+                "Kind_DomainEntity"
+            ]
+        },
+        "Kind_Environment": {
+            "type": "string",
+            "enum": [
+                "Kind_Environment"
+            ]
+        },
+        "Kind_Feature": {
+            "type": "string",
+            "enum": [
+                "Kind_Feature"
+            ]
+        },
+        "Kind_ImplementationPlan": {
+            "type": "string",
+            "enum": [
+                "Kind_ImplementationPlan"
+            ]
+        },
+        "Kind_Observation": {
+            "type": "string",
+            "enum": [
+                "Kind_Observation"
+            ]
+        },
+        "Kind_Persona": {
+            "type": "string",
+            "enum": [
+                "Kind_Persona"
+            ]
+        },
+        "Kind_Plan": {
+            "type": "string",
+            "enum": [
+                "Kind_Plan"
+            ]
+        },
+        "Kind_ProjectStructure": {
+            "type": "string",
+            "enum": [
+                "Kind_ProjectStructure"
+            ]
+        },
+        "Kind_Requirement": {
+            "type": "string",
+            "enum": [
+                "Kind_Requirement"
+            ]
+        },
+        "Kind_Risk": {
+            "type": "string",
+            "enum": [
+                "Kind_Risk"
+            ]
+        },
+        "Kind_SoftwareApplication": {
+            "type": "string",
+            "enum": [
+                "Kind_SoftwareApplication"
+            ]
+        },
+        "Kind_SourceFile": {
+            "type": "string",
+            "enum": [
+                "Kind_SourceFile"
+            ]
+        },
+        "Kind_Standard": {
+            "type": "string",
+            "enum": [
+                "Kind_Standard"
+            ]
+        },
+        "Kind_TechnologyStack": {
+            "type": "string",
+            "enum": [
+                "Kind_TechnologyStack"
+            ]
+        },
+        "Kind_TestCase": {
+            "type": "string",
+            "enum": [
+                "Kind_TestCase"
+            ]
+        },
+        "Kind_TestResult": {
+            "type": "string",
+            "enum": [
+                "Kind_TestResult"
+            ]
+        },
+        "Kind_Tool": {
+            "type": "string",
+            "enum": [
+                "Kind_Tool"
+            ]
+        },
+        "Kind_UnitTest": {
+            "type": "string",
+            "enum": [
+                "Kind_UnitTest"
+            ]
+        },
+        "Kind_UserStory": {
+            "type": "string",
+            "enum": [
+                "Kind_UserStory"
+            ]
+        }
+    }
+}

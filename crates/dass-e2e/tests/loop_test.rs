@@ -39,9 +39,7 @@ impl UserInteraction for TestUi {
     }
 
     // Artifact rendering stubs
-    fn render_requirements(&self, _: &[serde_json::Value]) {}
-    fn render_spec(&self, _: &serde_json::Value) {}
-    fn render_plan(&self, _: &serde_json::Value) {}
+    fn render_artifact(&self, _kind: &str, _data: &serde_json::Value) {}
 }
 
 #[tokio::test]
@@ -49,8 +47,8 @@ async fn test_end_to_end_execution() -> Result<()> {
     // 1. Setup paths & content
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let fixtures_dir = manifest_dir.join("fixtures/mini_ontology");
-    let schema_path = fixtures_dir.join("artifact/schema/metamodel.schema.json");
-    let schema_content = std::fs::read_to_string(&schema_path)?;
+    let ontology_path = fixtures_dir.join("ontology.json");
+    let ontology_json = std::fs::read_to_string(&ontology_path)?;
 
     // Use a unique work dir for this test run inside the repo to avoid workspace validation issues
     let work_dir = manifest_dir.join("../../target/test-work-dir-real-ai");
@@ -71,7 +69,7 @@ async fn test_end_to_end_execution() -> Result<()> {
         "test-app-real".to_string(),
         "Test App Real".to_string(),
         work_dir.clone(),
-        &schema_content,
+        &ontology_json,
         Some(&fixtures_dir),
     )
     .await?;
@@ -100,6 +98,25 @@ async fn test_end_to_end_execution() -> Result<()> {
 
     // We check for some common names the agents might use (or we can just check if NOT empty)
     // Since it's a real LLM, filenames might vary, but they should be there.
+
+    // 5. Specific Verification for Scalable Code Artifact
+    let code_artifact_path = work_dir.join("code.json");
+    if code_artifact_path.exists() {
+        let content = std::fs::read_to_string(&code_artifact_path)?;
+        let json: serde_json::Value = serde_json::from_str(&content)?;
+
+        if let Some(files) = json.get("files") {
+            assert!(
+                files.is_array(),
+                "code.json 'files' should be an array (Reference-Based)"
+            );
+        } else {
+            panic!(
+                "code.json exists but is missing 'files' array. Content: {}",
+                content
+            );
+        }
+    }
 
     Ok(())
 }

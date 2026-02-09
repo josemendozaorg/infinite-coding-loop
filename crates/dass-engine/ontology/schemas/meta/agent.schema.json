@@ -1,7 +1,0 @@
-{
-    "$id": "https://infinite-coding-loop.dass/schemas/meta/agent.schema.json",
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "title": "Meta-Agent",
-    "description": "An agent is a specialization of MetaEntity representing an autonomous actor in the system.",
-    "$ref": "base.schema.json#/$defs/MetaEntity"
-}
