@@ -29,6 +29,14 @@ struct Args {
     /// Working directory for code generation
     #[arg(short, long)]
     work_dir: Option<String>,
+
+    /// Enable debug mode
+    #[arg(long)]
+    debug: bool,
+
+    /// Output format (default: "text")
+    #[arg(long, default_value = "text")]
+    output_format: String,
 }
 
 struct CliInteraction {
@@ -161,7 +169,9 @@ async fn main() -> Result<()> {
     println!("{}", style("Running in LIVE MODE (calling AI CLI)").green());
     let client = ShellCliClient::new("gemini", work_dir_path.to_string_lossy().to_string())
         .with_yolo(args.yes)
-        .with_model(args.model.clone());
+        .with_model(args.model.clone())
+        .with_debug(args.debug)
+        .with_output_format(args.output_format.clone());
 
     let mut orchestrator =
         Orchestrator::new(client, final_app_id.clone(), app_name, work_dir_path).await?;
