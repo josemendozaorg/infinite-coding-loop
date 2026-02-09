@@ -1,5 +1,15 @@
 ## Ideas
 
+[] THIS IS A BIG PROBLEM: Show the prompt for every agent. The AI CLI is not create the Documents still.
+
+[] I am not following. Wait a second. Why are we actually parsing the JSON/YAML output whatsover? The application is constantly failing at this. 
+  "The AI is outputting multiple JSON code blocks (likely one for the "preview" and one for the "persistence" action), "
+  Why is the AI outputing multiple JSON code blocks instead of persisting the files?
+  The files are not being persisted.
+ 
+[] The Documents and Code generated should always be persisted.
+[] We should be able to resume where we left off once we start a project.
+
 [] Allow ontology visualizer to load an ontology from a file. We need to see what we leave for the playwright tests.
 
 [] Ontology visualizer should be able to edit and save an ontology and allow to download it or copy the raw json to clipboard.

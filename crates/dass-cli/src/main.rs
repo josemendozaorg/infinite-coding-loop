@@ -135,7 +135,13 @@ async fn main() -> Result<()> {
     let work_dir_path = if let Some(ref wd) = args.work_dir {
         std::path::PathBuf::from(wd)
     } else {
-        std::env::current_dir()?.join("tmp").join(&app_name)
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        std::env::current_dir()?
+            .join("tmp")
+            .join(format!("{}_{}", app_name, timestamp))
     };
 
     if !work_dir_path.exists() {

@@ -59,21 +59,19 @@ impl AiCliClient for ShellCliClient {
 
         // Run the blocking Command in a blocking task to avoid panicking the runtime
         let output = tokio::task::spawn_blocking(move || {
-            let mut cmd = Command::new("sh");
-            cmd.arg("-c").arg("cd \"$1\" && shift && exec \"$@\"");
-            cmd.arg("--");
-            cmd.arg(&work_dir);
-            cmd.arg(&executable);
-
-            cmd.arg("-p").arg(&prompt_text);
-
-            if yolo {
-                cmd.arg("--yolo");
-            }
+            let mut cmd = Command::new(&executable);
+            cmd.current_dir(&work_dir);
 
             if let Some(ref m) = model {
-                cmd.arg("--model").arg(m);
+                cmd.arg("-m").arg(m);
             }
+
+            if yolo {
+                cmd.arg("--approval-mode").arg("yolo");
+            }
+
+            // The prompt is now a positional argument at the end
+            cmd.arg(&prompt_text);
 
             cmd.output()
         })

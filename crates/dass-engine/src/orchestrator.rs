@@ -414,28 +414,29 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         let is_code = entity_type == Some("Code");
         let work_dir = self.work_dir.as_deref().unwrap_or(".");
 
-        let mut base = format!(
-            "{}\n\nPlease create or modify the {} artifact.",
-            prompt, target
+        let mut base = format!("{}\n\nPlease generate the {} artifact.", prompt, target);
+
+        base.push_str("\n\n**Tool-Driven Persistence Required**:\n");
+        base.push_str(&format!(
+            "1. You MUST use your tools (e.g., `write_file`) to persist the {} content to the file `{}` in directory `{}`.\n",
+            target, filename, work_dir
+        ));
+        base.push_str(
+            "2. Do NOT just output the text; you are responsible for the file creation.\n",
         );
 
-        base.push_str("\n\n**Persistence Instructions**:\n");
-        base.push_str(&format!(
-            "1. You MUST create or update the following file: `{}` in the directory: `{}`\n",
-            filename, work_dir
-        ));
-        base.push_str("2. Use your tools to persist this content to disk. Do NOT just output the text; ensure the file is written.\n");
-
+        base.push_str("\n**Strict Output Rules**:\n");
         if is_code {
-            base.push_str("\n**Output Rules**:\n");
-            base.push_str("1. Return a JSON object with a `files` key containing the list of filenames you created or modified.\n");
+            base.push_str(
+                "1. Return exactly one JSON object with a `files` key listing the updated paths.\n",
+            );
             base.push_str("2. Example: `{\"files\": [\"main.rs\", \"Cargo.toml\"], \"main_file\": \"main.rs\"}`\n");
         } else {
             base.push_str(&format!(
-                "\n**Output Rules**:\n1. Output the {} content in a strict JSON code block.\n",
+                "1. Provide the {} content as the ONLY output in a single triple-backtick JSON code block.\n",
                 target
             ));
-            base.push_str("2. IMPORTANT: Do NOT nest triple-backticks (```) inside any JSON string values. If you need to include code or schemas, provide them as plain text or use alternative formatting.");
+            base.push_str("2. Do NOT include any intro, outro, or multiple blocks. Do NOT nest triple-backticks inside values.");
         }
 
         base
