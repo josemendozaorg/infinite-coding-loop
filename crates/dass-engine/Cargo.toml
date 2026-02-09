@@ -17,6 +17,7 @@ chrono = { workspace = true, features = ["serde"] }
 jsonschema = "0.17"
 petgraph.workspace = true
 console = "0.16.2"
+tracing.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -7,7 +7,7 @@ use std::collections::HashMap;
 pub mod executor;
 mod validation_test;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RelationCategory {
     Creation,     // creates, implements
     Verification, // verifies
@@ -19,13 +19,11 @@ pub enum RelationCategory {
 impl RelationCategory {
     pub fn from_str(s: &str) -> Self {
         match s {
-            "creates" | "implements" => Self::Creation,
+            "creates" | "implements" | "defines" => Self::Creation,
             "verifies" => Self::Verification,
             "improves" => Self::Refinement,
-            "uses" | "contains" | "defines" | "constrains" | "requires" | "isA" | "applies" => {
-                Self::Context
-            }
-            _ => Self::Other,
+            // All other verbs are treated as Context
+            _ => Self::Context,
         }
     }
 
@@ -581,22 +579,42 @@ impl DependencyGraph {
         Some(template)
     }
 
-    pub fn get_dependencies(&self, kind: &str, relation: &str) -> Vec<String> {
-        let mut deps = Vec::new();
-        if let Some(&start_idx) = self.kind_map.get(kind) {
-            // Find inputs: relations pointing TO this node (if dependency means "required by")
-            // Or typically in a dependency graph: Target depends on Source.
-            // Our metamodel says "Agent creates Feature".
-            // So if I want "Feature", I look for incoming edge "creates".
+    pub fn get_related_artifacts(&self, pk: &str) -> Vec<String> {
+        let mut related = Vec::new();
 
-            for index in self.graph.node_indices() {
-                let mut edges = self.graph.edges_connecting(index, start_idx);
-                if edges.any(|e: petgraph::graph::EdgeReference<String>| e.weight() == relation) {
-                    deps.push(self.graph[index].clone());
+        use petgraph::visit::EdgeRef;
+
+        if let Some(&node_idx) = self.kind_map.get(pk) {
+            // Check incoming edges (e.g. "Spec defines Architecture")
+            for edge in self
+                .graph
+                .edges_directed(node_idx, petgraph::Direction::Incoming)
+            {
+                let source_idx = edge.source();
+                let source_name = &self.graph[source_idx];
+                // Only artifacts (nodes with schemas or explicitly not agents)
+                if !self.is_agent(source_name) {
+                    related.push(source_name.clone());
+                }
+            }
+
+            // Check outgoing edges (e.g. "Feature requires Requirement")
+            for edge in self
+                .graph
+                .edges_directed(node_idx, petgraph::Direction::Outgoing)
+            {
+                let target_idx = edge.target();
+                let target_name = &self.graph[target_idx];
+                if !self.is_agent(target_name) {
+                    related.push(target_name.clone());
                 }
             }
         }
-        deps
+
+        // Dedup
+        related.sort();
+        related.dedup();
+        related
     }
 }
 
@@ -611,15 +629,22 @@ mod tests {
             { "source": { "name": "Feature" }, "target": { "name": "Requirement" }, "type": { "name": "contains" } }
         ]"#;
 
-        let graph = DependencyGraph::load_from_metamodel(json, None).expect("Failed to load graph");
+        let mut graph =
+            DependencyGraph::load_from_metamodel(json, None).expect("Failed to load graph");
+        graph.agent_roles.insert("Agent".to_string());
 
-        // Query: Who produces a Feature?
-        let creators = graph.get_dependencies("Feature", "creates");
-        assert_eq!(creators, vec!["Agent"]);
+        // Query: What is related to Feature?
+        // Feature contains Requirement -> Requirement is related
+        // Agent creates Feature -> Agent is NOT related (as per is_agent filter in get_related_artifacts)
+        // Wait, current impl filters out Agents. So only Requirement should be returned.
 
-        // Query: What verifies a Feature? (None in this graph)
-        let verifiers = graph.get_dependencies("Feature", "verifies");
-        assert!(verifiers.is_empty());
+        let related = graph.get_related_artifacts("Feature");
+        assert_eq!(related, vec!["Requirement"]);
+
+        // Query: What is related to Requirement?
+        // Feature contains Requirement -> Feature is related (incoming edge)
+        let related_req = graph.get_related_artifacts("Requirement");
+        assert_eq!(related_req, vec!["Feature"]);
     }
 
     #[test]

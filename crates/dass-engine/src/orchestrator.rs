@@ -4,10 +4,12 @@ use crate::agents::generic::GenericAgent;
 use crate::domain::types::AgentRole;
 use crate::graph::executor::{GraphExecutor, InMemoryExecutor, Task};
 use crate::graph::{DependencyGraph, RelationCategory};
-use anyhow::Result;
-use std::collections::HashMap;
+use anyhow::{Context, Result};
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
+use tracing::{debug, info, warn};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ActionPlan {
     pub agent: String,
     pub target: String,
@@ -15,10 +17,17 @@ pub struct ActionPlan {
     pub category: RelationCategory,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct IterationInfo {
+    pub id: String,
+    pub name: String,
+    pub timestamp: String,
+}
+
 pub struct Orchestrator<C: AiCliClient + Clone + Send + Sync + 'static> {
     pub app_id: String,
     pub app_name: String,
-    pub work_dir: Option<String>,
+    pub work_dir: Option<PathBuf>,
     // New Graph Components
     pub executor: InMemoryExecutor,
     // Tracking produced artifacts (State)
@@ -26,6 +35,8 @@ pub struct Orchestrator<C: AiCliClient + Clone + Send + Sync + 'static> {
     pub verification_feedback: HashMap<String, String>, // Target -> Feedback
     pub verified_artifacts: std::collections::HashSet<String>, // Tracks those with score 1.0
     max_iterations: usize,
+    // Iteration tracking
+    pub current_iteration: Option<IterationInfo>,
     // Marker for the client generic, or we can store it if needed later
     _client: std::marker::PhantomData<C>,
 }
@@ -35,7 +46,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         client: C,
         app_id: String,
         app_name: String,
-        work_dir: std::path::PathBuf,
+        work_dir: PathBuf,
     ) -> Result<Self> {
         let metamodel_json = include_str!("../../../ontology-software-engineering/ontology.json");
         Self::new_with_metamodel(client, app_id, app_name, work_dir, metamodel_json, None).await
@@ -45,10 +56,15 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         client: C,
         app_id: String,
         app_name: String,
-        work_dir: std::path::PathBuf,
+        work_dir: PathBuf,
         metamodel_json: &str,
         ontology_base_path: Option<&std::path::Path>,
     ) -> Result<Self> {
+        info!(
+            "Initializing Orchestrator for app: {} ({})",
+            app_name, app_id
+        );
+
         // Initialize Graph (Load Metamodel)
         let graph = DependencyGraph::load_from_metamodel(metamodel_json, ontology_base_path)?;
 
@@ -78,6 +94,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                     "".to_string()
                 };
 
+            debug!("Registering agent: {:?}", role);
             executor.register_agent(Box::new(GenericAgent::new(
                 client.clone(),
                 role,
@@ -88,32 +105,199 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         Ok(Self {
             app_id,
             app_name,
-            work_dir: Some(work_dir.to_string_lossy().to_string()),
+            work_dir: Some(work_dir),
             executor,
             artifacts: HashMap::new(),
             verification_feedback: HashMap::new(),
             verified_artifacts: std::collections::HashSet::new(),
             max_iterations: 10,
+            current_iteration: None,
             _client: std::marker::PhantomData,
         })
     }
 
-    pub async fn run(&mut self, ui: &impl crate::interaction::UserInteraction) -> Result<()> {
-        ui.log_info("Starting Generic Graph-Driven Orchestration...");
+    async fn ensure_persistence_dirs(&self) -> Result<PathBuf> {
+        let work_dir = self.work_dir.as_ref().context("Work directory not set")?;
+        let icl_dir = work_dir.join(".infinitecodingloop");
+        let iterations_dir = icl_dir.join("iterations");
 
-        // 1. Initial Input
-        let initial_goal = ui
-            .ask_for_feature("What feature do you want to build?")
-            .await?;
-        if initial_goal.is_empty() {
-            return Ok(());
+        if !iterations_dir.exists() {
+            tokio::fs::create_dir_all(&iterations_dir).await?;
         }
 
-        // Feed initial input as a "SoftwareApplication" signal to start the orchestration
-        self.artifacts.insert(
-            "SoftwareApplication".to_string(),
-            serde_json::json!({ "name": self.app_name.clone(), "goal": initial_goal }),
+        Ok(icl_dir)
+    }
+
+    pub async fn start_iteration(&mut self, name: &str) -> Result<()> {
+        let icl_dir = self.ensure_persistence_dirs().await?;
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+        let id = uuid::Uuid::new_v4().to_string();
+
+        let iter_info = IterationInfo {
+            id: id.clone(),
+            name: name.to_string(),
+            timestamp,
+        };
+
+        let iter_folder = icl_dir.join("iterations").join(&id);
+        tokio::fs::create_dir_all(iter_folder.join("documents")).await?;
+
+        let iter_json_path = iter_folder.join("iteration.json");
+        let content = serde_json::to_string_pretty(&iter_info)?;
+        tokio::fs::write(iter_json_path, content).await?;
+
+        info!("Started new iteration: {} ({})", name, id);
+        self.current_iteration = Some(iter_info);
+        Ok(())
+    }
+
+    pub async fn load_iteration(&mut self, iteration_id: &str) -> Result<()> {
+        let work_dir = self.work_dir.as_ref().context("Work directory not set")?;
+        let iter_folder = work_dir
+            .join(".infinitecodingloop")
+            .join("iterations")
+            .join(iteration_id);
+
+        let iter_json_path = iter_folder.join("iteration.json");
+        let content = tokio::fs::read_to_string(iter_json_path).await?;
+        let iter_info: IterationInfo = serde_json::from_str(&content)?;
+        self.current_iteration = Some(iter_info);
+
+        // Load artifacts
+        let docs_dir = iter_folder.join("documents");
+        if docs_dir.exists() {
+            let mut entries = tokio::fs::read_dir(docs_dir).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                    let name = path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("unknown");
+                    let content = tokio::fs::read_to_string(&path).await?;
+                    let data: serde_json::Value = serde_json::from_str(&content)?;
+
+                    // Normalize name to CamelCase if it matched a known entity kind
+                    // For now, Orchestrator uses them as keys directly.
+                    // We might need to match against graph node names.
+
+                    // TODO: better normalization?
+                    // identify_next_actions uses target_kind which is CamelCase usually.
+                    // filename is target_kind.to_lowercase().
+                    // We should probably look for the matching node name in the graph.
+
+                    let mut found_kind = name.to_string();
+                    for node_idx in self.executor.graph.graph.node_indices() {
+                        let kind = &self.executor.graph.graph[node_idx];
+                        if kind.to_lowercase() == name.to_lowercase() {
+                            found_kind = kind.clone();
+                            break;
+                        }
+                    }
+
+                    self.artifacts.insert(found_kind, data);
+                }
+            }
+        }
+
+        info!(
+            "Loaded iteration: {} ({})",
+            self.current_iteration.as_ref().unwrap().name,
+            iteration_id
         );
+        Ok(())
+    }
+
+    pub fn get_execution_status(&self) -> (Vec<String>, Vec<String>) {
+        let mut done = Vec::new();
+        let mut pending = Vec::new();
+
+        for node_idx in self.executor.graph.graph.node_indices() {
+            let kind = &self.executor.graph.graph[node_idx];
+            if self.executor.graph.is_agent(kind) {
+                continue;
+            }
+            if kind == "SoftwareApplication" {
+                continue;
+            }
+
+            if self.artifacts.contains_key(kind) {
+                done.push(kind.clone());
+            } else {
+                // Check if it's actionable
+                let mut actionable = false;
+                for edge in self
+                    .executor
+                    .graph
+                    .graph
+                    .edges_directed(node_idx, petgraph::Direction::Incoming)
+                {
+                    let relation = edge.weight();
+                    let category = RelationCategory::from_str(relation);
+                    if category == RelationCategory::Creation {
+                        actionable = true;
+                        break;
+                    }
+                }
+                if actionable {
+                    pending.push(kind.clone());
+                }
+            }
+        }
+
+        (done, pending)
+    }
+
+    async fn persist_artifact(&self, name: &str, data: &serde_json::Value) -> Result<()> {
+        let iteration = self
+            .current_iteration
+            .as_ref()
+            .context("No active iteration to persist artifact")?;
+        let work_dir = self.work_dir.as_ref().context("Work directory not set")?;
+        let docs_dir = work_dir
+            .join(".infinitecodingloop")
+            .join("iterations")
+            .join(&iteration.id)
+            .join("documents");
+
+        if !docs_dir.exists() {
+            tokio::fs::create_dir_all(&docs_dir).await?;
+        }
+
+        let filename = format!("{}.json", name.to_lowercase());
+        let path = docs_dir.join(filename);
+
+        let content = serde_json::to_string_pretty(data)?;
+        tokio::fs::write(path, content).await?;
+
+        debug!("Persisted artifact {} in iteration {}", name, iteration.id);
+        Ok(())
+    }
+
+    pub async fn run(&mut self, ui: &impl crate::interaction::UserInteraction) -> Result<()> {
+        info!("Starting Generic Graph-Driven Orchestration...");
+
+        // 1. Initial Input (Skip if already exists in resumed iteration)
+        if !self.artifacts.contains_key("SoftwareApplication") {
+            let initial_goal = ui
+                .ask_for_feature("What feature do you want to build?")
+                .await?;
+            if initial_goal.is_empty() {
+                return Ok(());
+            }
+
+            if self.current_iteration.is_none() {
+                self.start_iteration("Initial Goal Formulation").await?;
+            }
+
+            // Feed initial input as a "SoftwareApplication" signal to start the orchestration
+            let initial_app =
+                serde_json::json!({ "name": self.app_name.clone(), "goal": initial_goal });
+            self.artifacts
+                .insert("SoftwareApplication".to_string(), initial_app.clone());
+            self.persist_artifact("SoftwareApplication", &initial_app)
+                .await?;
+        }
 
         // 2. Generic Execution Loop (State Machine)
         let mut iterations = 0;
@@ -127,6 +311,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
 
             let next_actions = self.identify_next_actions();
             if next_actions.is_empty() {
+                info!("No more actions identified.");
                 ui.log_info(&format!(
                     "No more actions identified. Current artifacts: {:?}",
                     self.artifacts.keys().collect::<Vec<_>>()
@@ -135,6 +320,10 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             }
 
             for action in next_actions {
+                info!(
+                    "Dispatched Action: {} {} {}",
+                    action.agent, action.relation, action.target
+                );
                 ui.log_info(&format!(
                     "Dispatched Action: {} {} {}",
                     action.agent, action.relation, action.target
@@ -143,6 +332,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             }
 
             if !ui.confirm("Proceed to next iteration?").await? {
+                info!("Iteration paused by user.");
                 ui.log_info("Iteration paused by user.");
                 break;
             }
@@ -227,12 +417,35 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         let agent_role = AgentRole::from(action.agent.as_str());
 
         // Find Input Context
-        // In a more advanced version, we'd filter based on Context relations in the graph
         let mut context_map = HashMap::new();
         let mut reference_instructions = String::new();
 
+        // Get related artifacts from the graph
+        let mut related_artifacts: HashSet<String> = self
+            .executor
+            .graph
+            .get_related_artifacts(&action.target)
+            .into_iter()
+            .collect();
+
+        // Always include the target itself if we are refining or verifying
+        if matches!(
+            action.category,
+            RelationCategory::Refinement | RelationCategory::Verification
+        ) {
+            related_artifacts.insert(action.target.clone());
+        }
+
+        // Always include SoftwareApplication if available (as global context)
+        related_artifacts.insert("SoftwareApplication".to_string());
+
         for (kind, val) in &self.artifacts {
-            ui.log_info(&format!("  [Context] Retrieving: {}", kind));
+            // Only include if related
+            if !related_artifacts.contains(kind) {
+                continue;
+            }
+
+            debug!("  [Context] Retrieving: {}", kind);
 
             // Check if this artifact is "Code" type (Reference-Based)
             let is_code = self
@@ -305,11 +518,9 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             .replace("{{target}}", &action.target);
 
         // Validating if the prompt template contains {{source_content}} or {{input}}
-        // If not, we append the context automatically.
         if final_prompt.contains("{{source_content}}") {
             final_prompt = final_prompt.replace("{{source_content}}", &context);
         } else if final_prompt.contains("{{input}}") {
-            // Legacy support or specific alias
             final_prompt = final_prompt.replace("{{input}}", &context);
         } else if !context.is_empty() {
             final_prompt = format!("{}\n\n### Context / Input:\n{}", final_prompt, context);
@@ -342,7 +553,6 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         // Semantic Result Handling
         match action.category {
             RelationCategory::Verification => {
-                // Verification results go to feedback map
                 let feedback = result
                     .get("feedback")
                     .and_then(|v| v.as_str())
@@ -352,19 +562,21 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                 let score = result.get("score").and_then(|v| v.as_f64()).unwrap_or(1.0);
 
                 if score < 1.0 {
+                    warn!("Verification failed for {}: {}", action.target, feedback);
                     self.verification_feedback
                         .insert(action.target.clone(), feedback.to_string());
                     self.verified_artifacts.remove(&action.target);
                 } else {
-                    // Passed! Clear feedback and mark as verified
+                    info!("Verification passed for {}", action.target);
                     self.verification_feedback.remove(&action.target);
                     self.verified_artifacts.insert(action.target.clone());
                 }
+
+                // Persist verification report
+                self.persist_artifact(&format!("{}_verification", action.target), &result)
+                    .await?;
             }
             RelationCategory::Refinement | RelationCategory::Creation => {
-                // Validate Result against Schema (only for artifacts, not necessarily for verification reports yet)
-                // We spawn blocking because jsonschema compilation/validation can trigger blocking operations (e.g. if refs are resolved)
-                // or simply be computationally expensive, which effectively blocks the async runtime if taking too long.
                 let graph = self.executor.graph.clone();
                 let target = action.target.clone();
                 let result_clone = result.clone();
@@ -375,6 +587,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                 .await?;
 
                 if let Err(e) = validation_result {
+                    warn!("Artifact validation failed for {}: {}", action.target, e);
                     return Err(anyhow::anyhow!(
                         "Artifact validation failed for {}: {}. Result: {}",
                         action.target,
@@ -383,19 +596,19 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                     ));
                 }
 
+                info!("Successfully created/refined artifact: {}", action.target);
                 self.artifacts.insert(action.target.clone(), result.clone());
+                self.persist_artifact(&action.target, &result).await?;
 
-                // If it was a refinement or creation, it's no longer "verified"
                 self.verified_artifacts.remove(&action.target);
 
-                // If it was a refinement, we can clear the feedback
                 if action.category == RelationCategory::Refinement {
                     self.verification_feedback.remove(&action.target);
                 }
             }
             _ => {
-                // Other or Context categories - should not be triggered by scheduler normally
                 self.artifacts.insert(action.target.clone(), result.clone());
+                self.persist_artifact(&action.target, &result).await?;
             }
         }
 

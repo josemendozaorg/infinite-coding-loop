@@ -114,10 +114,10 @@ fn test_agent_loading_integration() {
         .expect("Failed to load graph");
 
     assert!(
-        graph.loaded_agents.contains_key("product_manager"),
-        "product_manager agent should be loaded"
+        graph.loaded_agents.contains_key("ProductManager"),
+        "ProductManager agent should be loaded"
     );
-    let config = graph.loaded_agents.get("product_manager").unwrap();
+    let config = graph.loaded_agents.get("ProductManager").unwrap();
     assert!(
         config.contains("Product Manager"),
         "Config content should be loaded"

@@ -21,7 +21,7 @@ pub struct ShellCliClient {
     pub work_dir: String,
     pub yolo: bool,
     pub model: Option<String>,
-    pub debug: bool,
+    pub debug_ai_cli: bool,
     pub output_format: Option<String>,
 }
 
@@ -32,7 +32,7 @@ impl ShellCliClient {
             work_dir,
             yolo: false,
             model: None,
-            debug: false,
+            debug_ai_cli: false,
             output_format: None,
         }
     }
@@ -53,7 +53,7 @@ impl ShellCliClient {
     }
 
     pub fn with_debug(mut self, debug: bool) -> Self {
-        self.debug = debug;
+        self.debug_ai_cli = debug;
         self
     }
 
@@ -77,7 +77,7 @@ impl AiCliClient for ShellCliClient {
         if let Some(ref m) = model {
             cmd.arg("-m").arg(m);
         }
-        if self.debug {
+        if self.debug_ai_cli {
             cmd.arg("--debug");
         }
         if let Some(ref f) = self.output_format {
@@ -86,7 +86,7 @@ impl AiCliClient for ShellCliClient {
         cmd.arg("--approval-mode").arg("yolo");
         cmd.arg(&prompt_text_owned);
 
-        if self.debug {
+        if self.debug_ai_cli {
             eprintln!(
                 "\n{}",
                 console::style("--- AI CLI PROMPT ---").bold().yellow()
@@ -110,7 +110,7 @@ impl AiCliClient for ShellCliClient {
         let mut stderr = child.stderr.take().unwrap();
 
         let mut full_stdout = String::new();
-        let show_output = self.debug || self.output_format.as_deref() == Some("text");
+        let show_output = self.debug_ai_cli || self.output_format.as_deref() == Some("text");
 
         let mut stdout_done = false;
         let mut stderr_done = false;

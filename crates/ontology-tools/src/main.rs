@@ -50,6 +50,15 @@ enum Commands {
         )]
         input: PathBuf,
     },
+    /// Predict and print the execution path from the ontology
+    Plan {
+        #[arg(
+            short,
+            long,
+            default_value = "ontology-software-engineering/ontology.json"
+        )]
+        input: PathBuf,
+    },
 }
 
 #[derive(Deserialize, Debug)]
@@ -79,6 +88,9 @@ fn main() -> anyhow::Result<()> {
         }
         Commands::Validate { input } => {
             validate_graph(&input)?;
+        }
+        Commands::Plan { input } => {
+            simulate_path(&input)?;
         }
     }
 
@@ -248,4 +260,230 @@ fn validate_graph(input_path: &PathBuf) -> anyhow::Result<()> {
             std::process::exit(1);
         }
     }
+}
+
+fn simulate_path(input_path: &PathBuf) -> anyhow::Result<()> {
+    use console::style;
+    use dass_engine::graph::{DependencyGraph, RelationCategory};
+    use std::collections::HashSet;
+
+    println!("Simulating execution path for {:?}", input_path);
+    let content = std::fs::read_to_string(input_path)?;
+
+    // Simple base path inference as in validate_graph
+    let base_path = input_path.parent().and_then(|p| {
+        let mut current = p;
+        if current.ends_with("schema") {
+            current = current.parent().unwrap_or(current);
+        }
+        if current.ends_with("artifact") {
+            current = current.parent().unwrap_or(current);
+        }
+        if current.ends_with("schemas") {
+            current = current.parent().unwrap_or(current);
+        }
+        Some(current)
+    });
+
+    let graph = DependencyGraph::load_from_metamodel(&content, base_path)?;
+
+    let mut produced = HashSet::new();
+    produced.insert("SoftwareApplication".to_string());
+
+    let mut missing_creator = Vec::new();
+
+    // Identify Gaps: Any non-Agent (except root) that isn't created by an Agent
+    use petgraph::visit::EdgeRef;
+    for node_idx in graph.graph.node_indices() {
+        let node_name = &graph.graph[node_idx];
+        if graph.is_agent(node_name) || node_name == "SoftwareApplication" {
+            continue;
+        }
+
+        let is_created_by_agent = graph
+            .graph
+            .edges_directed(node_idx, petgraph::Direction::Incoming)
+            .any(|edge| {
+                let relation = edge.weight();
+                let category = RelationCategory::from_str(relation);
+                let source_idx = edge.source();
+                let source_name = &graph.graph[source_idx];
+
+                // Effective creation: Agent --(Creation)--> Node
+                category == RelationCategory::Creation && graph.is_agent(source_name)
+            });
+
+        if !is_created_by_agent {
+            missing_creator.push(node_name.clone());
+            // We still add them to produced so the simulation can show them in context
+            // but we will flag them as errors at the end.
+            produced.insert(node_name.clone());
+        }
+    }
+
+    let mut verified = HashSet::new();
+    let mut steps = 0;
+    let max_steps = 100;
+
+    println!("\n{}", style("PREDICTED EXECUTION PATH:").bold().yellow());
+    println!("{} SoftwareApplication (Initial Goal)", style("🏠").green());
+
+    while steps < max_steps {
+        let mut actions = Vec::new();
+
+        for edge_idx in graph.graph.edge_indices() {
+            let (source_idx, target_idx) = graph.graph.edge_endpoints(edge_idx).unwrap();
+            let source_kind = &graph.graph[source_idx];
+            let target_kind = &graph.graph[target_idx];
+            let relation = &graph.graph[edge_idx];
+            let category = RelationCategory::from_str(relation);
+
+            if graph.is_agent(source_kind) {
+                match category {
+                    RelationCategory::Creation => {
+                        if !produced.contains(target_kind) {
+                            actions.push((
+                                source_kind.clone(),
+                                relation.clone(),
+                                target_kind.clone(),
+                                "Creation",
+                            ));
+                        }
+                    }
+                    RelationCategory::Verification => {
+                        if produced.contains(target_kind) && !verified.contains(target_kind) {
+                            actions.push((
+                                source_kind.clone(),
+                                relation.clone(),
+                                target_kind.clone(),
+                                "Verification",
+                            ));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        if actions.is_empty() {
+            println!(
+                "\n{}",
+                style("Simulation complete. No more actionable nodes found.")
+                    .bold()
+                    .dim()
+            );
+            break;
+        }
+
+        // The engine currently picks the first actionable action it finds in edge order.
+        let (agent, relation, target, cat) = &actions[0];
+        steps += 1;
+
+        let icon = match *cat {
+            "Creation" => style("🪄").cyan(),
+            "Verification" => style("✅").green(),
+            _ => style("➜").white(),
+        };
+
+        println!(
+            "{:02}. {} {} {} {}",
+            steps,
+            icon,
+            style(agent).bold().blue(),
+            style(relation).dim(),
+            style(target).bold().magenta()
+        );
+
+        // Show Context
+        let mut context = graph.get_related_artifacts(target);
+        if *cat == "Verification" || *cat == "Refines" {
+            context.push(target.clone());
+        }
+        context.push("SoftwareApplication".to_string());
+
+        // Filter to only show context that exists at this point in the simulation
+        context.retain(|c| produced.contains(c));
+
+        context.sort();
+        context.dedup();
+
+        if !context.is_empty() {
+            let context_str = context
+                .iter()
+                .map(|c| style(c).dim().to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            println!("    {} {}", style("Context:").dim(), context_str);
+        }
+
+        if *cat == "Creation" {
+            produced.insert(target.clone());
+        } else if *cat == "Verification" {
+            verified.insert(target.clone());
+        }
+    }
+
+    if steps >= max_steps {
+        println!(
+            "\n{}",
+            style("Reached maximum simulation steps. Possible infinite loop in ontology?")
+                .red()
+                .bold()
+        );
+    }
+
+    // Detect Unlinked Nodes
+    let all_nodes: HashSet<String> = graph
+        .graph
+        .node_indices()
+        .map(|i| graph.graph[i].clone())
+        .collect();
+    let visited_nodes = produced; // produced contains all artifacts/entry points reached.
+
+    // Note: unlinked here means not reachable from the starting point "SoftwareApplication"
+    // via the engine's execution logic.
+    let mut unlinked: Vec<&String> = all_nodes
+        .iter()
+        .filter(|n| !visited_nodes.contains(*n) && !graph.is_agent(n))
+        .collect();
+    unlinked.sort();
+
+    if !missing_creator.is_empty() {
+        println!(
+            "\n{}",
+            style("ERROR: ARTIFACTS MISSING AGENT CREATOR:")
+                .bold()
+                .red()
+        );
+        let mut sorted = missing_creator.clone();
+        sorted.sort();
+        for node in sorted {
+            println!("  {} {}", style("✗").red(), node);
+        }
+        println!(
+            "    {}",
+            style("Add 'creates', 'implements', or 'defines' relationships from an Agent.")
+                .dim()
+                .italic()
+        );
+    }
+
+    if !unlinked.is_empty() {
+        println!(
+            "\n{}",
+            style("UNLINKED / UNREACHABLE ARTIFACTS:").bold().red()
+        );
+        for node in unlinked {
+            println!("  {} {}", style("✗").red(), node);
+        }
+    } else {
+        println!(
+            "\n{}",
+            style("All artifacts in the graph are reachable.")
+                .bold()
+                .green()
+        );
+    }
+
+    Ok(())
 }
