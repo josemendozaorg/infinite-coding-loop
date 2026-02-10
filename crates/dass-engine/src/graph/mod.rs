@@ -422,8 +422,20 @@ impl DependencyGraph {
         let schema_content = self
             .schemas
             .get(kind)
-            .or_else(|| self.schemas.get(&snake_kind))
-            .ok_or_else(|| anyhow::anyhow!("No schema found for artifact kind: {}", kind))?;
+            .or_else(|| self.schemas.get(&snake_kind));
+
+        if schema_content.is_none() {
+            let node_type = self.node_types.get(kind).map(|s| s.as_str());
+            if node_type == Some("Other") || kind == "SoftwareApplication" {
+                return Ok(());
+            }
+            return Err(anyhow::anyhow!(
+                "No schema found for artifact kind: {}",
+                kind
+            ));
+        }
+
+        let schema_content = schema_content.unwrap();
 
         let schema_json: serde_json::Value = serde_json::from_str(schema_content)?;
 

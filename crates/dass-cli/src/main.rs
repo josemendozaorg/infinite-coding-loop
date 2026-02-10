@@ -46,6 +46,10 @@ struct Args {
     /// Output format (default: "text")
     #[arg(long, default_value = "text")]
     output_format: String,
+
+    /// Maximum number of iterations (default: 100)
+    #[arg(long, default_value = "100")]
+    max_iterations: usize,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -286,7 +290,8 @@ async fn main() -> Result<()> {
         app_name,
         work_dir_path.clone(),
     )
-    .await?;
+    .await?
+    .with_max_iterations(args.max_iterations);
 
     let ui = CliInteraction::new(args.clone());
 

@@ -110,10 +110,15 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             artifacts: HashMap::new(),
             verification_feedback: HashMap::new(),
             verified_artifacts: std::collections::HashSet::new(),
-            max_iterations: 10,
+            max_iterations: 100,
             current_iteration: None,
             _client: std::marker::PhantomData,
         })
+    }
+
+    pub fn with_max_iterations(mut self, max: usize) -> Self {
+        self.max_iterations = max;
+        self
     }
 
     async fn ensure_persistence_dirs(&self) -> Result<PathBuf> {
