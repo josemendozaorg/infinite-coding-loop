@@ -542,7 +542,7 @@ impl DependencyGraph {
         relation: &str,
         target: &str,
     ) -> Option<String> {
-        let mut template = if let Some(t) = self.prompt_templates.get(&(
+        let template = if let Some(t) = self.prompt_templates.get(&(
             source.to_string(),
             relation.to_string(),
             target.to_string(),
@@ -556,37 +556,6 @@ impl DependencyGraph {
                 relation, target, source
             )
         };
-
-        // Inject Schema if present
-        if let Some(schema_content) = self.schemas.get(target) {
-            if template.contains("{{schema}}") {
-                template = template.replace("{{schema}}", schema_content);
-            } else {
-                template = format!("{}\n\nOutput Schema:\n{}", template, schema_content);
-            }
-
-            // Inject Base Schema if available (to resolve $ref visibility for LLM)
-            if let Some(base_schema) = self
-                .schemas
-                .get("https://infinite-coding-loop.dass/schemas/base.schema.json")
-            {
-                template = format!(
-                    "{}\n\nBase Schema Definitions (Reference):\n{}",
-                    template, base_schema
-                );
-            }
-
-            // Inject Taxonomy Schema to clarify "Kind_*" values
-            if let Some(taxonomy_schema) = self
-                .schemas
-                .get("https://infinite-coding-loop.dass/schemas/taxonomy.schema.json")
-            {
-                template = format!(
-                    "{}\n\nTaxonomy (Valid Kinds):\n{}",
-                    template, taxonomy_schema
-                );
-            }
-        }
 
         Some(template)
     }

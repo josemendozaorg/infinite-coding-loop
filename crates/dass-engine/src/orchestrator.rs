@@ -592,13 +592,28 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                 .await?;
 
                 if let Err(e) = validation_result {
-                    warn!("Artifact validation failed for {}: {}", action.target, e);
-                    return Err(anyhow::anyhow!(
-                        "Artifact validation failed for {}: {}. Result: {}",
-                        action.target,
-                        e,
-                        result
-                    ));
+                    let is_code = self
+                        .executor
+                        .graph
+                        .node_types
+                        .get(&action.target)
+                        .map(|t| t == "Code")
+                        .unwrap_or(false);
+
+                    if is_code {
+                        warn!(
+                            "Artifact type 'Code' detected. Skipping strict schema validation for {}. Validation error was: {}",
+                            action.target, e
+                        );
+                    } else {
+                        warn!("Artifact validation failed for {}: {}", action.target, e);
+                        return Err(anyhow::anyhow!(
+                            "Artifact validation failed for {}: {}. Result: {}",
+                            action.target,
+                            e,
+                            result
+                        ));
+                    }
                 }
 
                 info!("Successfully created/refined artifact: {}", action.target);
@@ -649,6 +664,36 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             );
             base.push_str("2. Example: `{\"files\": [\"main.rs\", \"Cargo.toml\"], \"main_file\": \"main.rs\"}`\n");
         } else {
+            // Inject Schema if present
+            if let Some(schema_content) = self.executor.graph.schemas.get(target) {
+                base.push_str("\n**STRICT SCHEMA ADHERENCE REQUIRED**:\n");
+                base.push_str("Your output MUST adhere strictly to the following JSON schema.\n");
+                base.push_str("Output Schema:\n");
+                base.push_str(&format!("```json\n{}\n```\n", schema_content));
+
+                // Inject Base Schema if available (to resolve $ref visibility for LLM)
+                if let Some(base_schema) = self
+                    .executor
+                    .graph
+                    .schemas
+                    .get("https://infinite-coding-loop.dass/schemas/base.schema.json")
+                {
+                    base.push_str("\nBase Schema Definitions (Reference):\n");
+                    base.push_str(&format!("```json\n{}\n```\n", base_schema));
+                }
+
+                // Inject Taxonomy Schema to clarify "Kind_*" values
+                if let Some(taxonomy_schema) = self
+                    .executor
+                    .graph
+                    .schemas
+                    .get("https://infinite-coding-loop.dass/schemas/taxonomy.schema.json")
+                {
+                    base.push_str("\nTaxonomy (Valid Kinds):\n");
+                    base.push_str(&format!("```json\n{}\n```\n", taxonomy_schema));
+                }
+            }
+
             base.push_str(&format!(
                 "1. Provide the {} content as the ONLY output in a single triple-backtick JSON code block.\n",
                 target
