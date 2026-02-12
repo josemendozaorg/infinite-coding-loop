@@ -13,8 +13,11 @@ if [ -z "$1" ]; then
 fi
 
 BUMP_TYPE=$1
-CORE_CARGO_TOML="ifcl-core/Cargo.toml"
-TUI_CARGO_TOML="tui/Cargo.toml"
+CORE_CARGO_TOML="crates/dass-engine/Cargo.toml"
+CLI_CARGO_TOML="crates/dass-cli/Cargo.toml"
+TUI_CARGO_TOML="crates/dass-tui/Cargo.toml"
+TOOLS_CARGO_TOML="crates/ontology-tools/Cargo.toml"
+E2E_CARGO_TOML="crates/dass-e2e/Cargo.toml"
 
 # Check if files exist
 if [ ! -f "$CORE_CARGO_TOML" ]; then
@@ -22,12 +25,7 @@ if [ ! -f "$CORE_CARGO_TOML" ]; then
     exit 1
 fi
 
-if [ ! -f "$TUI_CARGO_TOML" ]; then
-    echo "Error: $TUI_CARGO_TOML not found."
-    exit 1
-fi
-
-# Get current version from ifcl-core/Cargo.toml
+# Get current version from crates/dass-engine/Cargo.toml
 # Assumes 'version = "x.y.z"' is in the first few lines
 CURRENT_VERSION=$(grep '^version = ' "$CORE_CARGO_TOML" | head -n 1 | cut -d '"' -f 2)
 
@@ -66,6 +64,9 @@ echo "New version: $NEW_VERSION"
 # Mac OS sed handles -i differently, but we are on Linux.
 # Match exactly 'version = "..."' at the start of the line to avoid dependencies
 sed -i "s/^version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" "$CORE_CARGO_TOML"
+sed -i "s/^version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" "$CLI_CARGO_TOML"
 sed -i "s/^version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" "$TUI_CARGO_TOML"
+sed -i "s/^version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" "$TOOLS_CARGO_TOML"
+sed -i "s/^version = \"$CURRENT_VERSION\"/version = \"$NEW_VERSION\"/" "$E2E_CARGO_TOML"
 
-echo "Updated $CORE_CARGO_TOML and $TUI_CARGO_TOML to version $NEW_VERSION"
+echo "Updated all crates to version $NEW_VERSION"

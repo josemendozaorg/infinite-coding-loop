@@ -44,15 +44,15 @@ fn test_schema_injection_integration() {
     println!("Loaded Template: {}", template);
 
     // 5. Assertions
+    // Note: Schema injection now happens in Orchestrator::enhance_prompt,
+    // so the template returned by DependencyGraph no longer contains the schema.
     assert!(
         !template.contains("{{schema}}"),
-        "The {{schema}} placeholder should be replaced"
+        "The {{schema}} placeholder should not be present if it wasn't in the template"
     );
-
-    // Check if it contains some characteristic of the DesignSpec schema
     assert!(
-        template.contains("\"title\": \"DesignSpec\""),
-        "Template should contain the DesignSpec schema definition"
+        !template.contains("\"title\": \"DesignSpec\""),
+        "Template should NOT contain the DesignSpec schema definition here (it's injected in Orchestrator)"
     );
 }
 

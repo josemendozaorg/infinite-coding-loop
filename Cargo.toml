@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/ifcl-core", "crates/tui", "crates/dass-engine", "crates/dass-tui", "crates/dass-cli", "crates/ontology-tools", "crates/dass-e2e", "target/test-work-dir-real-ai/hello_world"]
+members = ["crates/dass-engine", "crates/dass-tui", "crates/dass-cli", "crates/ontology-tools", "crates/dass-e2e"]
 
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }
