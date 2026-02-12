@@ -1,6 +1,51 @@
 ## Ideas
 
-[] Code must not have schema validation either. 
+[] The execution graph is not printed always at the beginning when starting the project or a new iteration, it only appears when resuming an iteration. It should always be visible somewhere during the execution and be refreshed as we go, just to be able to see the progress.
+  ITERATION STATUS: Initial Implementation
+Completed Tasks:
+  ✔ ArchitectureStyle
+  ✔ Microservices
+  ✔ DDD
+  ✔ Methodology
+  ✔ QualityMetric
+  ✔ TDD
+  ✔ CodingStyle
+  ✔ GoogleCodingStyle
+  ✔ CodingPractice
+  ✔ DRY
+  ✔ KISS
+  ✔ Requirement
+  ✔ Feature
+Pending Tasks:
+  ➜ UserStory
+  ➜ AcceptanceCriteria
+  ➜ DesignSpec
+  ➜ ImplementationPlan
+  ➜ UnitTest
+  ➜ Code
+
+[X] When providing a path, the CLI should search for the existing projects in that folder and allow me to select one to continue.
+
+[] The model for the AI CLI for every graph node should be possible to be configured in the ontology graph json. It means we need to extend the base schema MetaRelationship to include the model per every graph node. It should optional, and when not defined, it should use the default model selected at the beginning of the application execution.
+
+[X] When running the loop, few things happened:
+  1. The Log is repeated, not sure why, perhaps it is calling the node twice:
+    Iteration 3 - Evaluating Graph State...
+    2026-02-12T22:30:53.386521Z  INFO Dispatched Action: ProductManager creates UserStory
+    2026-02-12T22:30:53.386553Z  INFO Dispatched Action: ProductManager creates UserStory
+  2. Execution stopped at ProductManager creates UserStory. Is it because model exhaustion? Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 1s.. Retrying after 1834.113302ms...
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 0s.. Retrying after 255.492243ms...
+Attempt 1 failed: You have exhausted your capacity on this model. Your quota will reset after 1s.. Retrying after 1912.8276259999998ms...
+
+  3. It is creating repeated files for every Document. One inside "{App Name}/.infinitecodingloop/iterations/{iteration_id}/documents/" and another inside the root "{App Name}/".
+  4. The {iteration_id} should be a sequential number with a date.. e.g. 20260213_0001. The sequence restarts per date.
+  5. The first graph nodes were executed without asking for the approval to move on to the next node.
+     The nodes Architect defines ArchitectureStyle,
+     Architect defines Microservices and all others till ProductManager creates Requirement.
+  6. It should be possible to select the model at the beginning.
+
+
+[X] Code must not have schema validation either. 
     Dispatched Action: Engineer implements Code
     Thinking... [Agent: Engineer] executing Task: implements Code
     YOLO mode is enabled. All tool calls will be automatically approved.

@@ -136,8 +136,27 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
 
     pub async fn start_iteration(&mut self, name: &str) -> Result<()> {
         let icl_dir = self.ensure_persistence_dirs().await?;
-        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
-        let id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Local::now();
+        let date_prefix = now.format("%Y%m%d").to_string();
+        let timestamp = now.format("%Y%m%d_%H%M%S").to_string();
+
+        // Generate sequential ID: scan existing iterations for today's date
+        let iterations_dir = icl_dir.join("iterations");
+        let mut max_seq = 0u32;
+        if let Ok(mut entries) = tokio::fs::read_dir(&iterations_dir).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                if let Some(name) = entry.file_name().to_str() {
+                    if name.starts_with(&date_prefix) {
+                        if let Some(seq_str) = name.split('_').nth(1) {
+                            if let Ok(seq) = seq_str.parse::<u32>() {
+                                max_seq = max_seq.max(seq);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let id = format!("{}_{:04}", date_prefix, max_seq + 1);
 
         let iter_info = IterationInfo {
             id: id.clone(),
@@ -145,7 +164,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             timestamp,
         };
 
-        let iter_folder = icl_dir.join("iterations").join(&id);
+        let iter_folder = iterations_dir.join(&id);
         tokio::fs::create_dir_all(iter_folder.join("documents")).await?;
 
         let iter_json_path = iter_folder.join("iteration.json");
@@ -281,7 +300,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
     }
 
     pub async fn run(&mut self, ui: &impl crate::interaction::UserInteraction) -> Result<()> {
-        info!("Starting Generic Graph-Driven Orchestration...");
+        ui.log_info("Starting Generic Graph-Driven Orchestration...");
 
         // 1. Initial Input (Skip if already exists in resumed iteration)
         if !self.artifacts.contains_key("SoftwareApplication") {
@@ -317,7 +336,6 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
 
             let next_actions = self.identify_next_actions();
             if next_actions.is_empty() {
-                info!("No more actions identified.");
                 ui.log_info(&format!(
                     "No more actions identified. Current artifacts: {:?}",
                     self.artifacts.keys().collect::<Vec<_>>()
@@ -326,21 +344,24 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             }
 
             for action in next_actions {
-                info!(
-                    "Dispatched Action: {} {} {}",
-                    action.agent, action.relation, action.target
-                );
                 ui.log_info(&format!(
-                    "Dispatched Action: {} {} {}",
+                    "Next Action: {} {} {}",
                     action.agent, action.relation, action.target
                 ));
-                self.execute_action(action, ui).await?;
-            }
 
-            if !ui.confirm("Proceed to next iteration?").await? {
-                info!("Iteration paused by user.");
-                ui.log_info("Iteration paused by user.");
-                break;
+                if !ui
+                    .confirm(&format!(
+                        "Execute: {} {} {}?",
+                        action.agent, action.relation, action.target
+                    ))
+                    .await?
+                {
+                    ui.log_info("Action skipped by user. Pausing iteration.");
+                    ui.end_step("Iteration paused by user.");
+                    return Ok(());
+                }
+
+                self.execute_action(action, ui).await?;
             }
         }
 
@@ -665,17 +686,29 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         entity_type: Option<&str>,
     ) -> String {
         let is_code = entity_type == Some("Code");
+        let has_schema = self.executor.graph.schemas.contains_key(target);
 
         let mut base = format!("{}\n\nPlease generate the {} artifact.", prompt, target);
 
-        base.push_str("\n\n**Tool-Driven Persistence Required**:\n");
-        base.push_str(&format!(
-            "1. You MUST use your tools (e.g., `write_file`) to persist the {} content to the file `{}` in the current directory.\n",
-            target, filename
-        ));
-        base.push_str(
-            "2. Do NOT just output the text; you are responsible for the file creation.\n",
-        );
+        // Determine the documents path for file writing
+        let docs_path = if let Some(ref iter) = self.current_iteration {
+            format!(".infinitecodingloop/iterations/{}/documents", iter.id)
+        } else {
+            ".".to_string()
+        };
+
+        // For artifacts WITHOUT a schema, instruct the AI CLI to write the file
+        // For artifacts WITH a schema, the orchestrator handles persistence via persist_artifact
+        if !has_schema || is_code {
+            base.push_str("\n\n**Tool-Driven Persistence Required**:\n");
+            base.push_str(&format!(
+                "1. You MUST use your tools (e.g., `write_file`) to persist the {} content to the file `{}/{}`.\n",
+                target, docs_path, filename
+            ));
+            base.push_str(
+                "2. Do NOT just output the text; you are responsible for the file creation.\n",
+            );
+        }
 
         base.push_str("\n**Strict Output Rules**:\n");
         if is_code {

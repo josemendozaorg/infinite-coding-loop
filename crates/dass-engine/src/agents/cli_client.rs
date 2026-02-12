@@ -66,6 +66,43 @@ impl ShellCliClient {
 #[async_trait]
 impl AiCliClient for ShellCliClient {
     async fn prompt(&self, prompt_text: &str) -> Result<String> {
+        let max_retries = 3u32;
+        let mut attempt = 0u32;
+
+        loop {
+            attempt += 1;
+            let result = self.execute_prompt(prompt_text).await;
+
+            match result {
+                Ok(output) => return Ok(output),
+                Err(e) => {
+                    let err_msg = format!("{}", e);
+                    let is_rate_limit = err_msg.contains("exhausted your capacity")
+                        || err_msg.contains("rate limit")
+                        || err_msg.contains("quota");
+
+                    if is_rate_limit && attempt < max_retries {
+                        let backoff_secs = 2u64.pow(attempt); // 2s, 4s, 8s
+                        eprintln!(
+                            "{} (attempt {}/{}). Retrying in {}s...",
+                            console::style("Model rate limited").bold().yellow(),
+                            attempt,
+                            max_retries,
+                            backoff_secs
+                        );
+                        tokio::time::sleep(std::time::Duration::from_secs(backoff_secs)).await;
+                        continue;
+                    }
+
+                    return Err(e);
+                }
+            }
+        }
+    }
+}
+
+impl ShellCliClient {
+    async fn execute_prompt(&self, prompt_text: &str) -> Result<String> {
         let work_dir = self.work_dir.clone();
         let executable = self.executable.clone();
         let prompt_text_owned = prompt_text.to_string();
@@ -110,6 +147,7 @@ impl AiCliClient for ShellCliClient {
         let mut stderr = child.stderr.take().unwrap();
 
         let mut full_stdout = String::new();
+        let mut full_stderr = String::new();
         let show_output = self.debug_ai_cli || self.output_format.as_deref() == Some("text");
 
         let mut stdout_done = false;
@@ -134,6 +172,7 @@ impl AiCliClient for ShellCliClient {
                         Ok(0) => stderr_done = true,
                         Ok(n) => {
                             let chunk = &stderr_buf[..n];
+                            full_stderr.push_str(&String::from_utf8_lossy(chunk));
                             if show_output {
                                 std::io::stderr().write_all(chunk).ok();
                                 std::io::stderr().flush().ok();
@@ -151,12 +190,18 @@ impl AiCliClient for ShellCliClient {
         let status = child.wait().await?;
 
         if !status.success() {
+            // Include stderr in the error so retry logic can detect rate limiting
+            let err_msg = format!(
+                "AI CLI failed with status: {}. Stderr: {}",
+                status,
+                full_stderr.chars().take(500).collect::<String>()
+            );
             eprintln!(
                 "{}: {}",
                 console::style("AI CLI FAILED").bold().red(),
                 status
             );
-            return Err(anyhow::anyhow!("AI CLI failed with status: {}", status));
+            return Err(anyhow::anyhow!(err_msg));
         }
 
         eprintln!("{}", console::style("AI CLI SUCCESS").bold().green());

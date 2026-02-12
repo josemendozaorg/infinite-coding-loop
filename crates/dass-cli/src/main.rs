@@ -20,9 +20,9 @@ struct Args {
     #[arg(short, long)]
     yolo: bool,
 
-    /// Model to use (default: "gemini-2.5-flash")
-    #[arg(long, default_value = "gemini-2.5-flash")]
-    model: String,
+    /// Model to use (if not specified, prompts for selection)
+    #[arg(long)]
+    model: Option<String>,
 
     /// Feature idea (skips input prompt)
     query: Option<String>,
@@ -217,6 +217,33 @@ async fn load_app_config(work_dir: &Path) -> Result<Option<AppConfig>> {
     }
 }
 
+/// Discover existing projects in subdirectories of the given path.
+/// Returns a list of (subdirectory_path, app_config) pairs.
+async fn discover_projects(base_dir: &Path) -> Result<Vec<(PathBuf, AppConfig)>> {
+    let mut projects = Vec::new();
+
+    // Check the base dir itself
+    if let Some(config) = load_app_config(base_dir).await? {
+        projects.push((base_dir.to_path_buf(), config));
+    }
+
+    // Check subdirectories
+    if let Ok(mut entries) = tokio::fs::read_dir(base_dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let path = entry.path();
+            if path.is_dir() {
+                if let Some(config) = load_app_config(&path).await? {
+                    projects.push((path, config));
+                }
+            }
+        }
+    }
+
+    // Sort by app name for consistent display
+    projects.sort_by(|a, b| a.1.app_name.cmp(&b.1.app_name));
+    Ok(projects)
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
@@ -239,29 +266,66 @@ async fn main() -> Result<()> {
         tokio::fs::create_dir_all(&work_dir_path).await?;
     }
 
-    // 3. Try Resume or Create
-    let (app_name, final_app_id) = if let Some(config) = load_app_config(&work_dir_path).await? {
-        println!(
-            "{}",
-            style(format!(
-                "Resuming Application: {} ({})",
-                config.app_name, config.app_id
-            ))
-            .yellow()
-        );
-        (config.app_name, config.app_id)
+    // 3. Discover existing projects or create new
+    let existing_projects = discover_projects(&work_dir_path).await?;
+
+    let (work_dir_path, app_name, final_app_id) = if !existing_projects.is_empty() {
+        let mut options: Vec<String> = existing_projects
+            .iter()
+            .map(|(path, config)| format!("{} ({})", config.app_name, path.display()))
+            .collect();
+        options.push(style("✚ Create New Project").bold().to_string());
+
+        let selection = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt("Select a project")
+            .items(&options)
+            .default(0)
+            .interact()?;
+
+        if selection < existing_projects.len() {
+            let (project_path, config) = &existing_projects[selection];
+            println!(
+                "{}",
+                style(format!("Resuming: {} ({})", config.app_name, config.app_id)).yellow()
+            );
+            (
+                project_path.clone(),
+                config.app_name.clone(),
+                config.app_id.clone(),
+            )
+        } else {
+            // Create new project
+            let name: String = Input::with_theme(&ColorfulTheme::default())
+                .with_prompt("Application Name")
+                .default("MyNewApp".into())
+                .interact_text()?;
+            let id = if let Some(ref id) = args.app_id {
+                id.clone()
+            } else {
+                uuid::Uuid::new_v4().to_string()
+            };
+            let project_path = work_dir_path.join(&name);
+            if !project_path.exists() {
+                tokio::fs::create_dir_all(&project_path).await?;
+            }
+            (project_path, name, id)
+        }
     } else {
+        // No existing projects found — check if this dir itself is a project or create new
         let name: String = Input::with_theme(&ColorfulTheme::default())
             .with_prompt("Application Name")
             .default("MyNewApp".into())
             .interact_text()?;
-
         let id = if let Some(ref id) = args.app_id {
             id.clone()
         } else {
             uuid::Uuid::new_v4().to_string()
         };
-        (name, id)
+        let project_path = work_dir_path.join(&name);
+        if !project_path.exists() {
+            tokio::fs::create_dir_all(&project_path).await?;
+        }
+        (project_path, name, id)
     };
 
     // Ensure .infinitecodingloop exists
@@ -278,9 +342,30 @@ async fn main() -> Result<()> {
     println!("{}", style("---------------------------").dim());
 
     println!("{}", style("Running in LIVE MODE (calling AI CLI)").green());
+
+    // Model selection: use CLI flag or prompt user
+    let model = if let Some(ref m) = args.model {
+        m.clone()
+    } else {
+        let models = vec![
+            "gemini-3-pro-preview".to_string(),
+            "gemini-3-flash-preview".to_string(),
+            "gemini-2.5-pro".to_string(),
+            "gemini-2.5-flash".to_string(),
+            "gemini-2.5-flash-lite".to_string(),
+        ];
+        let selection = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt("Select AI model")
+            .items(&models)
+            .default(0)
+            .interact()?;
+        models[selection].clone()
+    };
+    println!("{}", style(format!("Using model: {}", model)).dim());
+
     let client = ShellCliClient::new("gemini", work_dir_path.to_string_lossy().to_string())
         .with_yolo(args.yolo)
-        .with_model(args.model.clone())
+        .with_model(model)
         .with_debug(args.debug_ai_cli)
         .with_output_format(args.output_format.clone());
 
@@ -343,4 +428,143 @@ async fn main() -> Result<()> {
     orchestrator.run(&ui).await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper to create a fake project in a directory.
+    async fn create_fake_project(dir: &Path, app_name: &str, app_id: &str) {
+        let icl_dir = dir.join(".infinitecodingloop");
+        tokio::fs::create_dir_all(&icl_dir).await.unwrap();
+        let config = AppConfig {
+            app_id: app_id.to_string(),
+            app_name: app_name.to_string(),
+        };
+        let content = serde_json::to_string_pretty(&config).unwrap();
+        tokio::fs::write(icl_dir.join("app.json"), content)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_load_app_config_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = load_app_config(tmp.path()).await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_load_app_config_present() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_fake_project(tmp.path(), "TestApp", "test-id-123").await;
+
+        let config = load_app_config(tmp.path()).await.unwrap().unwrap();
+        assert_eq!(config.app_name, "TestApp");
+        assert_eq!(config.app_id, "test-id-123");
+    }
+
+    #[tokio::test]
+    async fn test_discover_projects_empty_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let projects = discover_projects(tmp.path()).await.unwrap();
+        assert!(projects.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_discover_projects_single_in_base() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_fake_project(tmp.path(), "BaseApp", "base-001").await;
+
+        let projects = discover_projects(tmp.path()).await.unwrap();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].1.app_name, "BaseApp");
+        assert_eq!(projects[0].0, tmp.path().to_path_buf());
+    }
+
+    #[tokio::test]
+    async fn test_discover_projects_multiple_subdirs() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        // Create three projects in subdirectories
+        let app_a = tmp.path().join("AppAlpha");
+        let app_b = tmp.path().join("AppBeta");
+        let app_c = tmp.path().join("AppGamma");
+        tokio::fs::create_dir_all(&app_a).await.unwrap();
+        tokio::fs::create_dir_all(&app_b).await.unwrap();
+        tokio::fs::create_dir_all(&app_c).await.unwrap();
+
+        create_fake_project(&app_a, "Alpha", "id-a").await;
+        create_fake_project(&app_b, "Beta", "id-b").await;
+        create_fake_project(&app_c, "Gamma", "id-c").await;
+
+        // Also create a plain subdir without a project
+        tokio::fs::create_dir_all(tmp.path().join("not-a-project"))
+            .await
+            .unwrap();
+
+        let projects = discover_projects(tmp.path()).await.unwrap();
+        assert_eq!(projects.len(), 3);
+
+        // Should be sorted by app_name
+        assert_eq!(projects[0].1.app_name, "Alpha");
+        assert_eq!(projects[1].1.app_name, "Beta");
+        assert_eq!(projects[2].1.app_name, "Gamma");
+    }
+
+    #[tokio::test]
+    async fn test_discover_projects_base_and_subdirs() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        // Project in the base dir itself
+        create_fake_project(tmp.path(), "RootProject", "root-id").await;
+
+        // Project in a subdir
+        let sub = tmp.path().join("SubProject");
+        tokio::fs::create_dir_all(&sub).await.unwrap();
+        create_fake_project(&sub, "ChildProject", "child-id").await;
+
+        let projects = discover_projects(tmp.path()).await.unwrap();
+        assert_eq!(projects.len(), 2);
+
+        // Sorted by name: ChildProject, RootProject
+        assert_eq!(projects[0].1.app_name, "ChildProject");
+        assert_eq!(projects[1].1.app_name, "RootProject");
+    }
+
+    #[tokio::test]
+    async fn test_list_iterations_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = list_iterations(tmp.path()).await.unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_list_iterations_with_entries() {
+        let tmp = tempfile::tempdir().unwrap();
+        let iters_dir = tmp
+            .path()
+            .join(".infinitecodingloop")
+            .join("iterations")
+            .join("20260213_0001");
+        tokio::fs::create_dir_all(&iters_dir).await.unwrap();
+
+        let iter_info = serde_json::json!({
+            "id": "20260213_0001",
+            "name": "Test Iteration",
+            "timestamp": "20260213_120000"
+        });
+        tokio::fs::write(
+            iters_dir.join("iteration.json"),
+            serde_json::to_string_pretty(&iter_info).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let result = list_iterations(tmp.path()).await.unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0, "20260213_0001");
+        assert_eq!(result[0].1, "Test Iteration");
+    }
 }
