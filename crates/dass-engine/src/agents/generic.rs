@@ -61,6 +61,38 @@ impl<C: AiCliClient> GenericAgent<C> {
 
         input.trim().to_string()
     }
+    fn extract_json_object(&self, input: &str) -> Option<String> {
+        let start = input.find('{')?;
+        let mut balance = 0;
+        let mut in_string = false;
+        let mut escape = false;
+
+        for (i, c) in input[start..].char_indices() {
+            if escape {
+                escape = false;
+                continue;
+            }
+            if c == '\\' {
+                escape = true;
+                continue;
+            }
+            if c == '"' {
+                in_string = !in_string;
+                continue;
+            }
+            if !in_string {
+                if c == '{' {
+                    balance += 1;
+                } else if c == '}' {
+                    balance -= 1;
+                    if balance == 0 {
+                        return Some(input[start..=start + i].to_string());
+                    }
+                }
+            }
+        }
+        None
+    }
 }
 
 #[async_trait]
@@ -91,6 +123,13 @@ impl<C: AiCliClient + Send + Sync> Agent for GenericAgent<C> {
         // Try parsing as YAML (requirements use YAML)
         if let Ok(val) = serde_yaml::from_str::<Value>(&cleaned) {
             return Ok(val);
+        }
+
+        // Fallback: Try to extract JSON object from the raw input
+        if let Some(extracted) = self.extract_json_object(&response) {
+            if let Ok(val) = serde_json::from_str::<Value>(&extracted) {
+                return Ok(val);
+            }
         }
 
         // Return error if neither (or return raw string wrapper?)
@@ -147,5 +186,23 @@ Some final text."#;
   "data": "Here is some nested json: ```json {\"test\": 1} ```"
 }"#
         );
+    }
+
+    #[test]
+    fn test_extract_json_object() {
+        let agent = GenericAgent::new(MockClient, "ProductManager".into(), "".into());
+        let input = r#"Here is the file:
+{"files": ["test.rs"]}
+Hope you like it."#;
+        let extracted = agent
+            .extract_json_object(input)
+            .expect("Should extract JSON");
+        assert_eq!(extracted, r#"{"files": ["test.rs"]}"#);
+
+        let input_nested = r#"start {"a": {"b": 1}} end"#;
+        let extracted_nested = agent
+            .extract_json_object(input_nested)
+            .expect("Should extract nested JSON");
+        assert_eq!(extracted_nested, r#"{"a": {"b": 1}}"#);
     }
 }
