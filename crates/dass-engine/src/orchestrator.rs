@@ -5,6 +5,7 @@ use crate::domain::types::AgentRole;
 use crate::graph::executor::{GraphExecutor, InMemoryExecutor, Task};
 use crate::graph::{DependencyGraph, RelationCategory};
 use anyhow::{Context, Result};
+use petgraph::visit::EdgeRef;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use tracing::{debug, info, warn};
@@ -359,6 +360,32 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             let category = RelationCategory::from_str(relation);
 
             if self.executor.graph.is_agent(source_kind) {
+                // Check if this action is actionable based on dependencies
+                // An artifact creation/verification is only actionable if all its "requires" dependencies are met.
+                let mut dependencies_met = true;
+                for target_edge in self
+                    .executor
+                    .graph
+                    .graph
+                    .edges_directed(target_idx, petgraph::Direction::Outgoing)
+                {
+                    if target_edge.weight() == "requires" {
+                        let dep_kind = &self.executor.graph.graph[target_edge.target()];
+                        if !self.artifacts.contains_key(dep_kind) {
+                            debug!(
+                                "Action {} {} {} is blocked by missing dependency: {}",
+                                source_kind, relation, target_kind, dep_kind
+                            );
+                            dependencies_met = false;
+                            break;
+                        }
+                    }
+                }
+
+                if !dependencies_met {
+                    continue;
+                }
+
                 match category {
                     RelationCategory::Creation => {
                         // Create if it doesn't exist
@@ -398,20 +425,13 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                             });
                         }
                     }
-                    _ => {
-                        // All other categories (Context, Other) are informative only
-                        // and do not trigger ActionPlans.
-                    }
+                    _ => {}
                 }
             }
         }
 
-        // Only return the first logically sound action for this iteration for this POC
-        if !plans.is_empty() {
-            vec![plans[0].clone()]
-        } else {
-            vec![]
-        }
+        // Return all logical actions. The orchestrator loop will execute them sequentially.
+        plans
     }
 
     async fn execute_action(
@@ -660,9 +680,12 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         base.push_str("\n**Strict Output Rules**:\n");
         if is_code {
             base.push_str(
-                "1. Return exactly one JSON object with a `files` key listing the updated paths.\n",
+                "1. Provide the file manifest as the ONLY output in a single triple-backtick JSON code block.\n",
             );
-            base.push_str("2. Example: `{\"files\": [\"main.rs\", \"Cargo.toml\"], \"main_file\": \"main.rs\"}`\n");
+            base.push_str(
+                "2. The JSON object MUST have a `files` key listing the updated paths.\n",
+            );
+            base.push_str("3. Example: ````json\n{\"files\": [\"main.rs\", \"Cargo.toml\"], \"main_file\": \"main.rs\"}\n````\n");
         } else {
             // Inject Schema if present
             if let Some(schema_content) = self.executor.graph.schemas.get(target) {

@@ -36,9 +36,7 @@ struct MockPanicClient;
 impl AiCliClient for MockPanicClient {
     async fn prompt(&self, prompt_text: &str) -> Result<String> {
         //println!("MOCK PROMPT: {}", prompt_text); // Comment out debug
-        if prompt_text.contains("creates Requirement")
-            || prompt_text.contains("modify the Requirement")
-        {
+        if prompt_text.contains("Requirement") {
             Ok(r#"[
   {
     "name": "REQ-001",
@@ -52,9 +50,7 @@ impl AiCliClient for MockPanicClient {
   }
 ]"#
             .to_string())
-        } else if prompt_text.contains("creates DesignSpec")
-            || prompt_text.contains("modify the DesignSpec")
-        {
+        } else if prompt_text.contains("DesignSpec") {
             Ok(r#"[
   {
     "name": "DS-001",

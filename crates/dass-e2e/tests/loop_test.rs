@@ -6,40 +6,66 @@ use dass_engine::orchestrator::Orchestrator;
 use std::path::PathBuf;
 
 // 1. Mock UI (To drive the Orchestrator)
-struct TestUi;
+// 1. Mock UI (To drive the Orchestrator)
+struct TestUi {
+    start_time: std::time::Instant,
+}
+
+impl TestUi {
+    fn new() -> Self {
+        Self {
+            start_time: std::time::Instant::now(),
+        }
+    }
+
+    fn elapsed(&self) -> String {
+        format!("{:.2?}", self.start_time.elapsed())
+    }
+}
 
 #[async_trait]
 impl UserInteraction for TestUi {
     async fn ask_for_feature(&self, _prompt: &str) -> Result<String> {
+        println!("[{}] ASK_FOR_FEATURE: {}", self.elapsed(), _prompt);
         Ok("Build a simple CLI tool that prints Hello World in Rust".to_string())
     }
-    async fn ask_user(&self, _prompt: &str) -> Result<String> {
+    async fn ask_user(&self, prompt: &str) -> Result<String> {
+        println!("[{}] ASK_USER: {}", self.elapsed(), prompt);
         Ok("yes".to_string())
     }
-    async fn confirm(&self, _prompt: &str) -> Result<bool> {
+    async fn confirm(&self, prompt: &str) -> Result<bool> {
+        println!("[{}] CONFIRM: {}", self.elapsed(), prompt);
         Ok(true)
     }
-    async fn select_option(&self, _prompt: &str, _options: &[String]) -> Result<usize> {
+    async fn select_option(&self, prompt: &str, options: &[String]) -> Result<usize> {
+        println!(
+            "[{}] SELECT_OPTION: {} {:?}",
+            self.elapsed(),
+            prompt,
+            options
+        );
         Ok(0)
     }
 
     // Logging stubs
     fn log_info(&self, msg: &str) {
-        println!("[INFO] {}", msg);
+        println!("[{}] [INFO] {}", self.elapsed(), msg);
     }
     fn log_error(&self, msg: &str) {
-        println!("[ERROR] {}", msg);
+        println!("[{}] [ERROR] {}", self.elapsed(), msg);
     }
 
     fn start_step(&self, msg: &str) {
-        println!("\n[STEP] {}", msg);
+        println!("\n[{}] [STEP] {}", self.elapsed(), msg);
     }
     fn end_step(&self, msg: &str) {
-        println!("[DONE] {}", msg);
+        println!("[{}] [DONE] {}", self.elapsed(), msg);
     }
 
     // Artifact rendering stubs
-    fn render_artifact(&self, _kind: &str, _data: &serde_json::Value) {}
+    fn render_artifact(&self, kind: &str, _data: &serde_json::Value) {
+        println!("[{}] [RENDER] Artifact: {}", self.elapsed(), kind);
+    }
 }
 
 #[tokio::test]
@@ -72,11 +98,12 @@ async fn test_end_to_end_execution() -> Result<()> {
         &ontology_json,
         Some(&fixtures_dir),
     )
-    .await?;
+    .await?
+    .with_max_iterations(15);
 
     // 3. Run the Loop
     // This will actually call gemini!
-    orchestrator.run(&TestUi).await?;
+    orchestrator.run(&TestUi::new()).await?;
 
     // 4. Verification: Check for artifact existence
     // The agents should have created files in the work_dir

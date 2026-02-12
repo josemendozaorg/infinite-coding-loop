@@ -38,19 +38,23 @@ async fn test_orchestration_cycle() -> Result<()> {
         serde_json::json!({ "name": "TestApp", "goal": "Create a calculator app" }),
     );
 
-    // We expect the first iteration to identify ProductManager -> creates -> Requirement
-    // and attempt to call the AI. Since we don't want to call real AI in tests,
-    // we might just want to verify state or run it in a way that doesn't call it.
-
-    // For now, let's just see if it identifies actions.
+    // We expect one of the identified actions to be ProductManager -> creates -> Requirement
     let actions = orchestrator.identify_next_actions();
     assert!(
         !actions.is_empty(),
-        "Should identify at least one starting action (ProductManager creating Requirement)"
+        "Should identify at least one starting action"
     );
-    assert_eq!(actions[0].agent, "ProductManager");
-    assert_eq!(actions[0].target, "Requirement");
-    assert_eq!(actions[0].relation, "creates");
+
+    let pm_action = actions
+        .iter()
+        .find(|a| a.agent == "ProductManager" && a.target == "Requirement");
+    assert!(
+        pm_action.is_some(),
+        "ProductManager should be ready to create Requirement. Identified actions: {:?}",
+        actions
+    );
+    let pm_action = pm_action.unwrap();
+    assert_eq!(pm_action.relation, "creates");
 
     Ok(())
 }
