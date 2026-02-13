@@ -166,6 +166,7 @@ const App: React.FC = () => {
   const [simulationSteps, setSimulationSteps] = useState<SimulationStep[]>([]);
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
   const [simulationLayoutMode, setSimulationLayoutMode] = useState<'ontology' | 'path'>('ontology');
+  const [showAllEdgesInSimulation, setShowAllEdgesInSimulation] = useState(false);
 
   // Exploration Mode State
   const [searchMode, setSearchMode] = useState(false); // If true, progressive disclosure
@@ -251,6 +252,13 @@ const App: React.FC = () => {
       activeEdges = activeEdges.filter(edge =>
         visibleNodeIdsSet.has(edge.source) && visibleNodeIdsSet.has(edge.target)
       );
+
+      // EXTRA: Hide non-execution edges by default to declutter
+      if (!showAllEdgesInSimulation) {
+        activeEdges = activeEdges.filter(edge =>
+          ['Creation', 'Verification', 'Refinement'].includes(edge.data.verbType)
+        );
+      }
     }
 
     // 3. Apply Orphan Filter (Only if NOT in simulation or search mode)
@@ -338,7 +346,7 @@ const App: React.FC = () => {
           };
         });
         setNodes(stableNodes);
-        setEdges(layouted.edges);
+        setEdges(activeEdges);
       }
     } else {
       setNodes(layouted.nodes);
@@ -351,7 +359,7 @@ const App: React.FC = () => {
         rfInstance.fitView({ padding: 0.2, duration: 800 });
       }, 100); // Small delay to allow render
     }
-  }, [showOrphans, searchMode, visibleNodeIds, initialLayout, setNodes, setEdges, rfInstance, showSimulation, simulationSteps, currentStepIndex, simulationLayoutMode]);
+  }, [showOrphans, searchMode, visibleNodeIds, initialLayout, setNodes, setEdges, rfInstance, showSimulation, simulationSteps, currentStepIndex, simulationLayoutMode, showAllEdgesInSimulation]);
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -517,6 +525,8 @@ const App: React.FC = () => {
           onSetStepIndex={setCurrentStepIndex}
           layoutMode={simulationLayoutMode}
           onSetLayoutMode={setSimulationLayoutMode}
+          showAllEdges={showAllEdgesInSimulation}
+          onSetShowAllEdges={setShowAllEdgesInSimulation}
         />
 
         {isPanelOpen && selectedNode && (

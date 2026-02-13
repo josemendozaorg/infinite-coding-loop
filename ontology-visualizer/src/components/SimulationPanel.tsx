@@ -13,6 +13,8 @@ interface SimulationPanelProps {
     onSetStepIndex: React.Dispatch<React.SetStateAction<number>>;
     layoutMode: 'ontology' | 'path';
     onSetLayoutMode: (mode: 'ontology' | 'path') => void;
+    showAllEdges: boolean;
+    onSetShowAllEdges: (show: boolean) => void;
 }
 
 const SimulationPanel: React.FC<SimulationPanelProps> = ({
@@ -24,7 +26,9 @@ const SimulationPanel: React.FC<SimulationPanelProps> = ({
     onStepClick,
     onSetStepIndex,
     layoutMode,
-    onSetLayoutMode
+    onSetLayoutMode,
+    showAllEdges,
+    onSetShowAllEdges
 }) => {
     const [isPlaying, setIsPlaying] = useState(false);
 
@@ -159,6 +163,20 @@ const SimulationPanel: React.FC<SimulationPanelProps> = ({
                         >
                             Path Flow
                         </button>
+                    </div>
+                )}
+
+                {steps.length > 0 && (
+                    <div style={{ marginBottom: '16px' }}>
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                checked={showAllEdges}
+                                onChange={(e) => onSetShowAllEdges(e.target.checked)}
+                                className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-xs font-medium text-slate-300">Show All Relationships</span>
+                        </label>
                     </div>
                 )}
 
