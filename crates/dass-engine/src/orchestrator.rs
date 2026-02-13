@@ -29,12 +29,14 @@ pub struct Orchestrator<C: AiCliClient + Clone + Send + Sync + 'static> {
     pub app_id: String,
     pub app_name: String,
     pub work_dir: Option<PathBuf>,
+    pub docs_folder: String,
     // New Graph Components
     pub executor: InMemoryExecutor,
     // Tracking produced artifacts (State)
     pub artifacts: HashMap<String, serde_json::Value>, // EntityKind -> Last Produced Value
     pub verification_feedback: HashMap<String, String>, // Target -> Feedback
     pub verified_artifacts: std::collections::HashSet<String>, // Tracks those with score 1.0
+    pub refinement_attempts: HashMap<String, usize>,   // Target -> retry count
     max_iterations: usize,
     // Iteration tracking
     pub current_iteration: Option<IterationInfo>,
@@ -107,10 +109,12 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             app_id,
             app_name,
             work_dir: Some(work_dir),
+            docs_folder: "spec".to_string(),
             executor,
             artifacts: HashMap::new(),
             verification_feedback: HashMap::new(),
             verified_artifacts: std::collections::HashSet::new(),
+            refinement_attempts: HashMap::new(),
             max_iterations: 100,
             current_iteration: None,
             _client: std::marker::PhantomData,
@@ -119,6 +123,11 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
 
     pub fn with_max_iterations(mut self, max: usize) -> Self {
         self.max_iterations = max;
+        self
+    }
+
+    pub fn with_docs_folder(mut self, folder: String) -> Self {
+        self.docs_folder = folder;
         self
     }
 
@@ -136,6 +145,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
 
     pub async fn start_iteration(&mut self, name: &str) -> Result<()> {
         let icl_dir = self.ensure_persistence_dirs().await?;
+        let work_dir = self.work_dir.as_ref().context("Work directory not set")?;
         let now = chrono::Local::now();
         let date_prefix = now.format("%Y%m%d").to_string();
         let timestamp = now.format("%Y%m%d_%H%M%S").to_string();
@@ -165,11 +175,17 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         };
 
         let iter_folder = iterations_dir.join(&id);
-        tokio::fs::create_dir_all(iter_folder.join("documents")).await?;
+        tokio::fs::create_dir_all(&iter_folder).await?;
 
         let iter_json_path = iter_folder.join("iteration.json");
         let content = serde_json::to_string_pretty(&iter_info)?;
         tokio::fs::write(iter_json_path, content).await?;
+
+        // Ensure docs folder exists
+        let docs_dir = work_dir.join(&self.docs_folder);
+        if !docs_dir.exists() {
+            tokio::fs::create_dir_all(&docs_dir).await?;
+        }
 
         info!("Started new iteration: {} ({})", name, id);
         self.current_iteration = Some(iter_info);
@@ -188,10 +204,10 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         let iter_info: IterationInfo = serde_json::from_str(&content)?;
         self.current_iteration = Some(iter_info);
 
-        // Load artifacts
-        let docs_dir = iter_folder.join("documents");
+        // Load artifacts from the docs folder
+        let docs_dir = work_dir.join(&self.docs_folder);
         if docs_dir.exists() {
-            let mut entries = tokio::fs::read_dir(docs_dir).await?;
+            let mut entries = tokio::fs::read_dir(&docs_dir).await?;
             while let Some(entry) = entries.next_entry().await? {
                 let path = entry.path();
                 if path.extension().and_then(|s| s.to_str()) == Some("json") {
@@ -201,15 +217,6 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                         .unwrap_or("unknown");
                     let content = tokio::fs::read_to_string(&path).await?;
                     let data: serde_json::Value = serde_json::from_str(&content)?;
-
-                    // Normalize name to CamelCase if it matched a known entity kind
-                    // For now, Orchestrator uses them as keys directly.
-                    // We might need to match against graph node names.
-
-                    // TODO: better normalization?
-                    // identify_next_actions uses target_kind which is CamelCase usually.
-                    // filename is target_kind.to_lowercase().
-                    // We should probably look for the matching node name in the graph.
 
                     let mut found_kind = name.to_string();
                     for node_idx in self.executor.graph.graph.node_indices() {
@@ -257,8 +264,21 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                     .graph
                     .edges_directed(node_idx, petgraph::Direction::Incoming)
                 {
+                    let source_idx = edge.source();
+                    let source_kind = &self.executor.graph.graph[source_idx];
                     let relation = edge.weight();
-                    let category = RelationCategory::from_str(relation);
+                    let edge_key = (
+                        source_kind.to_string(),
+                        relation.to_string(),
+                        kind.to_string(),
+                    );
+                    let category = self
+                        .executor
+                        .graph
+                        .edge_categories
+                        .get(&edge_key)
+                        .copied()
+                        .unwrap_or(RelationCategory::Context);
                     if category == RelationCategory::Creation {
                         actionable = true;
                         break;
@@ -279,23 +299,50 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             .as_ref()
             .context("No active iteration to persist artifact")?;
         let work_dir = self.work_dir.as_ref().context("Work directory not set")?;
-        let docs_dir = work_dir
-            .join(".infinitecodingloop")
-            .join("iterations")
-            .join(&iteration.id)
-            .join("documents");
 
+        // Write artifact to the docs folder
+        let docs_dir = work_dir.join(&self.docs_folder);
         if !docs_dir.exists() {
             tokio::fs::create_dir_all(&docs_dir).await?;
         }
 
         let filename = format!("{}.json", name.to_lowercase());
-        let path = docs_dir.join(filename);
-
+        let artifact_path = docs_dir.join(&filename);
         let content = serde_json::to_string_pretty(data)?;
-        tokio::fs::write(path, content).await?;
+        tokio::fs::write(&artifact_path, content).await?;
 
-        debug!("Persisted artifact {} in iteration {}", name, iteration.id);
+        // Record metadata in .infinitecodingloop/iterations/{id}/artifacts.json
+        let iter_dir = work_dir
+            .join(".infinitecodingloop")
+            .join("iterations")
+            .join(&iteration.id);
+        if !iter_dir.exists() {
+            tokio::fs::create_dir_all(&iter_dir).await?;
+        }
+
+        let artifacts_meta_path = iter_dir.join("artifacts.json");
+        let mut entries: Vec<serde_json::Value> = if artifacts_meta_path.exists() {
+            let existing = tokio::fs::read_to_string(&artifacts_meta_path).await?;
+            serde_json::from_str(&existing).unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        let relative_path = format!("{}/{}", self.docs_folder, filename);
+        let now = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+        entries.push(serde_json::json!({
+            "name": name,
+            "timestamp": now,
+            "path": relative_path
+        }));
+
+        let meta_content = serde_json::to_string_pretty(&entries)?;
+        tokio::fs::write(artifacts_meta_path, meta_content).await?;
+
+        debug!(
+            "Persisted artifact {} to {}/{} (iteration {})",
+            name, self.docs_folder, filename, iteration.id
+        );
         Ok(())
     }
 
@@ -378,11 +425,22 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             let source_kind = &self.executor.graph.graph[source_idx];
             let target_kind = &self.executor.graph.graph[target_idx];
             let relation = self.executor.graph.graph.edge_weight(edge_idx).unwrap();
-            let category = RelationCategory::from_str(relation);
+            let edge_key = (
+                source_kind.to_string(),
+                relation.to_string(),
+                target_kind.to_string(),
+            );
+            let category = self
+                .executor
+                .graph
+                .edge_categories
+                .get(&edge_key)
+                .copied()
+                .unwrap_or(RelationCategory::Context);
 
             if self.executor.graph.is_agent(source_kind) {
                 // Check if this action is actionable based on dependencies
-                // An artifact creation/verification is only actionable if all its "requires" dependencies are met.
+                // An artifact creation/verification is only actionable if all its Dependency edges are met.
                 let mut dependencies_met = true;
                 for target_edge in self
                     .executor
@@ -390,8 +448,22 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                     .graph
                     .edges_directed(target_idx, petgraph::Direction::Outgoing)
                 {
-                    if target_edge.weight() == "requires" {
-                        let dep_kind = &self.executor.graph.graph[target_edge.target()];
+                    let dep_target_idx = target_edge.target();
+                    let dep_kind = &self.executor.graph.graph[dep_target_idx];
+                    let dep_relation = target_edge.weight();
+                    let dep_edge_key = (
+                        target_kind.to_string(),
+                        dep_relation.to_string(),
+                        dep_kind.to_string(),
+                    );
+                    let dep_category = self
+                        .executor
+                        .graph
+                        .edge_categories
+                        .get(&dep_edge_key)
+                        .copied()
+                        .unwrap_or(RelationCategory::Context);
+                    if dep_category == RelationCategory::Dependency {
                         if !self.artifacts.contains_key(dep_kind) {
                             debug!(
                                 "Action {} {} {} is blocked by missing dependency: {}",
@@ -435,15 +507,31 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                     }
                     RelationCategory::Refinement => {
                         // Refine if artifact exists AND we have feedback (indicating it needs work)
+                        // Gate on max retries from LoopConfig
                         if self.artifacts.contains_key(target_kind)
                             && self.verification_feedback.contains_key(target_kind)
                         {
-                            plans.push(ActionPlan {
-                                agent: source_kind.clone(),
-                                target: target_kind.clone(),
-                                relation: relation.clone(),
-                                category,
-                            });
+                            let max_retries = self
+                                .executor
+                                .graph
+                                .loop_configs
+                                .get(&edge_key)
+                                .map(|lc| lc.max_retries)
+                                .unwrap_or(3);
+                            let attempts = self.refinement_attempts.get(target_kind).unwrap_or(&0);
+                            if *attempts < max_retries {
+                                plans.push(ActionPlan {
+                                    agent: source_kind.clone(),
+                                    target: target_kind.clone(),
+                                    relation: relation.clone(),
+                                    category,
+                                });
+                            } else {
+                                warn!(
+                                    "Max retries ({}) reached for refining {}. Skipping.",
+                                    max_retries, target_kind
+                                );
+                            }
                         }
                     }
                     _ => {}
@@ -607,13 +695,29 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
 
                 let score = result.get("score").and_then(|v| v.as_f64()).unwrap_or(1.0);
 
-                if score < 1.0 {
-                    warn!("Verification failed for {}: {}", action.target, feedback);
+                // Look up pass_threshold from any verification LoopConfig for this target
+                let pass_threshold = self
+                    .executor
+                    .graph
+                    .loop_configs
+                    .iter()
+                    .find(|((_, _, t), _)| t == &action.target)
+                    .map(|(_, lc)| lc.pass_threshold)
+                    .unwrap_or(1.0);
+
+                if score < pass_threshold {
+                    warn!(
+                        "Verification failed for {} (score: {:.2}, threshold: {:.2}): {}",
+                        action.target, score, pass_threshold, feedback
+                    );
                     self.verification_feedback
                         .insert(action.target.clone(), feedback.to_string());
                     self.verified_artifacts.remove(&action.target);
                 } else {
-                    info!("Verification passed for {}", action.target);
+                    info!(
+                        "Verification passed for {} (score: {:.2} >= {:.2})",
+                        action.target, score, pass_threshold
+                    );
                     self.verification_feedback.remove(&action.target);
                     self.verified_artifacts.insert(action.target.clone());
                 }
@@ -665,6 +769,13 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
 
                 if action.category == RelationCategory::Refinement {
                     self.verification_feedback.remove(&action.target);
+                    // Track refinement attempts for loop exit
+                    let attempts = self
+                        .refinement_attempts
+                        .entry(action.target.clone())
+                        .or_insert(0);
+                    *attempts += 1;
+                    info!("Refinement attempt {} for {}", attempts, action.target);
                 }
             }
             _ => {
@@ -691,11 +802,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         let mut base = format!("{}\n\nPlease generate the {} artifact.", prompt, target);
 
         // Determine the documents path for file writing
-        let docs_path = if let Some(ref iter) = self.current_iteration {
-            format!(".infinitecodingloop/iterations/{}/documents", iter.id)
-        } else {
-            ".".to_string()
-        };
+        let docs_path = &self.docs_folder;
 
         // For artifacts WITHOUT a schema, instruct the AI CLI to write the file
         // For artifacts WITH a schema, the orchestrator handles persistence via persist_artifact

@@ -10,10 +10,21 @@ import ReactFlow, {
 } from 'reactflow';
 import type { Connection, Edge, Node } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Save, FileJson, Share2, AlignCenter, Box, Bot, FileText } from 'lucide-react';
+import {
+  Save,
+  FileJson,
+  Share2,
+  AlignCenter,
+  Box,
+  Bot,
+  FileText,
+  PlayCircle
+} from 'lucide-react';
 import { loadOntology } from './services/schemaService';
+import { simulateExecution } from './services/simulationService';
+import type { SimulationStep } from './services/simulationService';
+import SimulationPanel from './components/SimulationPanel';
 import { Handle, Position } from 'reactflow';
-
 
 const nodeWidth = 180;
 
@@ -150,10 +161,20 @@ const App: React.FC = () => {
   const [showOrphans, setShowOrphans] = useState(true);
   const [initialLayout, setInitialLayout] = useState<{ nodes: Node[], edges: Edge[] } | null>(null);
 
+  // Simulation State
+  const [showSimulation, setShowSimulation] = useState(false);
+  const [simulationSteps, setSimulationSteps] = useState<SimulationStep[]>([]);
+  const [currentStepIndex, setCurrentStepIndex] = useState(-1);
+  const [simulationLayoutMode, setSimulationLayoutMode] = useState<'ontology' | 'path'>('ontology');
+  const [showAllEdgesInSimulation, setShowAllEdgesInSimulation] = useState(false);
+
   // Exploration Mode State
-  const [searchMode, setSearchMode] = useState(false); // If true, progressive disclosure
+  const [searchMode, setSearchMode] = useState(false);
   const [visibleNodeIds, setVisibleNodeIds] = useState<Set<string>>(new Set(['SoftwareApplication']));
-  const [rfInstance, setRfInstance] = useState<any>(null); // Store ReactFlow instance
+  const [rfInstance, setRfInstance] = useState<any>(null);
+
+  // Performance / Test Hooks
+  const isTesting = typeof window !== 'undefined' && window.location.search.includes('testing=true');
 
   useEffect(() => {
     async function init() {
@@ -210,7 +231,40 @@ const App: React.FC = () => {
       activeEdges = activeEdges.filter(e => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target));
     }
 
-    // 2. Apply Orphan Filter (Only if NOT in search mode, as search mode naturally handles connectivity)
+    // 2. Apply Simulation Progressive Visibility
+    else if (showSimulation && simulationSteps.length > 0) {
+      const producedNodeIds = new Set<string>(['SoftwareApplication']);
+
+      // All nodes produced up to the currentStepIndex
+      for (let i = 0; i <= currentStepIndex; i++) {
+        const step = simulationSteps[i];
+        if (step.verbType === 'Creation') {
+          producedNodeIds.add(step.target);
+        }
+      }
+
+      // Filter nodes: Show produced artifacts AND all Agents (actors)
+      activeNodes = activeNodes.filter(node =>
+        producedNodeIds.has(node.id) ||
+        node.data.kind === 'Agent' ||
+        node.id === 'SoftwareApplication'
+      );
+
+      // Filter edges: Only show edges between currently visible nodes
+      const visibleNodeIdsSet = new Set(activeNodes.map(n => n.id));
+      activeEdges = activeEdges.filter(edge =>
+        visibleNodeIdsSet.has(edge.source) && visibleNodeIdsSet.has(edge.target)
+      );
+
+      // EXTRA: Hide non-execution edges by default to declutter
+      if (!showAllEdgesInSimulation) {
+        activeEdges = activeEdges.filter(edge =>
+          ['Creation', 'Verification', 'Refinement'].includes(edge.data.verbType)
+        );
+      }
+    }
+
+    // 3. Apply Orphan Filter (Only if NOT in simulation or search mode)
     else if (!showOrphans) {
       const connectedNodeIds = new Set<string>();
       initialLayout.edges.forEach(edge => {
@@ -220,19 +274,98 @@ const App: React.FC = () => {
       activeNodes = activeNodes.filter(node => connectedNodeIds.has(node.id));
     }
 
-    // ... (rest of the logic)
-    const layouted = getLeftToRightLayout(activeNodes, activeEdges);
-    setNodes(layouted.nodes);
-    setEdges(layouted.edges);
+    // 4. Apply Simulation Highlighting
+    if (showSimulation && simulationSteps.length > 0) {
+      const activeStep = currentStepIndex >= 0 ? simulationSteps[currentStepIndex] : null;
 
-    // 4. Fit View if in Exploration Mode or orphans toggled
-    if (rfInstance && (searchMode || !showOrphans)) {
-      setTimeout(() => {
-        rfInstance.fitView({ padding: 0.2, duration: 800 });
-      }, 100); // Small delay to allow render
+      activeNodes = activeNodes.map(node => {
+        let className = node.className || '';
+        // Check if it was produced in THIS specific simulation run
+        const producedInSteps = simulationSteps.slice(0, currentStepIndex + 1).some(s => s.target === node.id && s.verbType === 'Creation');
+
+        if (producedInSteps || node.id === 'SoftwareApplication') {
+          className += ' node-produced';
+        }
+        if (activeStep?.target === node.id) {
+          className += ' node-highlighted';
+        }
+        if (activeStep?.context?.includes(node.id)) {
+          className += ' node-context';
+        }
+
+        return {
+          ...node,
+          className: className.trim()
+        };
+      });
+
+      activeEdges = activeEdges.map(edge => {
+        let className = edge.className || '';
+        if (activeStep && edge.source === activeStep.agent && edge.target === activeStep.target) {
+          className += ' edge-active';
+        }
+        return {
+          ...edge,
+          className: className.trim()
+        };
+      });
     }
 
-  }, [showOrphans, searchMode, visibleNodeIds, initialLayout, setNodes, setEdges, rfInstance]);
+    let layouted = getLeftToRightLayout(activeNodes, activeEdges);
+
+    // 6. Handle Layout Modes
+    if (showSimulation && simulationSteps.length > 0) {
+      if (simulationLayoutMode === 'path') {
+        // Arrange nodes in a horizontal line based on execution order
+        // Find FIRST appearance of each node in simulation
+        const nodeFirstAppearance = new Map<string, number>();
+        nodeFirstAppearance.set('SoftwareApplication', -1);
+
+        simulationSteps.forEach((step, idx) => {
+          if (!nodeFirstAppearance.has(step.agent)) nodeFirstAppearance.set(step.agent, idx);
+          if (!nodeFirstAppearance.has(step.target)) nodeFirstAppearance.set(step.target, idx);
+        });
+
+        const sortedNodeIds = Array.from(nodeFirstAppearance.entries())
+          .sort((a, b) => a[1] - b[1])
+          .map(e => e[0]);
+
+        const pathNodes = activeNodes.map(node => {
+          const idx = sortedNodeIds.indexOf(node.id);
+          return {
+            ...node,
+            position: { x: idx * 250, y: 300 + (idx % 2 === 0 ? 0 : 100) } // Zig-zag for better vertical space
+          };
+        });
+        setNodes(pathNodes);
+        setEdges(activeEdges);
+      } else if (initialLayout) {
+        // ONTOLOGY MODE - Stable Positions
+        const stableNodes = activeNodes.map(node => {
+          const initialNode = initialLayout.nodes.find(n => n.id === node.id);
+          return {
+            ...node,
+            position: initialNode?.position || node.position
+          };
+        });
+        setNodes(stableNodes);
+        setEdges(activeEdges);
+      }
+    } else {
+      setNodes(layouted.nodes);
+      setEdges(layouted.edges);
+    }
+
+    // 7. Fit View if in Exploration Mode, Simulation, or orphans toggled
+    if (rfInstance && (searchMode || showSimulation || !showOrphans)) {
+      setTimeout(() => {
+        rfInstance.fitView({
+          padding: 0.2,
+          duration: isTesting ? 0 : 800
+        });
+      }, isTesting ? 10 : 100); // Super fast fitView in tests
+    }
+  }, [showOrphans, searchMode, visibleNodeIds, initialLayout, setNodes, setEdges, rfInstance, showSimulation, simulationSteps, currentStepIndex, simulationLayoutMode, showAllEdgesInSimulation, isTesting]);
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -246,6 +379,16 @@ const App: React.FC = () => {
       setNodes(layouted.nodes);
     }
   }, [nodes, edges, initialLayout, setNodes]);
+
+  const runSimulation = useCallback(() => {
+    if (!initialLayout) return;
+    const steps = simulateExecution(initialLayout.nodes, initialLayout.edges);
+    setSimulationSteps(steps);
+    setCurrentStepIndex(-1); // Reset to start
+    setShowSimulation(true);
+    setIsPanelOpen(false); // Close properties panel to avoid clutter
+    setSearchMode(false); // Likely want full graph visible or at least default view
+  }, [initialLayout]);
 
   const onNodeClick = (_: React.MouseEvent, node: Node) => {
     setSelectedNode(node);
@@ -330,6 +473,13 @@ const App: React.FC = () => {
           <button className="btn btn-sm">
             <Share2 size={14} /> Export
           </button>
+          <button
+            className={`btn btn-sm ${showSimulation ? 'active' : ''}`}
+            onClick={() => setShowSimulation(!showSimulation)}
+            style={showSimulation ? { background: 'rgba(56, 139, 253, 0.15)', color: '#58a6ff', borderColor: '#58a6ff' } : {}}
+          >
+            <PlayCircle size={14} /> Simulate
+          </button>
           <button className="btn btn-primary btn-sm">
             <Save size={14} /> Save
           </button>
@@ -363,6 +513,30 @@ const App: React.FC = () => {
             </Panel>
           </ReactFlow>
         </div>
+
+        <SimulationPanel
+          isOpen={showSimulation}
+          onClose={() => setShowSimulation(false)}
+          steps={simulationSteps}
+          currentStepIndex={currentStepIndex}
+          runSimulation={runSimulation}
+          onStepClick={(step) => {
+            if (rfInstance) {
+              const node = nodes.find(n => n.id === step.target);
+              if (node) {
+                rfInstance.setCenter(node.position.x + 90, node.position.y, {
+                  zoom: 1.5,
+                  duration: isTesting ? 0 : 800
+                });
+              }
+            }
+          }}
+          onSetStepIndex={setCurrentStepIndex}
+          layoutMode={simulationLayoutMode}
+          onSetLayoutMode={setSimulationLayoutMode}
+          showAllEdges={showAllEdgesInSimulation}
+          onSetShowAllEdges={setShowAllEdgesInSimulation}
+        />
 
         {isPanelOpen && selectedNode && (
           <aside className="side-panel floating">

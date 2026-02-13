@@ -305,9 +305,18 @@ fn simulate_path(input_path: &PathBuf) -> anyhow::Result<()> {
             .edges_directed(node_idx, petgraph::Direction::Incoming)
             .any(|edge| {
                 let relation = edge.weight();
-                let category = RelationCategory::from_str(relation);
                 let source_idx = edge.source();
                 let source_name = &graph.graph[source_idx];
+                let edge_key = (
+                    source_name.to_string(),
+                    relation.to_string(),
+                    node_name.to_string(),
+                );
+                let category = graph
+                    .edge_categories
+                    .get(&edge_key)
+                    .copied()
+                    .unwrap_or(RelationCategory::Context);
 
                 // Effective creation: Agent --(Creation)--> Node
                 category == RelationCategory::Creation && graph.is_agent(source_name)
@@ -336,7 +345,16 @@ fn simulate_path(input_path: &PathBuf) -> anyhow::Result<()> {
             let source_kind = &graph.graph[source_idx];
             let target_kind = &graph.graph[target_idx];
             let relation = &graph.graph[edge_idx];
-            let category = RelationCategory::from_str(relation);
+            let edge_key = (
+                source_kind.to_string(),
+                relation.to_string(),
+                target_kind.to_string(),
+            );
+            let category = graph
+                .edge_categories
+                .get(&edge_key)
+                .copied()
+                .unwrap_or(RelationCategory::Context);
 
             if graph.is_agent(source_kind) {
                 match category {
