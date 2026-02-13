@@ -3,11 +3,12 @@ use async_trait::async_trait;
 use clap::Parser;
 use console::style;
 use dass_engine::{
-    agents::cli_client::ShellCliClient, interaction::UserInteraction, orchestrator::IterationInfo,
-    orchestrator::Orchestrator,
+    agents::cli_client::ShellCliClient,
+    config::{self, IclConfig},
+    interaction::UserInteraction,
+    orchestrator::{IterationInfo, Orchestrator},
 };
 use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
@@ -54,24 +55,6 @@ struct Args {
     /// Path to search for ontologies (default: current directory)
     #[arg(long)]
     ontology_path: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct AppConfig {
-    app_id: String,
-    app_name: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct ProjectConfig {
-    app_id: String,
-    app_name: String,
-    #[serde(default = "default_docs_folder")]
-    docs_folder: String,
-}
-
-fn default_docs_folder() -> String {
-    "spec".to_string()
 }
 
 struct CliInteraction {
@@ -178,51 +161,6 @@ fn setup_logging(debug: bool) {
         .init();
 }
 
-async fn ensure_infinite_coding_loop(
-    work_dir: &Path,
-    app_name: &str,
-    app_id: &str,
-    docs_folder: &str,
-) -> Result<()> {
-    let icl_dir = work_dir.join(".infinitecodingloop");
-    if !icl_dir.exists() {
-        tokio::fs::create_dir_all(&icl_dir).await?;
-    }
-
-    let app_json_path = icl_dir.join("app.json");
-    if !app_json_path.exists() {
-        let config = AppConfig {
-            app_id: app_id.to_string(),
-            app_name: app_name.to_string(),
-        };
-        let content = serde_json::to_string_pretty(&config)?;
-        tokio::fs::write(app_json_path, content).await?;
-    }
-
-    // Ensure config.json exists
-    let config_json_path = icl_dir.join("config.json");
-    if !config_json_path.exists() {
-        let project_config = ProjectConfig {
-            app_id: app_id.to_string(),
-            app_name: app_name.to_string(),
-            docs_folder: docs_folder.to_string(),
-        };
-        let content = serde_json::to_string_pretty(&project_config)?;
-        tokio::fs::write(config_json_path, content).await?;
-    }
-
-    // Ensure iterations directory
-    tokio::fs::create_dir_all(icl_dir.join("iterations")).await?;
-
-    // Ensure docs folder exists
-    let docs_dir = work_dir.join(docs_folder);
-    if !docs_dir.exists() {
-        tokio::fs::create_dir_all(&docs_dir).await?;
-    }
-
-    Ok(())
-}
-
 async fn list_iterations(work_dir: &Path) -> Result<Vec<(String, String)>> {
     let mut iterations = Vec::new();
     let iters_dir = work_dir.join(".infinitecodingloop").join("iterations");
@@ -243,55 +181,6 @@ async fn list_iterations(work_dir: &Path) -> Result<Vec<(String, String)>> {
     }
 
     Ok(iterations)
-}
-
-async fn load_app_config(work_dir: &Path) -> Result<Option<AppConfig>> {
-    let app_json_path = work_dir.join(".infinitecodingloop").join("app.json");
-    if app_json_path.exists() {
-        let content = tokio::fs::read_to_string(app_json_path).await?;
-        let config: AppConfig = serde_json::from_str(&content)?;
-        Ok(Some(config))
-    } else {
-        Ok(None)
-    }
-}
-
-async fn load_project_config(work_dir: &Path) -> Result<Option<ProjectConfig>> {
-    let config_json_path = work_dir.join(".infinitecodingloop").join("config.json");
-    if config_json_path.exists() {
-        let content = tokio::fs::read_to_string(config_json_path).await?;
-        let config: ProjectConfig = serde_json::from_str(&content)?;
-        Ok(Some(config))
-    } else {
-        Ok(None)
-    }
-}
-
-/// Discover existing projects in subdirectories of the given path.
-/// Returns a list of (subdirectory_path, app_config) pairs.
-async fn discover_projects(base_dir: &Path) -> Result<Vec<(PathBuf, AppConfig)>> {
-    let mut projects = Vec::new();
-
-    // Check the base dir itself
-    if let Some(config) = load_app_config(base_dir).await? {
-        projects.push((base_dir.to_path_buf(), config));
-    }
-
-    // Check subdirectories
-    if let Ok(mut entries) = tokio::fs::read_dir(base_dir).await {
-        while let Ok(Some(entry)) = entries.next_entry().await {
-            let path = entry.path();
-            if path.is_dir() {
-                if let Some(config) = load_app_config(&path).await? {
-                    projects.push((path, config));
-                }
-            }
-        }
-    }
-
-    // Sort by app name for consistent display
-    projects.sort_by(|a, b| a.1.app_name.cmp(&b.1.app_name));
-    Ok(projects)
 }
 
 /// Recursively discover directories containing an `ontology.json` file.
@@ -352,40 +241,59 @@ async fn main() -> Result<()> {
     }
 
     // 3. Discover existing projects or create new
-    let existing_projects = discover_projects(&work_dir_path).await?;
+    let existing_projects: Vec<(PathBuf, IclConfig)> =
+        config::discover_projects(&work_dir_path).await?;
 
-    let (work_dir_path, app_name, final_app_id, docs_folder) = if !existing_projects.is_empty() {
-        let mut options: Vec<String> = existing_projects
-            .iter()
-            .map(|(path, config)| format!("{} ({})", config.app_name, path.display()))
-            .collect();
-        options.push(style("✚ Create New Project").bold().to_string());
+    let (final_work_dir, app_name, final_app_id, docs_folder): (PathBuf, String, String, String) =
+        if !existing_projects.is_empty() {
+            let mut options: Vec<String> = existing_projects
+                .iter()
+                .map(|(path, config)| format!("{} ({})", config.app_name, path.display()))
+                .collect();
+            options.push(style("✚ Create New Project").bold().to_string());
 
-        let selection = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt("Select a project")
-            .items(&options)
-            .default(0)
-            .interact()?;
+            let selection = Select::with_theme(&ColorfulTheme::default())
+                .with_prompt("Select a project")
+                .items(&options)
+                .default(0)
+                .interact()?;
 
-        if selection < existing_projects.len() {
-            let (project_path, config) = &existing_projects[selection];
-            println!(
-                "{}",
-                style(format!("Resuming: {} ({})", config.app_name, config.app_id)).yellow()
-            );
-            // Load docs_folder from config.json (or default to "spec")
-            let docs = load_project_config(project_path)
-                .await?
-                .map(|c| c.docs_folder)
-                .unwrap_or_else(default_docs_folder);
-            (
-                project_path.clone(),
-                config.app_name.clone(),
-                config.app_id.clone(),
-                docs,
-            )
+            if selection < existing_projects.len() {
+                let (project_path, config) = &existing_projects[selection];
+                println!(
+                    "{}",
+                    style(format!("Resuming: {} ({})", config.app_name, config.app_id)).yellow()
+                );
+                let docs = config.docs_folder.clone();
+                (
+                    project_path.clone(),
+                    config.app_name.clone(),
+                    config.app_id.clone(),
+                    docs,
+                )
+            } else {
+                // Create new project
+                let name: String = Input::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Application Name")
+                    .default("MyNewApp".into())
+                    .interact_text()?;
+                let id = if let Some(ref id) = args.app_id {
+                    id.clone()
+                } else {
+                    uuid::Uuid::new_v4().to_string()
+                };
+                let docs: String = Input::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Documents folder (relative to project root)")
+                    .default("spec".into())
+                    .interact_text()?;
+                let project_path = work_dir_path.join(&name);
+                if !project_path.exists() {
+                    tokio::fs::create_dir_all(&project_path).await?;
+                }
+                (project_path, name, id, docs)
+            }
         } else {
-            // Create new project
+            // No existing projects found — check if this dir itself is a project or create new
             let name: String = Input::with_theme(&ColorfulTheme::default())
                 .with_prompt("Application Name")
                 .default("MyNewApp".into())
@@ -404,31 +312,11 @@ async fn main() -> Result<()> {
                 tokio::fs::create_dir_all(&project_path).await?;
             }
             (project_path, name, id, docs)
-        }
-    } else {
-        // No existing projects found — check if this dir itself is a project or create new
-        let name: String = Input::with_theme(&ColorfulTheme::default())
-            .with_prompt("Application Name")
-            .default("MyNewApp".into())
-            .interact_text()?;
-        let id = if let Some(ref id) = args.app_id {
-            id.clone()
-        } else {
-            uuid::Uuid::new_v4().to_string()
         };
-        let docs: String = Input::with_theme(&ColorfulTheme::default())
-            .with_prompt("Documents folder (relative to project root)")
-            .default("spec".into())
-            .interact_text()?;
-        let project_path = work_dir_path.join(&name);
-        if !project_path.exists() {
-            tokio::fs::create_dir_all(&project_path).await?;
-        }
-        (project_path, name, id, docs)
-    };
 
     // Ensure .infinitecodingloop exists
-    ensure_infinite_coding_loop(&work_dir_path, &app_name, &final_app_id, &docs_folder).await?;
+    config::ensure_infinite_coding_loop(&final_work_dir, &app_name, &final_app_id, &docs_folder)
+        .await?;
     println!(
         "{}",
         style(format!("Documents folder: {}", docs_folder)).dim()
@@ -515,7 +403,7 @@ async fn main() -> Result<()> {
 
     let ontology_content = tokio::fs::read_to_string(ontology_dir.join("ontology.json")).await?;
 
-    let client = ShellCliClient::new("gemini", work_dir_path.to_string_lossy().to_string())
+    let client = ShellCliClient::new("gemini", final_work_dir.to_string_lossy().to_string())
         .with_yolo(args.yolo)
         .with_model(model)
         .with_debug(args.debug_ai_cli)
@@ -524,8 +412,8 @@ async fn main() -> Result<()> {
     let mut orchestrator = Orchestrator::new_with_metamodel(
         client,
         final_app_id.clone(),
-        app_name,
-        work_dir_path.clone(),
+        app_name.clone(),
+        final_work_dir.clone(),
         &ontology_content,
         Some(ontology_dir.as_path()),
     )
@@ -536,7 +424,7 @@ async fn main() -> Result<()> {
     let ui = CliInteraction::new(args.clone());
 
     // 4. Iteration Resumption
-    let iterations = list_iterations(&work_dir_path).await?;
+    let iterations = list_iterations(&final_work_dir).await?;
     if !iterations.is_empty() {
         let mut options: Vec<String> = iterations
             .iter()
@@ -589,105 +477,6 @@ async fn main() -> Result<()> {
 mod tests {
     use super::*;
 
-    /// Helper to create a fake project in a directory.
-    async fn create_fake_project(dir: &Path, app_name: &str, app_id: &str) {
-        let icl_dir = dir.join(".infinitecodingloop");
-        tokio::fs::create_dir_all(&icl_dir).await.unwrap();
-        let config = AppConfig {
-            app_id: app_id.to_string(),
-            app_name: app_name.to_string(),
-        };
-        let content = serde_json::to_string_pretty(&config).unwrap();
-        tokio::fs::write(icl_dir.join("app.json"), content)
-            .await
-            .unwrap();
-    }
-
-    #[tokio::test]
-    async fn test_load_app_config_missing() {
-        let tmp = tempfile::tempdir().unwrap();
-        let result = load_app_config(tmp.path()).await.unwrap();
-        assert!(result.is_none());
-    }
-
-    #[tokio::test]
-    async fn test_load_app_config_present() {
-        let tmp = tempfile::tempdir().unwrap();
-        create_fake_project(tmp.path(), "TestApp", "test-id-123").await;
-
-        let config = load_app_config(tmp.path()).await.unwrap().unwrap();
-        assert_eq!(config.app_name, "TestApp");
-        assert_eq!(config.app_id, "test-id-123");
-    }
-
-    #[tokio::test]
-    async fn test_discover_projects_empty_dir() {
-        let tmp = tempfile::tempdir().unwrap();
-        let projects = discover_projects(tmp.path()).await.unwrap();
-        assert!(projects.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_discover_projects_single_in_base() {
-        let tmp = tempfile::tempdir().unwrap();
-        create_fake_project(tmp.path(), "BaseApp", "base-001").await;
-
-        let projects = discover_projects(tmp.path()).await.unwrap();
-        assert_eq!(projects.len(), 1);
-        assert_eq!(projects[0].1.app_name, "BaseApp");
-        assert_eq!(projects[0].0, tmp.path().to_path_buf());
-    }
-
-    #[tokio::test]
-    async fn test_discover_projects_multiple_subdirs() {
-        let tmp = tempfile::tempdir().unwrap();
-
-        // Create three projects in subdirectories
-        let app_a = tmp.path().join("AppAlpha");
-        let app_b = tmp.path().join("AppBeta");
-        let app_c = tmp.path().join("AppGamma");
-        tokio::fs::create_dir_all(&app_a).await.unwrap();
-        tokio::fs::create_dir_all(&app_b).await.unwrap();
-        tokio::fs::create_dir_all(&app_c).await.unwrap();
-
-        create_fake_project(&app_a, "Alpha", "id-a").await;
-        create_fake_project(&app_b, "Beta", "id-b").await;
-        create_fake_project(&app_c, "Gamma", "id-c").await;
-
-        // Also create a plain subdir without a project
-        tokio::fs::create_dir_all(tmp.path().join("not-a-project"))
-            .await
-            .unwrap();
-
-        let projects = discover_projects(tmp.path()).await.unwrap();
-        assert_eq!(projects.len(), 3);
-
-        // Should be sorted by app_name
-        assert_eq!(projects[0].1.app_name, "Alpha");
-        assert_eq!(projects[1].1.app_name, "Beta");
-        assert_eq!(projects[2].1.app_name, "Gamma");
-    }
-
-    #[tokio::test]
-    async fn test_discover_projects_base_and_subdirs() {
-        let tmp = tempfile::tempdir().unwrap();
-
-        // Project in the base dir itself
-        create_fake_project(tmp.path(), "RootProject", "root-id").await;
-
-        // Project in a subdir
-        let sub = tmp.path().join("SubProject");
-        tokio::fs::create_dir_all(&sub).await.unwrap();
-        create_fake_project(&sub, "ChildProject", "child-id").await;
-
-        let projects = discover_projects(tmp.path()).await.unwrap();
-        assert_eq!(projects.len(), 2);
-
-        // Sorted by name: ChildProject, RootProject
-        assert_eq!(projects[0].1.app_name, "ChildProject");
-        assert_eq!(projects[1].1.app_name, "RootProject");
-    }
-
     #[tokio::test]
     async fn test_list_iterations_empty() {
         let tmp = tempfile::tempdir().unwrap();
@@ -724,67 +513,39 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_load_project_config_missing() {
-        let tmp = tempfile::tempdir().unwrap();
-        let result = load_project_config(tmp.path()).await.unwrap();
-        assert!(result.is_none());
-    }
-
-    #[tokio::test]
-    async fn test_load_project_config_present() {
+    async fn test_load_icl_config_default_docs_folder() {
+        // icl.json without docs_folder should default to "spec"
         let tmp = tempfile::tempdir().unwrap();
         let icl_dir = tmp.path().join(".infinitecodingloop");
         tokio::fs::create_dir_all(&icl_dir).await.unwrap();
-        let config = ProjectConfig {
-            app_id: "test-id".to_string(),
-            app_name: "TestApp".to_string(),
-            docs_folder: "docs".to_string(),
-        };
-        let content = serde_json::to_string_pretty(&config).unwrap();
-        tokio::fs::write(icl_dir.join("config.json"), content)
+        let icl_json = r#"{ "version": "1.0.0", "app_id": "id-1", "app_name": "App1", "docs_folder": "spec" }"#;
+        tokio::fs::write(icl_dir.join("icl.json"), icl_json)
             .await
             .unwrap();
 
-        let loaded = load_project_config(tmp.path()).await.unwrap().unwrap();
-        assert_eq!(loaded.docs_folder, "docs");
-        assert_eq!(loaded.app_name, "TestApp");
-    }
-
-    #[tokio::test]
-    async fn test_load_project_config_default_docs_folder() {
-        // config.json without docs_folder should default to "spec"
-        let tmp = tempfile::tempdir().unwrap();
-        let icl_dir = tmp.path().join(".infinitecodingloop");
-        tokio::fs::create_dir_all(&icl_dir).await.unwrap();
-        let config_json = r#"{ "app_id": "id-1", "app_name": "App1" }"#;
-        tokio::fs::write(icl_dir.join("config.json"), config_json)
-            .await
-            .unwrap();
-
-        let loaded = load_project_config(tmp.path()).await.unwrap().unwrap();
+        let loaded = config::load_icl_config(tmp.path()).await.unwrap().unwrap();
         assert_eq!(loaded.docs_folder, "spec");
     }
 
     #[tokio::test]
-    async fn test_ensure_infinite_coding_loop_creates_config_and_docs() {
+    async fn test_ensure_infinite_coding_loop_creates_icl_and_docs() {
         let tmp = tempfile::tempdir().unwrap();
-        ensure_infinite_coding_loop(tmp.path(), "MyApp", "app-123", "my_specs")
+        config::ensure_infinite_coding_loop(tmp.path(), "MyApp", "app-123", "my_specs")
             .await
             .unwrap();
 
-        // app.json should exist
-        assert!(tmp.path().join(".infinitecodingloop/app.json").exists());
-        // config.json should exist
-        assert!(tmp.path().join(".infinitecodingloop/config.json").exists());
+        // icl.json should exist
+        assert!(tmp.path().join(".infinitecodingloop/icl.json").exists());
         // docs folder should exist
         assert!(tmp.path().join("my_specs").exists());
         // iterations dir should exist
         assert!(tmp.path().join(".infinitecodingloop/iterations").exists());
 
-        // Verify config.json content
-        let config = load_project_config(tmp.path()).await.unwrap().unwrap();
+        // Verify icl.json content
+        let config = config::load_icl_config(tmp.path()).await.unwrap().unwrap();
         assert_eq!(config.docs_folder, "my_specs");
         assert_eq!(config.app_name, "MyApp");
+        assert_eq!(config.version, "1.0.0");
     }
 
     #[tokio::test]
@@ -867,5 +628,44 @@ mod tests {
         let result = discover_ontologies(tmp.path()).await.unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], visible);
+    }
+
+    #[tokio::test]
+    async fn test_migration_from_old_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let icl_dir = tmp.path().join(".infinitecodingloop");
+        tokio::fs::create_dir_all(&icl_dir).await.unwrap();
+
+        // Create old files
+        let app_json = r#"{ "app_id": "migrated-id", "app_name": "MigratedApp" }"#;
+        tokio::fs::write(icl_dir.join("app.json"), app_json)
+            .await
+            .unwrap();
+
+        let config_json = r#"{ "app_id": "migrated-id", "app_name": "MigratedApp", "docs_folder": "migrated_specs" }"#;
+        tokio::fs::write(icl_dir.join("config.json"), config_json)
+            .await
+            .unwrap();
+
+        // Run ensure_infinite_coding_loop
+        config::ensure_infinite_coding_loop(
+            tmp.path(),
+            "FallbackName",
+            "fallback-id",
+            "fallback_specs",
+        )
+        .await
+        .unwrap();
+
+        // Verify icl.json contains migrated data
+        let config = config::load_icl_config(tmp.path()).await.unwrap().unwrap();
+        assert_eq!(config.app_id, "migrated-id");
+        assert_eq!(config.app_name, "MigratedApp");
+        assert_eq!(config.docs_folder, "migrated_specs");
+        assert_eq!(config.version, "1.0.0");
+
+        // Verify old files are gone
+        assert!(!icl_dir.join("app.json").exists());
+        assert!(!icl_dir.join("config.json").exists());
     }
 }

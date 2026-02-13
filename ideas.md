@@ -10,7 +10,7 @@
 
 [][]- quality verification and Iteration of the same node or bunch of nodes to achieve a quality threshold must be built it and not optional to define in the ontology graph by the user. But this means we should attach dynamically at runtime this verification and refinement nodes.
 
-[]- all documents must be in a folder called spec. In the .infinitecodingloop, we would only have metadata of what has been generated successfully on every “Iteration” or “execution of the infinite coding loop tool. And we do this by instructing the AI CLI in the prompt. The folder name can be a parameter to choose from in the beginning of the loop too, as part of the Application configuration setup. And all This configuration is stored in .infinitecodingloop/config.json. The folder name can be changed by the user. The default folder name is spec. The folder name is relative to the root of the project.
+[X]- all documents must be in a folder called spec. In the .infinitecodingloop, we would only have metadata of what has been generated successfully on every “Iteration” or “execution of the infinite coding loop tool. And we do this by instructing the AI CLI in the prompt. The folder name can be a parameter to choose from in the beginning of the loop too, as part of the Application configuration setup. And all This configuration is stored in .infinitecodingloop/config.json. The folder name can be changed by the user. The default folder name is spec. The folder name is relative to the root of the project.
 
 [][] - Some documents are in the scope of the Application, some others are in the scope of features. We can scope this my declaring relationships, but the location in the file structure matters and avoiding to regenerate Application level documents every time for a new feature. So perhaps we need separate ontologies for this. We want to allow executing ontologies separately and to be chosen at the beginning. 
 
@@ -38,7 +38,7 @@
 
 [X] The visualizater should have an option button to visualize the graph in the same way it will be executed by the engine, in which sequence from first to last and on each step see what context is needed. This is how the ontology-tools display it now.
 
-[] We should be able to choose the ontology to execute for every iteration of the infinite coding loop.
+[X] We should be able to choose the ontology to execute for every iteration of the infinite coding loop.
 
 [X] We should be able to define loops in the graph to improve a document till it passes a quality metric threshold. Like improving the code until a test passes, or improving the code and test until it meets the full feature/story acceptance criteria, or until it has 90% coverage, or until it passes the cyclomatic complexity threshold, etc.
 
