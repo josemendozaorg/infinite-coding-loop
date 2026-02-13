@@ -29,6 +29,7 @@ pub struct Orchestrator<C: AiCliClient + Clone + Send + Sync + 'static> {
     pub app_id: String,
     pub app_name: String,
     pub work_dir: Option<PathBuf>,
+    pub docs_folder: String,
     // New Graph Components
     pub executor: InMemoryExecutor,
     // Tracking produced artifacts (State)
@@ -108,6 +109,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             app_id,
             app_name,
             work_dir: Some(work_dir),
+            docs_folder: "spec".to_string(),
             executor,
             artifacts: HashMap::new(),
             verification_feedback: HashMap::new(),
@@ -121,6 +123,11 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
 
     pub fn with_max_iterations(mut self, max: usize) -> Self {
         self.max_iterations = max;
+        self
+    }
+
+    pub fn with_docs_folder(mut self, folder: String) -> Self {
+        self.docs_folder = folder;
         self
     }
 
@@ -138,6 +145,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
 
     pub async fn start_iteration(&mut self, name: &str) -> Result<()> {
         let icl_dir = self.ensure_persistence_dirs().await?;
+        let work_dir = self.work_dir.as_ref().context("Work directory not set")?;
         let now = chrono::Local::now();
         let date_prefix = now.format("%Y%m%d").to_string();
         let timestamp = now.format("%Y%m%d_%H%M%S").to_string();
@@ -167,11 +175,17 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         };
 
         let iter_folder = iterations_dir.join(&id);
-        tokio::fs::create_dir_all(iter_folder.join("documents")).await?;
+        tokio::fs::create_dir_all(&iter_folder).await?;
 
         let iter_json_path = iter_folder.join("iteration.json");
         let content = serde_json::to_string_pretty(&iter_info)?;
         tokio::fs::write(iter_json_path, content).await?;
+
+        // Ensure docs folder exists
+        let docs_dir = work_dir.join(&self.docs_folder);
+        if !docs_dir.exists() {
+            tokio::fs::create_dir_all(&docs_dir).await?;
+        }
 
         info!("Started new iteration: {} ({})", name, id);
         self.current_iteration = Some(iter_info);
@@ -190,10 +204,10 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         let iter_info: IterationInfo = serde_json::from_str(&content)?;
         self.current_iteration = Some(iter_info);
 
-        // Load artifacts
-        let docs_dir = iter_folder.join("documents");
+        // Load artifacts from the docs folder
+        let docs_dir = work_dir.join(&self.docs_folder);
         if docs_dir.exists() {
-            let mut entries = tokio::fs::read_dir(docs_dir).await?;
+            let mut entries = tokio::fs::read_dir(&docs_dir).await?;
             while let Some(entry) = entries.next_entry().await? {
                 let path = entry.path();
                 if path.extension().and_then(|s| s.to_str()) == Some("json") {
@@ -203,15 +217,6 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                         .unwrap_or("unknown");
                     let content = tokio::fs::read_to_string(&path).await?;
                     let data: serde_json::Value = serde_json::from_str(&content)?;
-
-                    // Normalize name to CamelCase if it matched a known entity kind
-                    // For now, Orchestrator uses them as keys directly.
-                    // We might need to match against graph node names.
-
-                    // TODO: better normalization?
-                    // identify_next_actions uses target_kind which is CamelCase usually.
-                    // filename is target_kind.to_lowercase().
-                    // We should probably look for the matching node name in the graph.
 
                     let mut found_kind = name.to_string();
                     for node_idx in self.executor.graph.graph.node_indices() {
@@ -294,23 +299,50 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             .as_ref()
             .context("No active iteration to persist artifact")?;
         let work_dir = self.work_dir.as_ref().context("Work directory not set")?;
-        let docs_dir = work_dir
-            .join(".infinitecodingloop")
-            .join("iterations")
-            .join(&iteration.id)
-            .join("documents");
 
+        // Write artifact to the docs folder
+        let docs_dir = work_dir.join(&self.docs_folder);
         if !docs_dir.exists() {
             tokio::fs::create_dir_all(&docs_dir).await?;
         }
 
         let filename = format!("{}.json", name.to_lowercase());
-        let path = docs_dir.join(filename);
-
+        let artifact_path = docs_dir.join(&filename);
         let content = serde_json::to_string_pretty(data)?;
-        tokio::fs::write(path, content).await?;
+        tokio::fs::write(&artifact_path, content).await?;
 
-        debug!("Persisted artifact {} in iteration {}", name, iteration.id);
+        // Record metadata in .infinitecodingloop/iterations/{id}/artifacts.json
+        let iter_dir = work_dir
+            .join(".infinitecodingloop")
+            .join("iterations")
+            .join(&iteration.id);
+        if !iter_dir.exists() {
+            tokio::fs::create_dir_all(&iter_dir).await?;
+        }
+
+        let artifacts_meta_path = iter_dir.join("artifacts.json");
+        let mut entries: Vec<serde_json::Value> = if artifacts_meta_path.exists() {
+            let existing = tokio::fs::read_to_string(&artifacts_meta_path).await?;
+            serde_json::from_str(&existing).unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        let relative_path = format!("{}/{}", self.docs_folder, filename);
+        let now = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+        entries.push(serde_json::json!({
+            "name": name,
+            "timestamp": now,
+            "path": relative_path
+        }));
+
+        let meta_content = serde_json::to_string_pretty(&entries)?;
+        tokio::fs::write(artifacts_meta_path, meta_content).await?;
+
+        debug!(
+            "Persisted artifact {} to {}/{} (iteration {})",
+            name, self.docs_folder, filename, iteration.id
+        );
         Ok(())
     }
 
@@ -770,11 +802,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         let mut base = format!("{}\n\nPlease generate the {} artifact.", prompt, target);
 
         // Determine the documents path for file writing
-        let docs_path = if let Some(ref iter) = self.current_iteration {
-            format!(".infinitecodingloop/iterations/{}/documents", iter.id)
-        } else {
-            ".".to_string()
-        };
+        let docs_path = &self.docs_folder;
 
         // For artifacts WITHOUT a schema, instruct the AI CLI to write the file
         // For artifacts WITH a schema, the orchestrator handles persistence via persist_artifact

@@ -12,7 +12,7 @@ fn test_schema_injection_integration() {
     let metamodel_json = r#"[
         {
             "source": { "name": "Architect" },
-            "type": { "name": "creates" },
+            "type": { "name": "creates", "verbType": "Creation" },
             "target": { "name": "DesignSpec" }
         }
     ]"#;
@@ -61,12 +61,12 @@ fn test_source_differentiation() {
     let metamodel_json = r#"[
         {
             "source": { "name": "ProductManager" },
-            "type": { "name": "creates" },
+            "type": { "name": "creates", "verbType": "Creation" },
             "target": { "name": "Requirement" }
         },
         {
             "source": { "name": "ProductManager" },
-            "type": { "name": "refines" },
+            "type": { "name": "refines", "verbType": "Refinement" },
             "target": { "name": "Requirement" }
         }
     ]"#;

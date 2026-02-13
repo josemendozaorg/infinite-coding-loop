@@ -1,12 +1,16 @@
 ## Ideas
 
+[] Visualizer should have the possibility to create or edit an ontology selected from file disk and allow to download it to disk. It should use AI CLI to help build the ontology with prompts.
+
+[] Every ontology node should use the AI CLI to clarify assumptions and make questions back to the user with some options to choose from. It should do this as many times as necessary to resolve all assumptions. After collecting the feedback from the user with the multiple questions, then it can come back to execute the node and pass the information collected with the answers. The questions with the answers should be stored in a document related with the ontology node being executed.
+
 [][] - Every node in the graph should have the possibility to be executed by a different AI CLI (cursor, gemini, claude code, copilot, opencode) and a different model. Perhaps, we could define at a higher level configuration like “Creation” verb Relationships in the graph should be executed by a top tier intelligent models, but Verification and Refining could be done by other less intelligent models. Of we could yet add an additional attribute to the Relationship like “LLM type” that would say like “High Reasoning and Intelligence”, “Fast Execution”, “Daily Driver”. 
 
 [][] - The Visualizer should guide the creation of the Ontology.
 
 [][]- quality verification and Iteration of the same node or bunch of nodes to achieve a quality threshold must be built it and not optional to define in the ontology graph by the user. But this means we should attach dynamically at runtime this verification and refinement nodes.
 
-[][]- perhaps all documents must be in a folder called spec. In the .infinitecodingloop, we would only have metadata of what has been generated successfully on every “Iteration” or “execution of the infinite coding loop tool. And we do this by instructing the AI CLI in the prompt. The folder name can be a parameter to choose from in the beginning of the loop too, as part of the Application configuration setup. And all This configuration is stored in .infinitecodingloop/config.json
+[]- all documents must be in a folder called spec. In the .infinitecodingloop, we would only have metadata of what has been generated successfully on every “Iteration” or “execution of the infinite coding loop tool. And we do this by instructing the AI CLI in the prompt. The folder name can be a parameter to choose from in the beginning of the loop too, as part of the Application configuration setup. And all This configuration is stored in .infinitecodingloop/config.json. The folder name can be changed by the user. The default folder name is spec. The folder name is relative to the root of the project.
 
 [][] - Some documents are in the scope of the Application, some others are in the scope of features. We can scope this my declaring relationships, but the location in the file structure matters and avoiding to regenerate Application level documents every time for a new feature. So perhaps we need separate ontologies for this. We want to allow executing ontologies separately and to be chosen at the beginning. 
 
