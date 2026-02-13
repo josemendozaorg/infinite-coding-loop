@@ -11,6 +11,8 @@ interface SimulationPanelProps {
     runSimulation: () => void;
     onStepClick?: (step: SimulationStep) => void;
     onSetStepIndex: React.Dispatch<React.SetStateAction<number>>;
+    layoutMode: 'ontology' | 'path';
+    onSetLayoutMode: (mode: 'ontology' | 'path') => void;
 }
 
 const SimulationPanel: React.FC<SimulationPanelProps> = ({
@@ -20,7 +22,9 @@ const SimulationPanel: React.FC<SimulationPanelProps> = ({
     currentStepIndex,
     runSimulation,
     onStepClick,
-    onSetStepIndex
+    onSetStepIndex,
+    layoutMode,
+    onSetLayoutMode
 }) => {
     const [isPlaying, setIsPlaying] = useState(false);
 
@@ -105,11 +109,58 @@ const SimulationPanel: React.FC<SimulationPanelProps> = ({
                         border: '1px solid rgba(255, 255, 255, 0.1)',
                         borderRadius: '6px',
                         cursor: 'pointer',
-                        fontWeight: 600
+                        fontWeight: 600,
+                        marginBottom: '12px'
                     }}
                 >
                     <PlayCircle size={16} /> {steps.length > 0 ? 'Restart Simulation' : 'Run Simulation'}
                 </button>
+
+                {steps.length > 0 && (
+                    <div style={{
+                        display: 'flex',
+                        background: '#0d1117',
+                        padding: '4px',
+                        borderRadius: '6px',
+                        marginBottom: '12px',
+                        border: '1px solid rgba(255, 255, 255, 0.1)'
+                    }}>
+                        <button
+                            onClick={() => onSetLayoutMode('ontology')}
+                            style={{
+                                flex: 1,
+                                padding: '6px',
+                                fontSize: '12px',
+                                borderRadius: '4px',
+                                border: 'none',
+                                background: layoutMode === 'ontology' ? '#1f6feb' : 'transparent',
+                                color: layoutMode === 'ontology' ? 'white' : '#8b949e',
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            Ontology
+                        </button>
+                        <button
+                            onClick={() => onSetLayoutMode('path')}
+                            style={{
+                                flex: 1,
+                                padding: '6px',
+                                fontSize: '12px',
+                                borderRadius: '4px',
+                                border: 'none',
+                                background: layoutMode === 'path' ? '#1f6feb' : 'transparent',
+                                color: layoutMode === 'path' ? 'white' : '#8b949e',
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            Path Flow
+                        </button>
+                    </div>
+                )}
 
                 {steps.length > 0 && (
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>

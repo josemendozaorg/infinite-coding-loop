@@ -61,21 +61,20 @@ test.describe('Execution Simulation', () => {
         await expect(step).toBeVisible();
         console.log('TEST: Steps produced.');
 
-        // 5. Verify Animation Classes on Graph
-        // Check if any node has the 'node-produced' class
-        const producedNode = page.locator('.react-flow__node.node-produced').first();
-        await expect(producedNode).toBeVisible();
-        console.log('TEST: node-produced class verified.');
+        // 5. Verify Progressive Visibility (Artifact should be hidden initially)
+        const archStyleNode = page.locator('.react-flow__node').filter({ hasText: 'ArchitectureStyle' });
+        await expect(archStyleNode).not.toBeVisible();
+        console.log('TEST: Artifact hidden before creation (Progressive Visibility).');
 
-        // 6. Test Playback: Click Forward
+        // 6. Test Playback: Click Forward to Step 1 (Architect creates ArchitectureStyle)
         console.log('TEST: Testing playback controls...');
         const forwardBtn = page.locator('button').filter({ has: page.locator('svg.lucide-arrow-right') }).last();
         await forwardBtn.click();
 
-        // Check for node-highlighted class
-        const highlightedNode = page.locator('.react-flow__node.node-highlighted');
-        await expect(highlightedNode).toBeVisible();
-        console.log('TEST: node-highlighted class verified.');
+        // Now ArchitectureStyle should be visible and highlighted
+        await expect(archStyleNode).toBeVisible();
+        await expect(archStyleNode).toHaveClass(/node-highlighted/);
+        console.log('TEST: Artifact appeared and highlighted after creation step.');
 
         console.log('TEST: Simulation playback and animations verified. Success.');
     });
