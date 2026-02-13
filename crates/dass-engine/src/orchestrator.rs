@@ -35,6 +35,7 @@ pub struct Orchestrator<C: AiCliClient + Clone + Send + Sync + 'static> {
     pub artifacts: HashMap<String, serde_json::Value>, // EntityKind -> Last Produced Value
     pub verification_feedback: HashMap<String, String>, // Target -> Feedback
     pub verified_artifacts: std::collections::HashSet<String>, // Tracks those with score 1.0
+    pub refinement_attempts: HashMap<String, usize>,   // Target -> retry count
     max_iterations: usize,
     // Iteration tracking
     pub current_iteration: Option<IterationInfo>,
@@ -111,6 +112,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             artifacts: HashMap::new(),
             verification_feedback: HashMap::new(),
             verified_artifacts: std::collections::HashSet::new(),
+            refinement_attempts: HashMap::new(),
             max_iterations: 100,
             current_iteration: None,
             _client: std::marker::PhantomData,
@@ -257,8 +259,21 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                     .graph
                     .edges_directed(node_idx, petgraph::Direction::Incoming)
                 {
+                    let source_idx = edge.source();
+                    let source_kind = &self.executor.graph.graph[source_idx];
                     let relation = edge.weight();
-                    let category = RelationCategory::from_str(relation);
+                    let edge_key = (
+                        source_kind.to_string(),
+                        relation.to_string(),
+                        kind.to_string(),
+                    );
+                    let category = self
+                        .executor
+                        .graph
+                        .edge_categories
+                        .get(&edge_key)
+                        .copied()
+                        .unwrap_or(RelationCategory::Context);
                     if category == RelationCategory::Creation {
                         actionable = true;
                         break;
@@ -378,11 +393,22 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             let source_kind = &self.executor.graph.graph[source_idx];
             let target_kind = &self.executor.graph.graph[target_idx];
             let relation = self.executor.graph.graph.edge_weight(edge_idx).unwrap();
-            let category = RelationCategory::from_str(relation);
+            let edge_key = (
+                source_kind.to_string(),
+                relation.to_string(),
+                target_kind.to_string(),
+            );
+            let category = self
+                .executor
+                .graph
+                .edge_categories
+                .get(&edge_key)
+                .copied()
+                .unwrap_or(RelationCategory::Context);
 
             if self.executor.graph.is_agent(source_kind) {
                 // Check if this action is actionable based on dependencies
-                // An artifact creation/verification is only actionable if all its "requires" dependencies are met.
+                // An artifact creation/verification is only actionable if all its Dependency edges are met.
                 let mut dependencies_met = true;
                 for target_edge in self
                     .executor
@@ -390,8 +416,22 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                     .graph
                     .edges_directed(target_idx, petgraph::Direction::Outgoing)
                 {
-                    if target_edge.weight() == "requires" {
-                        let dep_kind = &self.executor.graph.graph[target_edge.target()];
+                    let dep_target_idx = target_edge.target();
+                    let dep_kind = &self.executor.graph.graph[dep_target_idx];
+                    let dep_relation = target_edge.weight();
+                    let dep_edge_key = (
+                        target_kind.to_string(),
+                        dep_relation.to_string(),
+                        dep_kind.to_string(),
+                    );
+                    let dep_category = self
+                        .executor
+                        .graph
+                        .edge_categories
+                        .get(&dep_edge_key)
+                        .copied()
+                        .unwrap_or(RelationCategory::Context);
+                    if dep_category == RelationCategory::Dependency {
                         if !self.artifacts.contains_key(dep_kind) {
                             debug!(
                                 "Action {} {} {} is blocked by missing dependency: {}",
@@ -435,15 +475,31 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                     }
                     RelationCategory::Refinement => {
                         // Refine if artifact exists AND we have feedback (indicating it needs work)
+                        // Gate on max retries from LoopConfig
                         if self.artifacts.contains_key(target_kind)
                             && self.verification_feedback.contains_key(target_kind)
                         {
-                            plans.push(ActionPlan {
-                                agent: source_kind.clone(),
-                                target: target_kind.clone(),
-                                relation: relation.clone(),
-                                category,
-                            });
+                            let max_retries = self
+                                .executor
+                                .graph
+                                .loop_configs
+                                .get(&edge_key)
+                                .map(|lc| lc.max_retries)
+                                .unwrap_or(3);
+                            let attempts = self.refinement_attempts.get(target_kind).unwrap_or(&0);
+                            if *attempts < max_retries {
+                                plans.push(ActionPlan {
+                                    agent: source_kind.clone(),
+                                    target: target_kind.clone(),
+                                    relation: relation.clone(),
+                                    category,
+                                });
+                            } else {
+                                warn!(
+                                    "Max retries ({}) reached for refining {}. Skipping.",
+                                    max_retries, target_kind
+                                );
+                            }
                         }
                     }
                     _ => {}
@@ -607,13 +663,29 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
 
                 let score = result.get("score").and_then(|v| v.as_f64()).unwrap_or(1.0);
 
-                if score < 1.0 {
-                    warn!("Verification failed for {}: {}", action.target, feedback);
+                // Look up pass_threshold from any verification LoopConfig for this target
+                let pass_threshold = self
+                    .executor
+                    .graph
+                    .loop_configs
+                    .iter()
+                    .find(|((_, _, t), _)| t == &action.target)
+                    .map(|(_, lc)| lc.pass_threshold)
+                    .unwrap_or(1.0);
+
+                if score < pass_threshold {
+                    warn!(
+                        "Verification failed for {} (score: {:.2}, threshold: {:.2}): {}",
+                        action.target, score, pass_threshold, feedback
+                    );
                     self.verification_feedback
                         .insert(action.target.clone(), feedback.to_string());
                     self.verified_artifacts.remove(&action.target);
                 } else {
-                    info!("Verification passed for {}", action.target);
+                    info!(
+                        "Verification passed for {} (score: {:.2} >= {:.2})",
+                        action.target, score, pass_threshold
+                    );
                     self.verification_feedback.remove(&action.target);
                     self.verified_artifacts.insert(action.target.clone());
                 }
@@ -665,6 +737,13 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
 
                 if action.category == RelationCategory::Refinement {
                     self.verification_feedback.remove(&action.target);
+                    // Track refinement attempts for loop exit
+                    let attempts = self
+                        .refinement_attempts
+                        .entry(action.target.clone())
+                        .or_insert(0);
+                    *attempts += 1;
+                    info!("Refinement attempt {} for {}", attempts, action.target);
                 }
             }
             _ => {

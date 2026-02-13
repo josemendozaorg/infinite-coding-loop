@@ -9,7 +9,8 @@
       "type": "Agent"
     },
     "type": {
-      "name": "uses"
+      "name": "uses",
+      "verbType": "Context"
     }
   },
   {
@@ -22,7 +23,8 @@
       "type": "Agent"
     },
     "type": {
-      "name": "uses"
+      "name": "uses",
+      "verbType": "Context"
     }
   },
   {
@@ -35,7 +37,8 @@
       "type": "Agent"
     },
     "type": {
-      "name": "uses"
+      "name": "uses",
+      "verbType": "Context"
     }
   },
   {
@@ -48,7 +51,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "defines"
+      "name": "defines",
+      "verbType": "Creation"
     }
   },
   {
@@ -61,7 +65,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "defines"
+      "name": "defines",
+      "verbType": "Creation"
     }
   },
   {
@@ -74,7 +79,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "defines"
+      "name": "defines",
+      "verbType": "Creation"
     }
   },
   {
@@ -87,7 +93,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "defines"
+      "name": "defines",
+      "verbType": "Creation"
     }
   },
   {
@@ -100,7 +107,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "defines"
+      "name": "defines",
+      "verbType": "Creation"
     }
   },
   {
@@ -113,7 +121,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "defines"
+      "name": "defines",
+      "verbType": "Creation"
     }
   },
   {
@@ -126,7 +135,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "defines"
+      "name": "defines",
+      "verbType": "Creation"
     }
   },
   {
@@ -139,7 +149,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "defines"
+      "name": "defines",
+      "verbType": "Creation"
     }
   },
   {
@@ -152,7 +163,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "defines"
+      "name": "defines",
+      "verbType": "Creation"
     }
   },
   {
@@ -165,7 +177,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "defines"
+      "name": "defines",
+      "verbType": "Creation"
     }
   },
   {
@@ -178,7 +191,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "defines"
+      "name": "defines",
+      "verbType": "Creation"
     }
   },
   {
@@ -191,7 +205,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "isA"
+      "name": "isA",
+      "verbType": "Context"
     }
   },
   {
@@ -204,7 +219,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "isA"
+      "name": "isA",
+      "verbType": "Context"
     }
   },
   {
@@ -217,7 +233,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "isA"
+      "name": "isA",
+      "verbType": "Context"
     }
   },
   {
@@ -230,7 +247,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "isA"
+      "name": "isA",
+      "verbType": "Context"
     }
   },
   {
@@ -243,7 +261,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "isA"
+      "name": "isA",
+      "verbType": "Context"
     }
   },
   {
@@ -256,7 +275,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "isA"
+      "name": "isA",
+      "verbType": "Context"
     }
   },
   {
@@ -269,7 +289,8 @@
       "type": "Document"
     },
     "type": {
-      "name": "creates"
+      "name": "creates",
+      "verbType": "Creation"
     }
   },
   {
@@ -282,7 +303,8 @@
       "type": "Document"
     },
     "type": {
-      "name": "creates"
+      "name": "creates",
+      "verbType": "Creation"
     }
   },
   {
@@ -295,7 +317,8 @@
       "type": "Document"
     },
     "type": {
-      "name": "requires"
+      "name": "requires",
+      "verbType": "Dependency"
     }
   },
   {
@@ -308,7 +331,8 @@
       "type": "Document"
     },
     "type": {
-      "name": "creates"
+      "name": "creates",
+      "verbType": "Creation"
     }
   },
   {
@@ -321,7 +345,8 @@
       "type": "Document"
     },
     "type": {
-      "name": "requires"
+      "name": "requires",
+      "verbType": "Dependency"
     }
   },
   {
@@ -334,7 +359,8 @@
       "type": "Document"
     },
     "type": {
-      "name": "creates"
+      "name": "creates",
+      "verbType": "Creation"
     }
   },
   {
@@ -347,7 +373,8 @@
       "type": "Document"
     },
     "type": {
-      "name": "requires"
+      "name": "requires",
+      "verbType": "Dependency"
     }
   },
   {
@@ -360,7 +387,8 @@
       "type": "Document"
     },
     "type": {
-      "name": "creates"
+      "name": "creates",
+      "verbType": "Creation"
     }
   },
   {
@@ -373,7 +401,8 @@
       "type": "Document"
     },
     "type": {
-      "name": "requires"
+      "name": "requires",
+      "verbType": "Dependency"
     }
   },
   {
@@ -386,7 +415,8 @@
       "type": "Document"
     },
     "type": {
-      "name": "requires"
+      "name": "requires",
+      "verbType": "Dependency"
     }
   },
   {
@@ -399,7 +429,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "uses"
+      "name": "uses",
+      "verbType": "Context"
     }
   },
   {
@@ -412,7 +443,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "uses"
+      "name": "uses",
+      "verbType": "Context"
     }
   },
   {
@@ -425,7 +457,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "uses"
+      "name": "uses",
+      "verbType": "Context"
     }
   },
   {
@@ -438,7 +471,8 @@
       "type": "Document"
     },
     "type": {
-      "name": "creates"
+      "name": "creates",
+      "verbType": "Creation"
     }
   },
   {
@@ -451,7 +485,8 @@
       "type": "Document"
     },
     "type": {
-      "name": "requires"
+      "name": "requires",
+      "verbType": "Dependency"
     }
   },
   {
@@ -464,7 +499,8 @@
       "type": "Document"
     },
     "type": {
-      "name": "requires"
+      "name": "requires",
+      "verbType": "Dependency"
     }
   },
   {
@@ -477,7 +513,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "uses"
+      "name": "uses",
+      "verbType": "Context"
     }
   },
   {
@@ -490,7 +527,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "uses"
+      "name": "uses",
+      "verbType": "Context"
     }
   },
   {
@@ -503,7 +541,8 @@
       "type": "Document"
     },
     "type": {
-      "name": "creates"
+      "name": "creates",
+      "verbType": "Creation"
     }
   },
   {
@@ -516,7 +555,8 @@
       "type": "Document"
     },
     "type": {
-      "name": "requires"
+      "name": "requires",
+      "verbType": "Dependency"
     }
   },
   {
@@ -529,7 +569,8 @@
       "type": "Document"
     },
     "type": {
-      "name": "requires"
+      "name": "requires",
+      "verbType": "Dependency"
     }
   },
   {
@@ -542,7 +583,8 @@
       "type": "Code"
     },
     "type": {
-      "name": "implements"
+      "name": "implements",
+      "verbType": "Creation"
     }
   },
   {
@@ -555,7 +597,8 @@
       "type": "Document"
     },
     "type": {
-      "name": "requires"
+      "name": "requires",
+      "verbType": "Dependency"
     }
   },
   {
@@ -568,7 +611,8 @@
       "type": "Document"
     },
     "type": {
-      "name": "requires"
+      "name": "requires",
+      "verbType": "Dependency"
     }
   },
   {
@@ -581,7 +625,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "uses"
+      "name": "uses",
+      "verbType": "Context"
     }
   },
   {
@@ -594,7 +639,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "uses"
+      "name": "uses",
+      "verbType": "Context"
     }
   },
   {
@@ -607,7 +653,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "uses"
+      "name": "uses",
+      "verbType": "Context"
     }
   },
   {
@@ -620,7 +667,8 @@
       "type": "Other"
     },
     "type": {
-      "name": "uses"
+      "name": "uses",
+      "verbType": "Context"
     }
   },
   {
@@ -633,7 +681,12 @@
       "type": "Code"
     },
     "type": {
-      "name": "verifies"
+      "name": "verifies",
+      "verbType": "Verification"
+    },
+    "loop": {
+      "maxRetries": 3,
+      "passThreshold": 0.9
     }
   },
   {
@@ -646,7 +699,12 @@
       "type": "Document"
     },
     "type": {
-      "name": "verifies"
+      "name": "verifies",
+      "verbType": "Verification"
+    },
+    "loop": {
+      "maxRetries": 3,
+      "passThreshold": 0.9
     }
   }
 ]

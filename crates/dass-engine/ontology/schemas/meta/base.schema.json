@@ -35,12 +35,44 @@
             "title": "Meta-Verb",
             "description": "An action or relationship type in the graph.",
             "required": [
-                "name"
+                "name",
+                "verbType"
             ],
             "properties": {
                 "name": {
                     "type": "string",
                     "description": "The name of the relationship type (e.g. 'creates')."
+                },
+                "verbType": {
+                    "type": "string",
+                    "enum": [
+                        "Creation",
+                        "Verification",
+                        "Refinement",
+                        "Dependency",
+                        "Context"
+                    ],
+                    "description": "Semantic category that controls how the engine handles this relationship."
+                }
+            }
+        },
+        "LoopConfig": {
+            "type": "object",
+            "title": "Loop Configuration",
+            "description": "Exit conditions for Verification/Refinement cycles.",
+            "properties": {
+                "maxRetries": {
+                    "type": "integer",
+                    "default": 3,
+                    "minimum": 1,
+                    "description": "Maximum number of refinement attempts before giving up."
+                },
+                "passThreshold": {
+                    "type": "number",
+                    "default": 1.0,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Minimum verification score to consider the artifact as passing."
                 }
             }
         },
@@ -60,6 +92,10 @@
                 },
                 "type": {
                     "$ref": "#/$defs/MetaVerb"
+                },
+                "loop": {
+                    "$ref": "#/$defs/LoopConfig",
+                    "description": "Optional loop exit conditions. Only meaningful on Verification/Refinement edges."
                 }
             }
         }

@@ -107,32 +107,80 @@ function processOntologyNodes(ontology: any[]): Node[] {
 }
 
 function processOntologyEdges(ontology: any[]): Edge[] {
-    const edgeMap: Record<string, { source: string; target: string; relations: string[] }> = {};
+    const edgeMap: Record<string, { source: string; target: string; relations: string[]; verbTypes: Set<string>; loopInfo?: string }> = {};
 
     ontology.forEach((rel: any) => {
         if (!rel.source?.name || !rel.target?.name || !rel.type?.name) return;
 
         const key = `${rel.source.name}->${rel.target.name}`;
         if (!edgeMap[key]) {
-            edgeMap[key] = { source: rel.source.name, target: rel.target.name, relations: [] };
+            edgeMap[key] = {
+                source: rel.source.name,
+                target: rel.target.name,
+                relations: [],
+                verbTypes: new Set()
+            };
         }
         if (!edgeMap[key].relations.includes(rel.type.name)) {
             edgeMap[key].relations.push(rel.type.name);
         }
+        if (rel.type.verbType) {
+            edgeMap[key].verbTypes.add(rel.type.verbType);
+        }
+
+        // Capture loop info for tooltip if present
+        if (rel.loop) {
+            const info = `Max Retries: ${rel.loop.maxRetries || 3}, Threshold: ${rel.loop.passThreshold || 1.0}`;
+            edgeMap[key].loopInfo = info;
+        }
     });
 
-    return Object.values(edgeMap).map((value) => ({
-        id: `e-${value.source}-${value.target}`,
-        source: value.source,
-        target: value.target,
-        label: value.relations.sort().join(', '),
-        animated: true,
-        style: { stroke: '#58a6ff' },
-        labelStyle: { fill: '#8b949e', fontSize: 10, fontWeight: 700 },
-        labelBgStyle: { fill: '#161b22', fillOpacity: 0.7 },
-        markerEnd: {
-            type: MarkerType.ArrowClosed,
-            color: '#58a6ff'
-        },
-    }));
+    return Object.values(edgeMap).map((value) => {
+        // Determine color based on priority of verb types
+        let color = '#58a6ff'; // Default Context (Blue)
+        let styleType = 'solid';
+
+        if (value.verbTypes.has('Refinement')) {
+            color = '#d2a8ff'; // Purple
+            styleType = 'dashed';
+        } else if (value.verbTypes.has('Verification')) {
+            color = '#f0883e'; // Orange
+        } else if (value.verbTypes.has('Dependency')) {
+            color = '#ff7b72'; // Red
+        } else if (value.verbTypes.has('Creation')) {
+            color = '#7ee787'; // Green
+        }
+
+        let label = value.relations.sort().join(', ');
+        if (value.loopInfo) {
+            // Shorten for label
+            const shortInfo = value.loopInfo.replace('Max Retries', 'Retries').replace('Threshold', 'Thres');
+            label += `\n[${shortInfo}]`;
+        }
+
+        return {
+            id: `e-${value.source}-${value.target}`,
+            source: value.source,
+            target: value.target,
+            label: label,
+            animated: value.verbTypes.has('Refinement') || value.verbTypes.has('Creation'),
+            style: {
+                stroke: color,
+                strokeDasharray: styleType === 'dashed' ? '5,5' : undefined
+            },
+            labelStyle: { fill: color, fontSize: 10, fontWeight: 700 },
+            labelBgStyle: { fill: '#161b22', fillOpacity: 0.8 },
+            markerEnd: {
+                type: MarkerType.ArrowClosed,
+                color: color
+            },
+            data: {
+                loopInfo: value.loopInfo,
+                verbType: value.verbTypes.has('Creation') ? 'Creation' :
+                    value.verbTypes.has('Verification') ? 'Verification' :
+                        value.verbTypes.has('Refinement') ? 'Refinement' :
+                            value.verbTypes.has('Dependency') ? 'Dependency' : 'Context'
+            }
+        };
+    });
 }

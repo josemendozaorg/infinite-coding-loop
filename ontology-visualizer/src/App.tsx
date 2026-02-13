@@ -10,8 +10,11 @@ import ReactFlow, {
 } from 'reactflow';
 import type { Connection, Edge, Node } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Save, FileJson, Share2, AlignCenter, Box, Bot, FileText } from 'lucide-react';
+import { Save, FileJson, Share2, AlignCenter, Box, Bot, FileText, PlayCircle } from 'lucide-react';
 import { loadOntology } from './services/schemaService';
+import { simulateExecution } from './services/simulationService';
+import type { SimulationStep } from './services/simulationService';
+import SimulationPanel from './components/SimulationPanel';
 import { Handle, Position } from 'reactflow';
 
 
@@ -150,6 +153,10 @@ const App: React.FC = () => {
   const [showOrphans, setShowOrphans] = useState(true);
   const [initialLayout, setInitialLayout] = useState<{ nodes: Node[], edges: Edge[] } | null>(null);
 
+  // Simulation State
+  const [showSimulation, setShowSimulation] = useState(false);
+  const [simulationSteps, setSimulationSteps] = useState<SimulationStep[]>([]);
+
   // Exploration Mode State
   const [searchMode, setSearchMode] = useState(false); // If true, progressive disclosure
   const [visibleNodeIds, setVisibleNodeIds] = useState<Set<string>>(new Set(['SoftwareApplication']));
@@ -247,6 +254,15 @@ const App: React.FC = () => {
     }
   }, [nodes, edges, initialLayout, setNodes]);
 
+  const runSimulation = useCallback(() => {
+    if (!initialLayout) return;
+    const steps = simulateExecution(initialLayout.nodes, initialLayout.edges);
+    setSimulationSteps(steps);
+    setShowSimulation(true);
+    setIsPanelOpen(false); // Close properties panel to avoid clutter
+    setSearchMode(false); // Likely want full graph visible or at least default view
+  }, [initialLayout]);
+
   const onNodeClick = (_: React.MouseEvent, node: Node) => {
     setSelectedNode(node);
     setIsPanelOpen(true);
@@ -330,6 +346,13 @@ const App: React.FC = () => {
           <button className="btn btn-sm">
             <Share2 size={14} /> Export
           </button>
+          <button
+            className={`btn btn-sm ${showSimulation ? 'active' : ''}`}
+            onClick={() => setShowSimulation(!showSimulation)}
+            style={showSimulation ? { background: 'rgba(56, 139, 253, 0.15)', color: '#58a6ff', borderColor: '#58a6ff' } : {}}
+          >
+            <PlayCircle size={14} /> Simulate
+          </button>
           <button className="btn btn-primary btn-sm">
             <Save size={14} /> Save
           </button>
@@ -363,6 +386,24 @@ const App: React.FC = () => {
             </Panel>
           </ReactFlow>
         </div>
+
+        <SimulationPanel
+          isOpen={showSimulation}
+          onClose={() => setShowSimulation(false)}
+          steps={simulationSteps}
+          runSimulation={runSimulation}
+          onStepClick={(step) => {
+            // Optional: highlight node or zoom to it locally
+            const node = nodes.find(n => n.id === step.target);
+            if (node) {
+              setSelectedNode(node);
+              // Center view logic if rfInstance available
+              if (rfInstance) {
+                rfInstance.setCenter(node.position.x + 90, node.position.y + 30, { zoom: 1, duration: 800 });
+              }
+            }
+          }}
+        />
 
         {isPanelOpen && selectedNode && (
           <aside className="side-panel floating">

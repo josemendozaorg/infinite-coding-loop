@@ -1,80 +1,86 @@
 [
-    {
-        "source": {
-            "name": "SoftwareApplication",
-            "type": "Other"
-        },
-        "target": {
-            "name": "ProductManager",
-            "type": "Agent"
-        },
-        "type": {
-            "name": "uses"
-        }
+  {
+    "source": {
+      "name": "SoftwareApplication",
+      "type": "Other"
     },
-    {
-        "source": {
-            "name": "SoftwareApplication",
-            "type": "Other"
-        },
-        "target": {
-            "name": "Engineer",
-            "type": "Agent"
-        },
-        "type": {
-            "name": "uses"
-        }
+    "target": {
+      "name": "ProductManager",
+      "type": "Agent"
     },
-    {
-        "source": {
-            "name": "ProductManager",
-            "type": "Agent"
-        },
-        "target": {
-            "name": "Requirement",
-            "type": "Document"
-        },
-        "type": {
-            "name": "creates"
-        }
-    },
-    {
-        "source": {
-            "name": "Engineer",
-            "type": "Agent"
-        },
-        "target": {
-            "name": "Requirement",
-            "type": "Document"
-        },
-        "type": {
-            "name": "verifies"
-        }
-    },
-    {
-        "source": {
-            "name": "Engineer",
-            "type": "Agent"
-        },
-        "target": {
-            "name": "Code",
-            "type": "Code"
-        },
-        "type": {
-            "name": "implements"
-        }
-    },
-    {
-        "source": {
-            "name": "Engineer",
-            "type": "Agent"
-        },
-        "target": {
-            "name": "Code",
-            "type": "Code"
-        },
-        "type": {
-            "name": "verifies"
-        }
+    "type": {
+      "name": "uses",
+      "verbType": "Context"
     }
+  },
+  {
+    "source": {
+      "name": "SoftwareApplication",
+      "type": "Other"
+    },
+    "target": {
+      "name": "Engineer",
+      "type": "Agent"
+    },
+    "type": {
+      "name": "uses",
+      "verbType": "Context"
+    }
+  },
+  {
+    "source": {
+      "name": "ProductManager",
+      "type": "Agent"
+    },
+    "target": {
+      "name": "Requirement",
+      "type": "Document"
+    },
+    "type": {
+      "name": "creates",
+      "verbType": "Creation"
+    }
+  },
+  {
+    "source": {
+      "name": "QA",
+      "type": "Agent"
+    },
+    "target": {
+      "name": "Requirement",
+      "type": "Document"
+    },
+    "type": {
+      "name": "verifies",
+      "verbType": "Verification"
+    }
+  },
+  {
+    "source": {
+      "name": "Engineer",
+      "type": "Agent"
+    },
+    "target": {
+      "name": "Code",
+      "type": "Code"
+    },
+    "type": {
+      "name": "implements",
+      "verbType": "Creation"
+    }
+  },
+  {
+    "source": {
+      "name": "Engineer",
+      "type": "Agent"
+    },
+    "target": {
+      "name": "Code",
+      "type": "Code"
+    },
+    "type": {
+      "name": "verifies",
+      "verbType": "Verification"
+    }
+  }
 ]

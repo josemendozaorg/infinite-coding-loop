@@ -12,17 +12,17 @@ pub enum RelationCategory {
     Creation,     // creates, implements
     Verification, // verifies
     Refinement,   // refines, improves
-    Context,      // uses, specifies, targets, contains, defines, constrains
-    Other,
+    Dependency,   // requires
+    Context,      // uses, isA, defines, contains
 }
 
 impl RelationCategory {
-    pub fn from_str(s: &str) -> Self {
+    pub fn from_verb_type(s: &str) -> Self {
         match s {
-            "creates" | "implements" | "defines" => Self::Creation,
-            "verifies" => Self::Verification,
-            "improves" => Self::Refinement,
-            // All other verbs are treated as Context
+            "Creation" => Self::Creation,
+            "Verification" => Self::Verification,
+            "Refinement" => Self::Refinement,
+            "Dependency" => Self::Dependency,
             _ => Self::Context,
         }
     }
@@ -39,11 +39,44 @@ pub struct MetaRelationship {
     pub target: MetaEntity,
     #[serde(rename = "type")]
     pub rel_type: MetaVerb,
+    #[serde(rename = "loop")]
+    pub loop_config: Option<LoopConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetaVerb {
     pub name: String,
+    #[serde(rename = "verbType")]
+    pub verb_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoopConfig {
+    #[serde(rename = "maxRetries", default = "LoopConfig::default_max_retries")]
+    pub max_retries: usize,
+    #[serde(
+        rename = "passThreshold",
+        default = "LoopConfig::default_pass_threshold"
+    )]
+    pub pass_threshold: f64,
+}
+
+impl Default for LoopConfig {
+    fn default() -> Self {
+        Self {
+            max_retries: 3,
+            pass_threshold: 1.0,
+        }
+    }
+}
+
+impl LoopConfig {
+    fn default_max_retries() -> usize {
+        3
+    }
+    fn default_pass_threshold() -> f64 {
+        1.0
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,6 +98,9 @@ pub struct DependencyGraph {
     pub loaded_agents: HashMap<String, String>,        // Key: Role, Value: JSON Content
     pub agent_roles: std::collections::HashSet<String>, // Roles defined in the metamodel
     pub node_types: HashMap<String, String>, // Key: Entity Name, Value: Type (e.g. "Code", "Agent")
+    // Data-driven verb categories (replaces hardcoded from_str matching)
+    pub edge_categories: HashMap<(String, String, String), RelationCategory>,
+    pub loop_configs: HashMap<(String, String, String), LoopConfig>,
 }
 
 impl Default for DependencyGraph {
@@ -84,6 +120,8 @@ impl DependencyGraph {
             loaded_agents: HashMap::new(),
             agent_roles: std::collections::HashSet::new(),
             node_types: HashMap::new(),
+            edge_categories: HashMap::new(),
+            loop_configs: HashMap::new(),
         }
     }
 
@@ -229,10 +267,21 @@ impl DependencyGraph {
             let source_str = rel.source.name.clone();
             let target_str = rel.target.name.clone();
             let relation_str = rel.rel_type.name.clone();
+            let verb_type = rel.rel_type.verb_type.clone();
 
             let s_idx = dg.get_or_create_node(&source_str);
             let t_idx = dg.get_or_create_node(&target_str);
             dg.graph.add_edge(s_idx, t_idx, relation_str.clone());
+
+            // Store edge category from verbType (data-driven, no hardcoded matching)
+            let edge_key = (source_str.clone(), relation_str.clone(), target_str.clone());
+            let category = RelationCategory::from_verb_type(&verb_type);
+            dg.edge_categories.insert(edge_key.clone(), category);
+
+            // Store loop config if present
+            if let Some(lc) = rel.loop_config {
+                dg.loop_configs.insert(edge_key.clone(), lc);
+            }
 
             // Capture Node Types
             if let Some(t) = rel.source.entity_type {
@@ -383,7 +432,12 @@ impl DependencyGraph {
             let source = &self.graph[source_idx];
             let target = &self.graph[target_idx];
             let relation = self.graph.edge_weight(edge).unwrap();
-            let category = RelationCategory::from_str(relation);
+            let edge_key = (source.to_string(), relation.to_string(), target.to_string());
+            let category = self
+                .edge_categories
+                .get(&edge_key)
+                .copied()
+                .unwrap_or(RelationCategory::Context);
 
             // Rule: Agent -(Creation)-> Artifact
             if self.is_agent(source) && category == RelationCategory::Creation {
@@ -606,8 +660,8 @@ mod tests {
     #[test]
     fn test_load_and_query_graph() {
         let json = r#"[
-            { "source": { "name": "Agent" }, "target": { "name": "Feature" }, "type": { "name": "creates" } },
-            { "source": { "name": "Feature" }, "target": { "name": "Requirement" }, "type": { "name": "contains" } }
+            { "source": { "name": "Agent" }, "target": { "name": "Feature" }, "type": { "name": "creates", "verbType": "Creation" } },
+            { "source": { "name": "Feature" }, "target": { "name": "Requirement" }, "type": { "name": "contains", "verbType": "Context" } }
         ]"#;
 
         let mut graph =
@@ -631,8 +685,8 @@ mod tests {
     #[test]
     fn test_invalid_topology_multiple_roots() {
         let json = r#"[
-            { "source": { "name": "A" }, "target": { "name": "B" }, "type": { "name": "rel" } },
-            { "source": { "name": "C" }, "target": { "name": "D" }, "type": { "name": "rel" } }
+            { "source": { "name": "A" }, "target": { "name": "B" }, "type": { "name": "rel", "verbType": "Context" } },
+            { "source": { "name": "C" }, "target": { "name": "D" }, "type": { "name": "rel", "verbType": "Context" } }
         ]"#;
 
         let result = DependencyGraph::load_from_metamodel(json, None);
@@ -643,9 +697,9 @@ mod tests {
     #[test]
     fn test_invalid_topology_unreachable() {
         let json = r#"[
-            { "source": { "name": "A" }, "target": { "name": "B" }, "type": { "name": "rel" } },
-            { "source": { "name": "B" }, "target": { "name": "A" }, "type": { "name": "rel" } },
-            { "source": { "name": "C" }, "target": { "name": "D" }, "type": { "name": "rel" } }
+            { "source": { "name": "A" }, "target": { "name": "B" }, "type": { "name": "rel", "verbType": "Context" } },
+            { "source": { "name": "B" }, "target": { "name": "A" }, "type": { "name": "rel", "verbType": "Context" } },
+            { "source": { "name": "C" }, "target": { "name": "D" }, "type": { "name": "rel", "verbType": "Context" } }
         ]"#;
 
         let result = DependencyGraph::load_from_metamodel(json, None);
