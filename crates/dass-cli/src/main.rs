@@ -345,14 +345,78 @@ async fn main() -> Result<()> {
             .default(".".into())
             .interact_text()?
     };
-    let work_dir_path = PathBuf::from(work_dir_input);
+    let base_work_dir = PathBuf::from(work_dir_input);
 
-    if !work_dir_path.exists() {
-        tokio::fs::create_dir_all(&work_dir_path).await?;
+    if !base_work_dir.exists() {
+        tokio::fs::create_dir_all(&base_work_dir).await?;
     }
 
-    // 3. Discover existing projects or create new
-    let existing_projects = discover_projects(&work_dir_path).await?;
+    // Banner
+    println!(
+        "\n{}",
+        style("   DASS SOFTWARE FACTORY   ")
+            .bold()
+            .on_blue()
+            .white()
+    );
+    println!("{}", style("---------------------------").dim());
+
+    // 3. Ontology selection (NEW: before project discovery)
+    let ontology_search_path = if let Some(ref path) = args.ontology_path {
+        path.clone()
+    } else {
+        Input::with_theme(&ColorfulTheme::default())
+            .with_prompt("Ontology Search Path")
+            .default(".".into())
+            .interact_text()?
+    };
+    let ontology_search_dir = std::fs::canonicalize(&ontology_search_path)
+        .unwrap_or_else(|_| PathBuf::from(&ontology_search_path));
+
+    let discovered = discover_ontologies(&ontology_search_dir).await?;
+    let ontology_dir = match discovered.len() {
+        0 => {
+            anyhow::bail!(
+                "No ontology.json found under '{}'.",
+                ontology_search_dir.display()
+            );
+        }
+        1 => {
+            let onto = discovered[0].clone();
+            println!(
+                "{}",
+                style(format!("Using ontology: {}", onto.display())).dim()
+            );
+            onto
+        }
+        _ => {
+            let options: Vec<String> = discovered
+                .iter()
+                .map(|p| {
+                    p.strip_prefix(&ontology_search_dir)
+                        .unwrap_or(p)
+                        .display()
+                        .to_string()
+                })
+                .collect();
+            let selection = Select::with_theme(&ColorfulTheme::default())
+                .with_prompt("Select ontology")
+                .items(&options)
+                .default(0)
+                .interact()?;
+            let onto = discovered[selection].clone();
+            println!(
+                "{}",
+                style(format!("Using ontology: {}", onto.display())).dim()
+            );
+            onto
+        }
+    };
+
+    let ontology_content = tokio::fs::read_to_string(ontology_dir.join("ontology.json")).await?;
+
+    // 4. Discover existing projects or create new
+    let existing_projects = discover_projects(&base_work_dir).await?;
 
     let (work_dir_path, app_name, final_app_id, docs_folder) = if !existing_projects.is_empty() {
         let mut options: Vec<String> = existing_projects
@@ -399,7 +463,7 @@ async fn main() -> Result<()> {
                 .with_prompt("Documents folder (relative to project root)")
                 .default("spec".into())
                 .interact_text()?;
-            let project_path = work_dir_path.join(&name);
+            let project_path = base_work_dir.join(&name);
             if !project_path.exists() {
                 tokio::fs::create_dir_all(&project_path).await?;
             }
@@ -420,7 +484,7 @@ async fn main() -> Result<()> {
             .with_prompt("Documents folder (relative to project root)")
             .default("spec".into())
             .interact_text()?;
-        let project_path = work_dir_path.join(&name);
+        let project_path = base_work_dir.join(&name);
         if !project_path.exists() {
             tokio::fs::create_dir_all(&project_path).await?;
         }
@@ -433,16 +497,6 @@ async fn main() -> Result<()> {
         "{}",
         style(format!("Documents folder: {}", docs_folder)).dim()
     );
-
-    // Banner
-    println!(
-        "{}",
-        style("   DASS SOFTWARE FACTORY   ")
-            .bold()
-            .on_blue()
-            .white()
-    );
-    println!("{}", style("---------------------------").dim());
 
     println!("{}", style("Running in LIVE MODE (calling AI CLI)").green());
 
@@ -465,55 +519,6 @@ async fn main() -> Result<()> {
         models[selection].clone()
     };
     println!("{}", style(format!("Using model: {}", model)).dim());
-
-    // Ontology selection
-    let ontology_search_path = args.ontology_path.as_deref().unwrap_or(".");
-    let ontology_search_dir = std::fs::canonicalize(ontology_search_path)
-        .unwrap_or_else(|_| PathBuf::from(ontology_search_path));
-
-    let discovered = discover_ontologies(&ontology_search_dir).await?;
-    let ontology_dir = match discovered.len() {
-        0 => {
-            anyhow::bail!(
-                "No ontology.json found under '{}'. Use --ontology-path to specify the search root.",
-                ontology_search_dir.display()
-            );
-        }
-        1 => {
-            println!(
-                "{}",
-                style(format!("Using ontology: {}", discovered[0].display())).dim()
-            );
-            discovered[0].clone()
-        }
-        _ => {
-            let options: Vec<String> = discovered
-                .iter()
-                .map(|p| {
-                    p.file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("unknown")
-                        .to_string()
-                })
-                .collect();
-            let selection = Select::with_theme(&ColorfulTheme::default())
-                .with_prompt("Select ontology")
-                .items(&options)
-                .default(0)
-                .interact()?;
-            println!(
-                "{}",
-                style(format!(
-                    "Using ontology: {}",
-                    discovered[selection].display()
-                ))
-                .dim()
-            );
-            discovered[selection].clone()
-        }
-    };
-
-    let ontology_content = tokio::fs::read_to_string(ontology_dir.join("ontology.json")).await?;
 
     let client = ShellCliClient::new("gemini", work_dir_path.to_string_lossy().to_string())
         .with_yolo(args.yolo)
