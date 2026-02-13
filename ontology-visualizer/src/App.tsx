@@ -169,9 +169,12 @@ const App: React.FC = () => {
   const [showAllEdgesInSimulation, setShowAllEdgesInSimulation] = useState(false);
 
   // Exploration Mode State
-  const [searchMode, setSearchMode] = useState(false); // If true, progressive disclosure
+  const [searchMode, setSearchMode] = useState(false);
   const [visibleNodeIds, setVisibleNodeIds] = useState<Set<string>>(new Set(['SoftwareApplication']));
-  const [rfInstance, setRfInstance] = useState<any>(null); // Store ReactFlow instance
+  const [rfInstance, setRfInstance] = useState<any>(null);
+
+  // Performance / Test Hooks
+  const isTesting = typeof window !== 'undefined' && window.location.search.includes('testing=true');
 
   useEffect(() => {
     async function init() {
@@ -356,10 +359,13 @@ const App: React.FC = () => {
     // 7. Fit View if in Exploration Mode, Simulation, or orphans toggled
     if (rfInstance && (searchMode || showSimulation || !showOrphans)) {
       setTimeout(() => {
-        rfInstance.fitView({ padding: 0.2, duration: 800 });
-      }, 100); // Small delay to allow render
+        rfInstance.fitView({
+          padding: 0.2,
+          duration: isTesting ? 0 : 800
+        });
+      }, isTesting ? 10 : 100); // Super fast fitView in tests
     }
-  }, [showOrphans, searchMode, visibleNodeIds, initialLayout, setNodes, setEdges, rfInstance, showSimulation, simulationSteps, currentStepIndex, simulationLayoutMode, showAllEdgesInSimulation]);
+  }, [showOrphans, searchMode, visibleNodeIds, initialLayout, setNodes, setEdges, rfInstance, showSimulation, simulationSteps, currentStepIndex, simulationLayoutMode, showAllEdgesInSimulation, isTesting]);
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -518,7 +524,10 @@ const App: React.FC = () => {
             if (rfInstance) {
               const node = nodes.find(n => n.id === step.target);
               if (node) {
-                rfInstance.setCenter(node.position.x + 90, node.position.y, { zoom: 1.5, duration: 800 });
+                rfInstance.setCenter(node.position.x + 90, node.position.y, {
+                  zoom: 1.5,
+                  duration: isTesting ? 0 : 800
+                });
               }
             }
           }}

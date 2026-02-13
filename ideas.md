@@ -1,5 +1,43 @@
 ## Ideas
 
+[][] - Every node in the graph should have the possibility to be executed by a different AI CLI (cursor, gemini, claude code, copilot, opencode) and a different model. Perhaps, we could define at a higher level configuration like “Creation” verb Relationships in the graph should be executed by a top tier intelligent models, but Verification and Refining could be done by other less intelligent models. Of we could yet add an additional attribute to the Relationship like “LLM type” that would say like “High Reasoning and Intelligence”, “Fast Execution”, “Daily Driver”. 
+
+[][] - The Visualizer should guide the creation of the Ontology.
+
+[][]- quality verification and Iteration of the same node or bunch of nodes to achieve a quality threshold must be built it and not optional to define in the ontology graph by the user. But this means we should attach dynamically at runtime this verification and refinement nodes.
+
+[][]- perhaps all documents must be in a folder called spec. In the .infinitecodingloop, we would only have metadata of what has been generated successfully on every “Iteration” or “execution of the infinite coding loop tool. And we do this by instructing the AI CLI in the prompt. The folder name can be a parameter to choose from in the beginning of the loop too, as part of the Application configuration setup. And all This configuration is stored in .infinitecodingloop/config.json
+
+[][] - Some documents are in the scope of the Application, some others are in the scope of features. We can scope this my declaring relationships, but the location in the file structure matters and avoiding to regenerate Application level documents every time for a new feature. So perhaps we need separate ontologies for this. We want to allow executing ontologies separately and to be chosen at the beginning. 
+
+[][]- And we also want the possibility to execute a group of connected ontologies. So there should be a new Entity type called “ontology” that allows to reference other existing ontologies. This way we can compose ontologies and be able to reason better about them. But also execute them separately. 
+
+[][]- A new entity type can be an “Ontology” itself, which reference a whole complete ontology to load with Agents and Entities, etc. This can make this really powerful. There could be made an engine thst would discover ontologies from a Marketplace amd register them like MCPs. This is brilliant idea.
+
+[][] - Visualize the Graph in the vidualizator like it is now in the ontology tools. The Graph is presented like it will execute with the contexts needed.
+
+[][] - Every “run” of the infinite loop could be just a feature in the application. Then the multiple features could be executed in parallel from the outside. This is just a possibility. We need to assess if this should be from the outside or from the inside. Perhaps we can do it from the inside but yet create a higher level abstraction. Like Ontogology of Ontologies, like one main graph run subgraphs, and the current subgraph is a feature subgraph, and there is a initialization graph to prepare the first document and the project structure, etc, but then that is not repeated, but reused instead, but the Document can be used. When started, it checks if all the “static" Documents (like DDD, TDD) in the graph are available in folder/database.
+
+[][] - Create a public library of the “static” Documents that can be reference from new ontologies, so that they do not have to be recreated every time.
+
+[][] - The ontogoly visualizer could be reused to follow in real-time the execution of the graph and see the Produced document.
+
+[][] - Every Node should execute a Git Commit. Perhaps this should also be a node in the graph, so that the User can locate when and where it wants to create commits. “Engineer executes Commit”.
+
+[][] - Create a “Unix Command” as a new type of Entity. Every Command should also have a prompt that will instruct the agent execute a unix command. “ontology/Command/prompt/Commit.md”.  “Command uses Feature“ to collect Context.
+
+[][] - It should be stored the full history traceability of every Node execution. The graph itself should be the tool used for the traceability. Every Graph Iteration should be able to be seen what happened in the UI or the console tool.
+
+[][] - Every feature should create a feature branch. Perhaps this should also be a node in the graph, to give the posibility to the User to decide when to create feature branches and when not.
+
+[][]- infinite loop- the orchestrator should be a state machine. Each node id a agent working on a primitive (use Temporal?) Each Agent Asks Questions to human with a template for each they have to generate to resolve assumptions. The git agent must be present after each agent finishes its work. Also to open a branch PR for each feature. Also for initializing a repo in a Git organisation with gh cli.
+
+[X] The visualizater should have an option button to visualize the graph in the same way it will be executed by the engine, in which sequence from first to last and on each step see what context is needed. This is how the ontology-tools display it now.
+
+[] We should be able to choose the ontology to execute for every iteration of the infinite coding loop.
+
+[X] We should be able to define loops in the graph to improve a document till it passes a quality metric threshold. Like improving the code until a test passes, or improving the code and test until it meets the full feature/story acceptance criteria, or until it has 90% coverage, or until it passes the cyclomatic complexity threshold, etc.
+
 [] The execution graph is not printed always at the beginning when starting the project or a new iteration, it only appears when resuming an iteration. It should always be visible somewhere during the execution and be refreshed as we go, just to be able to see the progress.
   ITERATION STATUS: Initial Implementation
 Completed Tasks:
@@ -61,11 +99,11 @@ Attempt 1 failed: You have exhausted your capacity on this model. Your quota wil
 
 [] Some documents like TDD, DDD, CodingStyle, CodingStandards, Microservices, ArchitectureStyle, etc, do not need to be generated every time. Perhaps they just need to be generated once and be available to be loaded by the dass-engine. We could create a library of those type of documents to be reused and loaded by the dass-engine. And then we could create a entity type like: Library Document, which would allow to select a document from the library to be loaded.
 
-[] We need to implement a way to do loops for improvement of Code, improvement of a document that does not satisfy a quality metric or to iterate code that does not pass an Unit Test. We need to implement a way to loop in the graph execution in the dass-engine.
+[X] We need to implement a way to do loops for improvement of Code, improvement of a document that does not satisfy a quality metric or to iterate code that does not pass an Unit Test. We need to implement a way to loop in the graph execution in the dass-engine.
 
-[] Make sure the cli creates a new folder if it does not exist for the application name.
+[X] Make sure the cli creates a new folder if it does not exist for the application name.
 
-[] Create/Verify/Refine these verbs must not be hardcoded either. We should rather define a new field in the MetaVerb called "verbType" that can have a defined set of values like "Creation", "Verification", "Refinement", "Context". Then when defining the ontology, one can use any verb, but then the verbType would be used to determine if it is use to create, verify, refine or provide context. This would allow us to have a more flexible ontology and also to have a more flexible execution engine.
+[X] Create/Verify/Refine these verbs must not be hardcoded either. We should rather define a new field in the MetaVerb called "verbType" that can have a defined set of values like "Creation", "Verification", "Refinement", "Context". Then when defining the ontology, one can use any verb, but then the verbType would be used to determine if it is use to create, verify, refine or provide context. This would allow us to have a more flexible ontology and also to have a more flexible execution engine.
 
 [] The ontology-tools must be re-used in the dass-engine to display the ontology graph execution prediction at the beginning when starting and also to load the ontology and the graph and the context nodes in the same way the ontology tools does it.
 
