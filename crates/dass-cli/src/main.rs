@@ -50,6 +50,10 @@ struct Args {
     /// Maximum number of iterations (default: 100)
     #[arg(long, default_value = "100")]
     max_iterations: usize,
+
+    /// Path to search for ontologies (default: current directory)
+    #[arg(long)]
+    ontology_path: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -290,6 +294,41 @@ async fn discover_projects(base_dir: &Path) -> Result<Vec<(PathBuf, AppConfig)>>
     Ok(projects)
 }
 
+/// Recursively discover directories containing an `ontology.json` file.
+/// Returns a sorted list of parent directory paths.
+async fn discover_ontologies(base_dir: &Path) -> Result<Vec<PathBuf>> {
+    let mut results = Vec::new();
+    discover_ontologies_recursive(base_dir, &mut results).await?;
+    results.sort();
+    Ok(results)
+}
+
+async fn discover_ontologies_recursive(dir: &Path, results: &mut Vec<PathBuf>) -> Result<()> {
+    let mut entries = match tokio::fs::read_dir(dir).await {
+        Ok(e) => e,
+        Err(_) => return Ok(()),
+    };
+
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        if path.is_file() && path.file_name().and_then(|n| n.to_str()) == Some("ontology.json") {
+            results.push(dir.to_path_buf());
+        } else if path.is_dir() {
+            let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            // Skip hidden dirs, node_modules, target, dist, .git
+            if !dir_name.starts_with('.')
+                && dir_name != "node_modules"
+                && dir_name != "target"
+                && dir_name != "dist"
+            {
+                Box::pin(discover_ontologies_recursive(&path, results)).await?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
@@ -427,17 +466,68 @@ async fn main() -> Result<()> {
     };
     println!("{}", style(format!("Using model: {}", model)).dim());
 
+    // Ontology selection
+    let ontology_search_path = args.ontology_path.as_deref().unwrap_or(".");
+    let ontology_search_dir = std::fs::canonicalize(ontology_search_path)
+        .unwrap_or_else(|_| PathBuf::from(ontology_search_path));
+
+    let discovered = discover_ontologies(&ontology_search_dir).await?;
+    let ontology_dir = match discovered.len() {
+        0 => {
+            anyhow::bail!(
+                "No ontology.json found under '{}'. Use --ontology-path to specify the search root.",
+                ontology_search_dir.display()
+            );
+        }
+        1 => {
+            println!(
+                "{}",
+                style(format!("Using ontology: {}", discovered[0].display())).dim()
+            );
+            discovered[0].clone()
+        }
+        _ => {
+            let options: Vec<String> = discovered
+                .iter()
+                .map(|p| {
+                    p.file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("unknown")
+                        .to_string()
+                })
+                .collect();
+            let selection = Select::with_theme(&ColorfulTheme::default())
+                .with_prompt("Select ontology")
+                .items(&options)
+                .default(0)
+                .interact()?;
+            println!(
+                "{}",
+                style(format!(
+                    "Using ontology: {}",
+                    discovered[selection].display()
+                ))
+                .dim()
+            );
+            discovered[selection].clone()
+        }
+    };
+
+    let ontology_content = tokio::fs::read_to_string(ontology_dir.join("ontology.json")).await?;
+
     let client = ShellCliClient::new("gemini", work_dir_path.to_string_lossy().to_string())
         .with_yolo(args.yolo)
         .with_model(model)
         .with_debug(args.debug_ai_cli)
         .with_output_format(args.output_format.clone());
 
-    let mut orchestrator = Orchestrator::new(
+    let mut orchestrator = Orchestrator::new_with_metamodel(
         client,
         final_app_id.clone(),
         app_name,
         work_dir_path.clone(),
+        &ontology_content,
+        Some(ontology_dir.as_path()),
     )
     .await?
     .with_max_iterations(args.max_iterations)
@@ -695,5 +785,87 @@ mod tests {
         let config = load_project_config(tmp.path()).await.unwrap().unwrap();
         assert_eq!(config.docs_folder, "my_specs");
         assert_eq!(config.app_name, "MyApp");
+    }
+
+    #[tokio::test]
+    async fn test_discover_ontologies_empty_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = discover_ontologies(tmp.path()).await.unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_discover_ontologies_single() {
+        let tmp = tempfile::tempdir().unwrap();
+        let onto_dir = tmp.path().join("my_ontology");
+        tokio::fs::create_dir_all(&onto_dir).await.unwrap();
+        tokio::fs::write(onto_dir.join("ontology.json"), "[]")
+            .await
+            .unwrap();
+
+        let result = discover_ontologies(tmp.path()).await.unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], onto_dir);
+    }
+
+    #[tokio::test]
+    async fn test_discover_ontologies_nested() {
+        let tmp = tempfile::tempdir().unwrap();
+        let deep = tmp.path().join("a").join("b").join("c");
+        tokio::fs::create_dir_all(&deep).await.unwrap();
+        tokio::fs::write(deep.join("ontology.json"), "[]")
+            .await
+            .unwrap();
+
+        let result = discover_ontologies(tmp.path()).await.unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], deep);
+    }
+
+    #[tokio::test]
+    async fn test_discover_ontologies_multiple() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir_a = tmp.path().join("alpha");
+        let dir_b = tmp.path().join("beta");
+        tokio::fs::create_dir_all(&dir_a).await.unwrap();
+        tokio::fs::create_dir_all(&dir_b).await.unwrap();
+        tokio::fs::write(dir_a.join("ontology.json"), "[]")
+            .await
+            .unwrap();
+        tokio::fs::write(dir_b.join("ontology.json"), "[]")
+            .await
+            .unwrap();
+
+        let result = discover_ontologies(tmp.path()).await.unwrap();
+        assert_eq!(result.len(), 2);
+        // Results should be sorted
+        assert!(result[0].ends_with("alpha"));
+        assert!(result[1].ends_with("beta"));
+    }
+
+    #[tokio::test]
+    async fn test_discover_ontologies_skips_hidden_and_dist() {
+        let tmp = tempfile::tempdir().unwrap();
+        // These should be skipped
+        let hidden = tmp.path().join(".hidden");
+        let dist = tmp.path().join("dist");
+        let target = tmp.path().join("target");
+        for d in [&hidden, &dist, &target] {
+            tokio::fs::create_dir_all(d).await.unwrap();
+            tokio::fs::write(d.join("ontology.json"), "[]")
+                .await
+                .unwrap();
+        }
+
+        // This should be found
+        let visible = tmp.path().join("visible");
+        tokio::fs::create_dir_all(&visible).await.unwrap();
+        tokio::fs::write(visible.join("ontology.json"), "[]")
+            .await
+            .unwrap();
+
+        let result = discover_ontologies(tmp.path()).await.unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], visible);
     }
 }
