@@ -1,29 +1,66 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import type { SimulationStep } from '../services/simulationService';
-import { PlayCircle, GitCommit, FileText, CheckCircle, ArrowRight } from 'lucide-react';
+import { PlayCircle, GitCommit, FileText, CheckCircle, ArrowRight, Pause, SkipBack } from 'lucide-react';
 
 interface SimulationPanelProps {
     isOpen: boolean;
     onClose: () => void;
     steps: SimulationStep[];
+    currentStepIndex: number;
     runSimulation: () => void;
     onStepClick?: (step: SimulationStep) => void;
+    onSetStepIndex: React.Dispatch<React.SetStateAction<number>>;
 }
 
 const SimulationPanel: React.FC<SimulationPanelProps> = ({
     isOpen,
     onClose,
     steps,
+    currentStepIndex,
     runSimulation,
-    onStepClick
+    onStepClick,
+    onSetStepIndex
 }) => {
+    const [isPlaying, setIsPlaying] = useState(false);
+
+    useEffect(() => {
+        let interval: any;
+        if (isPlaying && steps.length > 0) {
+            interval = setInterval(() => {
+                onSetStepIndex((prev: number) => {
+                    if (prev >= steps.length - 1) {
+                        setIsPlaying(false);
+                        return prev;
+                    }
+                    return prev + 1;
+                });
+            }, 1000);
+        }
+        return () => clearInterval(interval);
+    }, [isPlaying, steps, onSetStepIndex]);
+
     if (!isOpen) return null;
+
+    const handleBack = () => {
+        setIsPlaying(false);
+        onSetStepIndex(Math.max(-1, currentStepIndex - 1));
+    };
+
+    const handleForward = () => {
+        setIsPlaying(false);
+        onSetStepIndex(Math.min(steps.length - 1, currentStepIndex + 1));
+    };
+
+    const handleReset = () => {
+        setIsPlaying(false);
+        onSetStepIndex(-1);
+    };
 
     return (
         <aside className="side-panel floating left-panel" style={{
             position: 'absolute',
-            top: '60px',
+            top: '80px',
             left: '20px',
             bottom: '20px',
             width: '320px',
@@ -52,7 +89,7 @@ const SimulationPanel: React.FC<SimulationPanelProps> = ({
                 </button>
             </div>
 
-            <div style={{ padding: '12px', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+            <div style={{ padding: '12px', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <button
                     onClick={runSimulation}
                     className="btn btn-primary"
@@ -71,8 +108,29 @@ const SimulationPanel: React.FC<SimulationPanelProps> = ({
                         fontWeight: 600
                     }}
                 >
-                    <PlayCircle size={16} /> Run Simulation
+                    <PlayCircle size={16} /> {steps.length > 0 ? 'Restart Simulation' : 'Run Simulation'}
                 </button>
+
+                {steps.length > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                        <button className="btn btn-sm" onClick={handleReset} title="Reset">
+                            <SkipBack size={14} />
+                        </button>
+                        <button className="btn btn-sm" onClick={handleBack} disabled={currentStepIndex <= -1}>
+                            <ArrowRight size={14} style={{ transform: 'rotate(180deg)' }} />
+                        </button>
+                        <button
+                            className="btn btn-sm btn-primary"
+                            onClick={() => setIsPlaying(!isPlaying)}
+                            style={{ padding: '8px 16px' }}
+                        >
+                            {isPlaying ? <Pause size={16} /> : <PlayCircle size={16} />}
+                        </button>
+                        <button className="btn btn-sm" onClick={handleForward} disabled={currentStepIndex >= steps.length - 1}>
+                            <ArrowRight size={14} />
+                        </button>
+                    </div>
+                )}
             </div>
 
             <div className="panel-content" style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
@@ -82,21 +140,23 @@ const SimulationPanel: React.FC<SimulationPanelProps> = ({
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {steps.map((step) => (
+                        {steps.map((step, index) => (
                             <div
                                 key={step.id}
-                                onClick={() => onStepClick && onStepClick(step)}
+                                onClick={() => {
+                                    setIsPlaying(false);
+                                    onStepClick && onStepClick(step);
+                                }}
                                 style={{
-                                    background: 'rgba(13, 17, 23, 0.5)',
-                                    border: '1px solid rgba(48, 54, 61, 0.7)',
+                                    background: index === currentStepIndex ? 'rgba(56, 139, 253, 0.15)' : 'rgba(13, 17, 23, 0.5)',
+                                    border: index === currentStepIndex ? '1px solid #58a6ff' : '1px solid rgba(48, 54, 61, 0.7)',
                                     borderRadius: '6px',
                                     padding: '10px',
                                     cursor: 'pointer',
-                                    transition: 'background 0.2s',
-                                    fontSize: '0.85rem'
+                                    transition: 'all 0.2s',
+                                    fontSize: '0.85rem',
+                                    opacity: index > currentStepIndex ? 0.5 : 1
                                 }}
-                                onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(48, 54, 61, 0.5)'}
-                                onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(13, 17, 23, 0.5)'}
                             >
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
                                     <span style={{
@@ -120,25 +180,6 @@ const SimulationPanel: React.FC<SimulationPanelProps> = ({
                                     <FileText size={14} color="#79c0ff" />
                                     <span style={{ fontWeight: 600, color: '#c9d1d9' }}>{step.target}</span>
                                 </div>
-
-                                {step.context && step.context.length > 0 && (
-                                    <div style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed rgba(48, 54, 61, 0.7)' }}>
-                                        <span style={{ fontSize: '0.7rem', color: '#8b949e', display: 'block', marginBottom: '4px' }}>Context:</span>
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                            {step.context.map(ctx => (
-                                                <span key={ctx} style={{
-                                                    fontSize: '0.7rem',
-                                                    background: 'rgba(56, 139, 253, 0.15)',
-                                                    color: '#79c0ff',
-                                                    padding: '2px 6px',
-                                                    borderRadius: '10px'
-                                                }}>
-                                                    {ctx}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
                             </div>
                         ))}
                     </div>

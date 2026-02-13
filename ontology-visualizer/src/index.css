@@ -164,3 +164,39 @@ body {
   border: 1px solid var(--border-primary);
   margin-bottom: 1rem;
 }
+
+/* Simulation Animations */
+@keyframes pulse-border {
+  0% { border-color: rgba(126, 231, 135, 0.4); box-shadow: 0 0 0 0 rgba(126, 231, 135, 0.4); }
+  70% { border-color: rgba(126, 231, 135, 1); box-shadow: 0 0 0 10px rgba(126, 231, 135, 0); }
+  100% { border-color: rgba(126, 231, 135, 0.4); box-shadow: 0 0 0 0 rgba(126, 231, 135, 0); }
+}
+
+@keyframes dash-draw {
+  from { stroke-dashoffset: 20; }
+  to { stroke-dashoffset: 0; }
+}
+
+.node-produced {
+  border: 2px solid #7ee787 !important;
+  animation: pulse-border 2s infinite;
+}
+
+.edge-active .react-flow__edge-path {
+  stroke: #58a6ff !important;
+  stroke-width: 3;
+  stroke-dasharray: 5;
+  animation: dash-draw 0.5s linear infinite;
+}
+
+.node-highlighted {
+  transform: scale(1.05);
+  transition: transform 0.3s ease;
+  z-index: 100 !important;
+  box-shadow: 0 0 20px rgba(88, 166, 255, 0.4);
+}
+
+.node-context {
+  border-color: #58a6ff !important;
+  opacity: 1 !important;
+}

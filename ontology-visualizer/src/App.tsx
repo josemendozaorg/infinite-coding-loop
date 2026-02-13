@@ -10,13 +10,21 @@ import ReactFlow, {
 } from 'reactflow';
 import type { Connection, Edge, Node } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Save, FileJson, Share2, AlignCenter, Box, Bot, FileText, PlayCircle } from 'lucide-react';
+import {
+  Save,
+  FileJson,
+  Share2,
+  AlignCenter,
+  Box,
+  Bot,
+  FileText,
+  PlayCircle
+} from 'lucide-react';
 import { loadOntology } from './services/schemaService';
 import { simulateExecution } from './services/simulationService';
 import type { SimulationStep } from './services/simulationService';
 import SimulationPanel from './components/SimulationPanel';
 import { Handle, Position } from 'reactflow';
-
 
 const nodeWidth = 180;
 
@@ -156,6 +164,7 @@ const App: React.FC = () => {
   // Simulation State
   const [showSimulation, setShowSimulation] = useState(false);
   const [simulationSteps, setSimulationSteps] = useState<SimulationStep[]>([]);
+  const [currentStepIndex, setCurrentStepIndex] = useState(-1); // -1 means no steps executed yet
 
   // Exploration Mode State
   const [searchMode, setSearchMode] = useState(false); // If true, progressive disclosure
@@ -228,6 +237,50 @@ const App: React.FC = () => {
     }
 
     // ... (rest of the logic)
+    // 3. Apply Simulation Highlighting
+    if (showSimulation && simulationSteps.length > 0) {
+      const producedNodes = new Set<string>(['SoftwareApplication']);
+      const activeStep = currentStepIndex >= 0 ? simulationSteps[currentStepIndex] : null;
+
+      // Everything produced up to currentStepIndex
+      for (let i = 0; i <= currentStepIndex; i++) {
+        const step = simulationSteps[i];
+        if (step.verbType === 'Creation') {
+          producedNodes.add(step.target);
+        }
+      }
+
+      activeNodes = activeNodes.map(node => {
+        let className = node.className || '';
+        if (producedNodes.has(node.id)) {
+          className += ' node-produced';
+        }
+        if (activeStep?.target === node.id) {
+          className += ' node-highlighted';
+        }
+        if (activeStep?.context?.includes(node.id)) {
+          className += ' node-context';
+        }
+
+        return {
+          ...node,
+          className: className.trim()
+        };
+      });
+
+      activeEdges = activeEdges.map(edge => {
+        let className = edge.className || '';
+        if (activeStep && edge.source === activeStep.agent && edge.target === activeStep.target) {
+          className += ' edge-active';
+        }
+        // Also highlight edges to context? Maybe too messy. Just the active action.
+        return {
+          ...edge,
+          className: className.trim()
+        };
+      });
+    }
+
     const layouted = getLeftToRightLayout(activeNodes, activeEdges);
     setNodes(layouted.nodes);
     setEdges(layouted.edges);
@@ -258,6 +311,7 @@ const App: React.FC = () => {
     if (!initialLayout) return;
     const steps = simulateExecution(initialLayout.nodes, initialLayout.edges);
     setSimulationSteps(steps);
+    setCurrentStepIndex(-1); // Reset to start
     setShowSimulation(true);
     setIsPanelOpen(false); // Close properties panel to avoid clutter
     setSearchMode(false); // Likely want full graph visible or at least default view
@@ -391,18 +445,21 @@ const App: React.FC = () => {
           isOpen={showSimulation}
           onClose={() => setShowSimulation(false)}
           steps={simulationSteps}
+          currentStepIndex={currentStepIndex}
           runSimulation={runSimulation}
           onStepClick={(step) => {
-            // Optional: highlight node or zoom to it locally
+            const index = simulationSteps.findIndex(s => s.id === step.id);
+            setCurrentStepIndex(index);
+
             const node = nodes.find(n => n.id === step.target);
             if (node) {
               setSelectedNode(node);
-              // Center view logic if rfInstance available
               if (rfInstance) {
                 rfInstance.setCenter(node.position.x + 90, node.position.y + 30, { zoom: 1, duration: 800 });
               }
             }
           }}
+          onSetStepIndex={setCurrentStepIndex}
         />
 
         {isPanelOpen && selectedNode && (

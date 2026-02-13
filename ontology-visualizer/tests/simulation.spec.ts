@@ -53,20 +53,30 @@ test.describe('Execution Simulation', () => {
         console.log('TEST: Clicked Run Simulation. Waiting for results...');
 
         // 4. Verify Steps Appear
-        // If logic works, we should see steps. If 0 steps, we check for the initial message removal or specific step elements.
-        // The initial message "Click 'Run Simulation'..." should disappear.
         const initialMsg = page.getByText('Click "Run Simulation" to see the predicted execution path.');
-        await expect(initialMsg).not.toBeVisible({ timeout: 5000 }).catch(async (e) => {
-            console.log('TEST: ERROR - Initial message still visible.');
-            console.log('--- BROWSER CONSOLE LOGS START ---');
-            consoleLogs.forEach(log => console.log(log));
-            console.log('--- BROWSER CONSOLE LOGS END ---');
-            throw e;
-        });
+        await expect(initialMsg).not.toBeVisible({ timeout: 5000 });
 
-        // Verify at least one step
+        // Verify at least one step exists
         const step = page.locator('.panel-content > div > div').first();
         await expect(step).toBeVisible();
-        console.log('TEST: Steps verified. Success.');
+        console.log('TEST: Steps produced.');
+
+        // 5. Verify Animation Classes on Graph
+        // Check if any node has the 'node-produced' class
+        const producedNode = page.locator('.react-flow__node.node-produced').first();
+        await expect(producedNode).toBeVisible();
+        console.log('TEST: node-produced class verified.');
+
+        // 6. Test Playback: Click Forward
+        console.log('TEST: Testing playback controls...');
+        const forwardBtn = page.locator('button').filter({ has: page.locator('svg.lucide-arrow-right') }).last();
+        await forwardBtn.click();
+
+        // Check for node-highlighted class
+        const highlightedNode = page.locator('.react-flow__node.node-highlighted');
+        await expect(highlightedNode).toBeVisible();
+        console.log('TEST: node-highlighted class verified.');
+
+        console.log('TEST: Simulation playback and animations verified. Success.');
     });
 });
