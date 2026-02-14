@@ -4,6 +4,7 @@ use crate::agents::generic::GenericAgent;
 use crate::domain::types::AgentRole;
 use crate::graph::executor::{GraphExecutor, InMemoryExecutor, Task};
 use crate::graph::{DependencyGraph, RelationCategory};
+use crate::logging::IterationLogger;
 use anyhow::{Context, Result};
 use petgraph::visit::EdgeRef;
 use std::collections::{HashMap, HashSet};
@@ -40,6 +41,8 @@ pub struct Orchestrator<C: AiCliClient + Clone + Send + Sync + 'static> {
     max_iterations: usize,
     // Iteration tracking
     pub current_iteration: Option<IterationInfo>,
+    // Execution logger for full traceability
+    pub logger: Option<IterationLogger>,
     // Marker for the client generic, or we can store it if needed later
     _client: std::marker::PhantomData<C>,
 }
@@ -117,6 +120,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             refinement_attempts: HashMap::new(),
             max_iterations: 100,
             current_iteration: None,
+            logger: None,
             _client: std::marker::PhantomData,
         })
     }
@@ -187,7 +191,12 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             tokio::fs::create_dir_all(&docs_dir).await?;
         }
 
+        // Initialize execution logger
+        let logger = IterationLogger::new(&iter_folder).await?;
+        logger.log_iteration_start(&id, name).await?;
+
         info!("Started new iteration: {} ({})", name, id);
+        self.logger = Some(logger);
         self.current_iteration = Some(iter_info);
         Ok(())
     }
@@ -203,6 +212,11 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         let content = tokio::fs::read_to_string(iter_json_path).await?;
         let iter_info: IterationInfo = serde_json::from_str(&content)?;
         self.current_iteration = Some(iter_info);
+
+        // Initialize execution logger (append mode for resumed iterations)
+        let logger = IterationLogger::new(&iter_folder).await?;
+        logger.log_iteration_resumed(iteration_id).await?;
+        self.logger = Some(logger);
 
         // Load artifacts from the docs folder
         let docs_dir = work_dir.join(&self.docs_folder);
@@ -343,6 +357,12 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             "Persisted artifact {} to {}/{} (iteration {})",
             name, self.docs_folder, filename, iteration.id
         );
+
+        // Log artifact persisted
+        if let Some(ref logger) = self.logger {
+            let _ = logger.log_artifact_persisted(name, &relative_path).await;
+        }
+
         Ok(())
     }
 
@@ -381,6 +401,11 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                 iterations
             ));
 
+            // Log loop cycle
+            if let Some(ref logger) = self.logger {
+                let _ = logger.log_loop_cycle(iterations).await;
+            }
+
             let next_actions = self.identify_next_actions();
             if next_actions.is_empty() {
                 ui.log_info(&format!(
@@ -388,6 +413,20 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                     self.artifacts.keys().collect::<Vec<_>>()
                 ));
                 break;
+            }
+
+            // Log all identified actions
+            if let Some(ref logger) = self.logger {
+                for action in &next_actions {
+                    let _ = logger
+                        .log_action_identified(
+                            &action.agent,
+                            &action.relation,
+                            &action.target,
+                            &format!("{:?}", action.category),
+                        )
+                        .await;
+                }
             }
 
             for action in next_actions {
@@ -403,6 +442,12 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                     ))
                     .await?
                 {
+                    // Log action skipped
+                    if let Some(ref logger) = self.logger {
+                        let _ = logger
+                            .log_action_skipped(&action.agent, &action.relation, &action.target)
+                            .await;
+                    }
                     ui.log_info("Action skipped by user. Pausing iteration.");
                     ui.end_step("Iteration paused by user.");
                     return Ok(());
@@ -410,6 +455,16 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
 
                 self.execute_action(action, ui).await?;
             }
+        }
+
+        // Log iteration end
+        if let Some(ref logger) = self.logger {
+            let _ = logger
+                .log(crate::logging::LogEvent::info(
+                    crate::logging::LogEventType::IterationEnd,
+                    "Iteration completed",
+                ))
+                .await;
         }
 
         ui.end_step("Goal achieved or max iterations reached.");
@@ -550,6 +605,18 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
     ) -> Result<()> {
         let agent_role = AgentRole::from(action.agent.as_str());
 
+        // Log action dispatched
+        if let Some(ref logger) = self.logger {
+            let _ = logger
+                .log_action_dispatched(
+                    &action.agent,
+                    &action.relation,
+                    &action.target,
+                    &format!("{:?}", action.category),
+                )
+                .await;
+        }
+
         // Find Input Context
         let mut context_map = HashMap::new();
         let mut reference_instructions = String::new();
@@ -675,6 +742,13 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         let enhanced_prompt =
             self.enhance_prompt(final_prompt, &action.target, &filename, entity_type);
 
+        // Log prompt sent
+        if let Some(ref logger) = self.logger {
+            let _ = logger
+                .log_prompt_sent(&action.agent, &action.target, &enhanced_prompt)
+                .await;
+        }
+
         let task = Task {
             id: format!("task_{}_{}", action.relation, action.target),
             description: format!("{} {}", action.relation, action.target),
@@ -682,7 +756,32 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             prompt: Some(enhanced_prompt),
         };
 
-        let result = self.executor.dispatch_agent(agent_role, task).await?;
+        let result = match self.executor.dispatch_agent(agent_role, task).await {
+            Ok(val) => {
+                // Log response received
+                if let Some(ref logger) = self.logger {
+                    let _ = logger
+                        .log_response_received(&action.agent, &action.target, &val)
+                        .await;
+                }
+                val
+            }
+            Err(e) => {
+                // Log error
+                if let Some(ref logger) = self.logger {
+                    let _ = logger
+                        .log_error(
+                            &format!(
+                                "Agent dispatch failed: {} {} {}",
+                                action.agent, action.relation, action.target
+                            ),
+                            Some(&format!("{}", e)),
+                        )
+                        .await;
+                }
+                return Err(e);
+            }
+        };
 
         // Semantic Result Handling
         match action.category {
@@ -704,6 +803,13 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                     .find(|((_, _, t), _)| t == &action.target)
                     .map(|(_, lc)| lc.pass_threshold)
                     .unwrap_or(1.0);
+
+                // Log verification result
+                if let Some(ref logger) = self.logger {
+                    let _ = logger
+                        .log_verification(&action.target, score, pass_threshold, feedback)
+                        .await;
+                }
 
                 if score < pass_threshold {
                     warn!(
@@ -745,6 +851,13 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                         .map(|t| t == "Code")
                         .unwrap_or(false);
 
+                    // Log validation failure
+                    if let Some(ref logger) = self.logger {
+                        let _ = logger
+                            .log_validation(&action.target, false, Some(&format!("{}", e)))
+                            .await;
+                    }
+
                     if is_code {
                         warn!(
                             "Artifact type 'Code' detected. Skipping strict schema validation for {}. Validation error was: {}",
@@ -758,6 +871,11 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                             e,
                             result
                         ));
+                    }
+                } else {
+                    // Log validation success
+                    if let Some(ref logger) = self.logger {
+                        let _ = logger.log_validation(&action.target, true, None).await;
                     }
                 }
 
@@ -776,6 +894,21 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                         .or_insert(0);
                     *attempts += 1;
                     info!("Refinement attempt {} for {}", attempts, action.target);
+
+                    // Log refinement attempt
+                    if let Some(ref logger) = self.logger {
+                        let max_retries = self
+                            .executor
+                            .graph
+                            .loop_configs
+                            .iter()
+                            .find(|((_, _, t), _)| t == &action.target)
+                            .map(|(_, lc)| lc.max_retries)
+                            .unwrap_or(3);
+                        let _ = logger
+                            .log_refinement_attempt(&action.target, *attempts, max_retries)
+                            .await;
+                    }
                 }
             }
             _ => {
