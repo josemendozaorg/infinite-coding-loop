@@ -43,8 +43,8 @@ pub struct Orchestrator<C: AiCliClient + Clone + Send + Sync + 'static> {
     pub current_iteration: Option<IterationInfo>,
     // Execution logger for full traceability
     pub logger: Option<IterationLogger>,
-    // Marker for the client generic, or we can store it if needed later
-    _client: std::marker::PhantomData<C>,
+    // The AI Client for interactive clarification
+    pub client: C,
 }
 
 impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
@@ -121,7 +121,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             max_iterations: 100,
             current_iteration: None,
             logger: None,
-            _client: std::marker::PhantomData,
+            client,
         })
     }
 
@@ -598,6 +598,103 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         plans
     }
 
+    async fn clarify_assumptions(
+        &self,
+        target_node: &str,
+        context: &str,
+        ui: &impl crate::interaction::UserInteraction,
+    ) -> Result<String> {
+        let mut assumption_history = String::new();
+        let mut iteration_count = 0;
+        const MAX_CLARIFICATION_LOOPS: usize = 5;
+
+        loop {
+            if iteration_count >= MAX_CLARIFICATION_LOOPS {
+                break;
+            }
+            iteration_count += 1;
+
+            let prompt = format!(
+                "You are an expert system analyst. I am about to execute a task to create or refine the artifact '{}'.\n\
+                 Here is the current context:\n{}\n\n\
+                 Here is the history of our clarification so far:\n{}\n\n\
+                 Your goal is to identify any ambiguous assumptions that need user clarification before we proceed.\n\
+                 If everything is clear and no major assumptions are being made that require user input, output 'NO_QUESTIONS' as the only text.\n\
+                 Otherwise, output a JSON object with a list of questions. Each question MUST have a `text` field. It CAN have an `options` field (list of strings) if multiple choice is appropriate.\n\
+                 Format:\n\
+                 ```json\n\
+                 {{\n\
+                   \"questions\": [\n\
+                     {{\n\
+                       \"text\": \"The question text\",\n\
+                       \"options\": [\"Option A\", \"Option B\", \"Option C\"]\n\
+                     }}\n\
+                   ]\n\
+                 }}\n\
+                 ```\n\
+                 Respond with ONLY the JSON or 'NO_QUESTIONS'.",
+                target_node, context, assumption_history
+            );
+
+            ui.log_info(&format!("Thinking about assumptions for {}...", target_node));
+            let response = self.client.prompt(&prompt).await?;
+
+            // Simple check for NO_QUESTIONS
+            if response.contains("NO_QUESTIONS") {
+                break;
+            }
+
+            // Parse JSON
+            let json_start = response.find("```json").map(|i| i + 7).unwrap_or(0);
+            let json_end = response.rfind("```").unwrap_or(response.len());
+            let json_str = if json_start < json_end {
+                &response[json_start..json_end]
+            } else {
+                &response
+            };
+
+            let parsed: serde_json::Value = match serde_json::from_str(json_str) {
+                Ok(v) => v,
+                Err(_) => {
+                    warn!("Failed to parse assumption questions JSON. skipping.");
+                    break;
+                }
+            };
+
+            let questions = parsed.get("questions").and_then(|v| v.as_array());
+            if questions.is_none() || questions.unwrap().is_empty() {
+                break;
+            }
+
+            for q in questions.unwrap() {
+                let text = q
+                    .get("text")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("Unknown Question");
+                let options = q.get("options").and_then(|o| o.as_array());
+
+                let answer = if let Some(opts) = options {
+                    let opt_strs: Vec<String> = opts
+                        .iter()
+                        .map(|v| v.as_str().unwrap_or("").to_string())
+                        .collect();
+                    if !opt_strs.is_empty() {
+                        let selection = ui.select_option(text, &opt_strs).await?;
+                        opt_strs[selection].clone()
+                    } else {
+                        ui.ask_user(text).await?
+                    }
+                } else {
+                    ui.ask_user(text).await?
+                };
+
+                assumption_history.push_str(&format!("Q: {}\nA: {}\n\n", text, answer));
+            }
+        }
+
+        Ok(assumption_history)
+    }
+
     async fn execute_action(
         &mut self,
         action: ActionPlan,
@@ -700,6 +797,29 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             if let Some(feedback) = self.verification_feedback.get(&action.target) {
                 context = format!("{}\n\n### FEEDBACK FOR REFINEMENT:\n{}", context, feedback);
             }
+        }
+
+        // Clarify Assumptions (Interactive Loop)
+        let assumptions_qa = self
+            .clarify_assumptions(&action.target, &context, ui)
+            .await?;
+        if !assumptions_qa.is_empty() {
+            // Persist assumptions document
+            let assumption_artifact = serde_json::json!({
+                "target": action.target,
+                "qa_history": assumptions_qa
+            });
+            self.persist_artifact(
+                &format!("{}_assumptions", action.target),
+                &assumption_artifact,
+            )
+            .await?;
+
+            // Add assumptions to context for the main execution
+            context.push_str(&format!(
+                "\n\n### User Clarifications / Assumptions:\n{}\n",
+                assumptions_qa
+            ));
         }
 
         let prompt_template = self
@@ -998,5 +1118,113 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         }
 
         base
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+    use std::sync::{Arc, Mutex};
+    use std::collections::VecDeque;
+
+    #[derive(Clone)]
+    struct MockCliClient {
+        responses: Arc<Mutex<VecDeque<String>>>,
+    }
+
+    impl MockCliClient {
+        fn new(responses: Vec<String>) -> Self {
+            Self {
+                responses: Arc::new(Mutex::new(responses.into())),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl AiCliClient for MockCliClient {
+        async fn prompt(&self, _prompt: &str) -> Result<String> {
+            let mut guard = self.responses.lock().unwrap();
+            if let Some(res) = guard.pop_front() {
+                Ok(res)
+            } else {
+                Ok("NO_QUESTIONS".to_string())
+            }
+        }
+    }
+
+    struct MockUserInteraction {
+        answers: Arc<Mutex<VecDeque<String>>>,
+    }
+
+    impl MockUserInteraction {
+        fn new(answers: Vec<String>) -> Self {
+            Self {
+                answers: Arc::new(Mutex::new(answers.into())),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl crate::interaction::UserInteraction for MockUserInteraction {
+        async fn ask_user(&self, _prompt: &str) -> Result<String> {
+            let mut guard = self.answers.lock().unwrap();
+            Ok(guard.pop_front().unwrap_or_default())
+        }
+
+        async fn ask_for_feature(&self, _prompt: &str) -> Result<String> {
+             Ok("test feature".to_string())
+        }
+
+        async fn confirm(&self, _prompt: &str) -> Result<bool> {
+            Ok(true)
+        }
+
+        async fn select_option(&self, _prompt: &str, options: &[String]) -> Result<usize> {
+            let mut guard = self.answers.lock().unwrap();
+            let answer = guard.pop_front().unwrap_or_default();
+            // Find index of answer in options
+            Ok(options.iter().position(|r| r == &answer).unwrap_or(0))
+        }
+
+        fn start_step(&self, _name: &str) {}
+        fn end_step(&self, _name: &str) {}
+        fn render_artifact(&self, _kind: &str, _data: &serde_json::Value) {}
+        fn log_info(&self, _msg: &str) {}
+        fn log_error(&self, _msg: &str) {}
+    }
+
+    #[tokio::test]
+    async fn test_clarify_assumptions() {
+        // Setup responses:
+        // 1. AI asks a question about database
+        // 2. AI says NO_QUESTIONS
+        let client = MockCliClient::new(vec![
+            r#"{ "questions": [ { "text": "Which DB?", "options": ["Pg", "MySQL"] } ] }"#.to_string(),
+            "NO_QUESTIONS".to_string(),
+        ]);
+
+        let ui = MockUserInteraction::new(vec!["Pg".to_string()]);
+
+        let orchestrator = Orchestrator {
+            app_id: "test".to_string(),
+            app_name: "test".to_string(),
+            work_dir: None,
+            docs_folder: "spec".to_string(),
+            executor: InMemoryExecutor::new(DependencyGraph::new()),
+            artifacts: HashMap::new(),
+            verification_feedback: HashMap::new(),
+            verified_artifacts: std::collections::HashSet::new(),
+            refinement_attempts: HashMap::new(),
+            max_iterations: 10,
+            current_iteration: None,
+            logger: None,
+            client: client,
+        };
+
+        let result = orchestrator.clarify_assumptions("TargetNode", "Context", &ui).await.unwrap();
+
+        assert!(result.contains("Q: Which DB?"));
+        assert!(result.contains("A: Pg"));
     }
 }
