@@ -1,10 +1,45 @@
 ## Ideas
 
-[] Visualizer should have the possibility to create or edit an ontology selected from file disk and allow to download it to disk. It should use AI CLI to help build the ontology with prompts.
+[] - Every node in the graph should have the possibility to be executed by a different AI CLI (cursor, gemini, claude code, copilot, opencode) and a different model. Perhaps, we could define at a higher level configuration like “Creation” verb Relationships in the graph should be executed by a top tier intelligent models, but Verification and Refining could be done by other less intelligent models. Of we could yet add an additional attribute to the Relationship like “LLM type” that would say like “High Reasoning and Intelligence”, “Fast Execution”, “Daily Driver”. 
 
 [] Every ontology node should use the AI CLI to clarify assumptions and make questions back to the user with some options to choose from. It should do this as many times as necessary to resolve all assumptions. After collecting the feedback from the user with the multiple questions, then it can come back to execute the node and pass the information collected with the answers. The questions with the answers should be stored in a document related with the ontology node being executed.
 
-[][] - Every node in the graph should have the possibility to be executed by a different AI CLI (cursor, gemini, claude code, copilot, opencode) and a different model. Perhaps, we could define at a higher level configuration like “Creation” verb Relationships in the graph should be executed by a top tier intelligent models, but Verification and Refining could be done by other less intelligent models. Of we could yet add an additional attribute to the Relationship like “LLM type” that would say like “High Reasoning and Intelligence”, “Fast Execution”, “Daily Driver”. 
+[][] - Every document should have some optional criteria to measure its quality. When it doesn't pass the metric, it goes through the “improvement”/”refinement” edge to iterate once again and make it better or just simply run the node again providing the feedback what to do to reach the desired metrics.
+
+[X]- Every work done by a node should be commited to git. This can help us rollback work done on a node.
+
+[][]- integrate with Telegram (or others) to receive the questions and answers. And be connected 24/7 to the ICL agent and be able to quick ontology runs. The Telegram would work like the CLI interface.
+
+[][]- A node can be configured to Use an LLM call instead of a AI CLI call. But the “Create” files cannot because this is done using the AI CLI agents. There should be a task that uses the AI CLI (opencode) to collect context from folder and pass it to the LLM.
+
+[][] - The loop can grab a ontology dynamicly using AI CLI. At the beginning, when selecting the ontology, there can be a “Let AI Select it” and next step would show you which wss chosen by AI and you can agree or step back to select manually.  Or it there isn't one, ask AI to create one based on your purpose. Once created, you can save it to reuse it later. **Every Ontology should have the amount of times it is used to create a leaderboard of Ontologies publicly**.
+
+[][] -The AI CLI can be an autonomous router itself that will chose the right model with the right CLI for each node in the ontology. Each ontology has a category that can guide the model selection. This we did already I think “ hard task wifh thinking, planing” , “execution task”, “verification task”, “command running task”.
+
+[][]- The AI CLI can also choose ontologies from marketplaces. Anybody can create their own marketplaces. Project scope, team scope, organization scope.
+
+[][]- Ontologies can be assessed and assign a risk profile. Several LLMs could analyse them and emit a score once published in the public marketplace.
+
+[][]- A ontology node can be instructed to call a Skill, a Command, an agent inside the AI CLI. We are not replacing that. We are creating an orchestration layer, context engineering, real world cooperation alike predictable and deterministic execution graph to create certain outcomes, with clear guidelines, verification steps, guardrails, all powered by AI. It is called ontology because the graph ideally should have a semantic meaning.
+
+[][] - Because we can assign AI CLI and the model, we can determine with nodes can execute using local models. If we have granular enough ontologies that are broken down enough, we could have tasks that are low complexity enough to be done by local models or very cheap or free models. The idea is to achieve the balance between how granular to build the ontology so it doesn't create too many tasks that are disconnected from each other because context drifting or other reasons. 
+
+[][] - The ICL can dynamicly create the ontologies as it goes as well. With the Agent definitions and Prompt definitions for each Relationship in the graph.
+
+[][]- CLI ICL = Command line interface Infinite Coding Loop.
+
+[][] - Entity has a Relationship with another Entity. An entity in the left can be an Agent that performs actions. An entity on the right, can be an entity Agent to be inherited, or a Document to be created or a Document to be used as Context by another entity, be it Document or Agent.
+
+[][] - The ontology can have hooks as well. For example, a notification hook to know the progess of the ontology. An approval hook to stop the ontology in every Node or only certain nodes to ask for human feedback or approval. The hooks could be commands or POST endpoints attached to Entity types or Entity Names or Relationship types or Relationship names. All can be defined together in the ontology. Calling and MCP needs to be done by the AI CLI. Everything inside the CLI will run as it does nowadays and with all the improvements to come.
+
+[][] - Eventually, the AI CLIs will actually integrate with the ontologies. The Idea is that it becomes a first class citizen, like a Command or a Skill. Instead it is an ontology that has a description a clear graph of steps, prompts, hooks, to follow and when calling the AI CLI, it can call itself the CLI that it is running from.
+
+[][] - The ontology CLI has to stream in a strict JSON schema the progress of execution of the ontology in a interoperable easy to access interface by the calling clients, which they can plug in to it optionally.
+
+[][] - An entity Agent on the Left on the Relationship in the ontology, can have a inheritance Relationship with an entity Agent on the Right. Senior Engineer inherits Software Architect. And what will happen is that the prompts will get joined by the AI CLI into a combined Prompt in Runtime and be used for the Senior Engineer (Agent on the Left)
+
+[] Visualizer should have the possibility to create or edit an ontology selected from file disk and allow to download it to disk. It should use AI CLI to help build the ontology with prompts.
+
 
 [][] - The Visualizer should guide the creation of the Ontology.
 
