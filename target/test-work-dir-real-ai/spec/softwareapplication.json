@@ -1,4 +1,13 @@
 {
-  "goal": "Build a simple CLI tool that prints Hello World in Rust",
-  "name": "Test App Real"
+  "app_goal": "Build a simple CLI tool that prints Hello World in Rust",
+  "app_name": "Test App Real",
+  "description": "The application shall be a command-line interface tool implemented in Rust. When executed, it must print the exact string 'Hello World' to the standard output.",
+  "id": "REQ-001",
+  "name": "CLI Hello World Tool",
+  "priority": "High",
+  "status": "Implemented",
+  "source_files": [
+    "Cargo.toml",
+    "src/main.rs"
+  ]
 }
