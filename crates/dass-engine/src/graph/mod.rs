@@ -84,6 +84,11 @@ pub struct MetaEntity {
     pub name: String,
     #[serde(rename = "type")]
     pub entity_type: Option<String>,
+    #[serde(rename = "modelType")]
+    pub model_type: Option<String>,
+    pub model: Option<String>,
+    #[serde(rename = "aiCli")]
+    pub ai_cli: Option<String>,
 }
 
 // 2. The In-Memory Graph
@@ -101,6 +106,7 @@ pub struct DependencyGraph {
     // Data-driven verb categories (replaces hardcoded from_str matching)
     pub edge_categories: HashMap<(String, String, String), RelationCategory>,
     pub loop_configs: HashMap<(String, String, String), LoopConfig>,
+    pub node_configs: HashMap<String, MetaEntity>, // Key: Entity Name, Value: MetaEntity
 }
 
 impl Default for DependencyGraph {
@@ -122,6 +128,7 @@ impl DependencyGraph {
             node_types: HashMap::new(),
             edge_categories: HashMap::new(),
             loop_configs: HashMap::new(),
+            node_configs: HashMap::new(),
         }
     }
 
@@ -284,12 +291,18 @@ impl DependencyGraph {
             }
 
             // Capture Node Types
-            if let Some(t) = rel.source.entity_type {
+            if let Some(t) = rel.source.entity_type.clone() {
                 dg.node_types.insert(source_str.clone(), t);
             }
-            if let Some(t) = rel.target.entity_type {
+            if let Some(t) = rel.target.entity_type.clone() {
                 dg.node_types.insert(target_str.clone(), t);
             }
+
+            // Capture Node Configs (containing model overrides)
+            dg.node_configs
+                .insert(source_str.clone(), rel.source.clone());
+            dg.node_configs
+                .insert(target_str.clone(), rel.target.clone());
 
             // Infer Prompt Path
             let prompt_filename = format!("{}_{}_{}.md", source_str, relation_str, target_str);

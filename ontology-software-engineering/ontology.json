@@ -48,7 +48,8 @@
     },
     "target": {
       "name": "ArchitectureStyle",
-      "type": "Other"
+      "type": "Other",
+      "modelType": "High Reasoning"
     },
     "type": {
       "name": "defines",
@@ -384,7 +385,8 @@
     },
     "target": {
       "name": "DesignSpec",
-      "type": "Document"
+      "type": "Document",
+      "model": "o1-pro"
     },
     "type": {
       "name": "creates",

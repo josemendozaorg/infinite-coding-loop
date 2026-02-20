@@ -27,6 +27,23 @@
                     ],
                     "default": "Other",
                     "description": "The functional classification of this entity."
+                },
+                "modelType": {
+                    "type": "string",
+                    "enum": [
+                        "High Reasoning",
+                        "Fast Execution",
+                        "Daily Driver"
+                    ],
+                    "description": "Classification of the node according to intelligence/execution-speed tiers."
+                },
+                "model": {
+                    "type": "string",
+                    "description": "Specific AI model override for this node."
+                },
+                "aiCli": {
+                    "type": "string",
+                    "description": "Specific AI CLI override for this node."
                 }
             }
         },

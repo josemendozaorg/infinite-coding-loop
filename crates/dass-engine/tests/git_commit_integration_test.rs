@@ -37,7 +37,11 @@ struct TrackingMockCliClient {
 
 #[async_trait]
 impl AiCliClient for TrackingMockCliClient {
-    async fn prompt(&self, prompt: &str) -> Result<String> {
+    async fn prompt(
+        &self,
+        prompt: &str,
+        _options: dass_engine::graph::executor::ExecutionOptions,
+    ) -> Result<String> {
         self.prompts_received
             .lock()
             .unwrap()
