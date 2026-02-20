@@ -1,0 +1,77 @@
+{
+  "DomainDrivenDesign": {
+    "architecturalDecisions": [
+      "Initially, a single bounded context 'CheeseCatalog' is sufficient given the clear and focused application goal.",
+      "The 'CheeseType' entity will serve as the aggregate root for managing all related cheese information."
+    ],
+    "boundedContexts": [
+      {
+        "aggregates": [
+          {
+            "description": "Represents a distinct type of cheese from Boyaca, acting as the aggregate root.",
+            "entities": [
+              {
+                "attributes": {
+                  "characteristics": "Flavor profile, texture, aging process, etc.",
+                  "description": "Detailed description of the cheese",
+                  "id": "Unique identifier for the cheese type",
+                  "imageUrl": "URL to an image of the cheese",
+                  "name": "Name of the cheese type",
+                  "origin": "Specific origin within Boyaca (e.g., town, municipality)"
+                },
+                "name": "CheeseType"
+              }
+            ],
+            "name": "CheeseType",
+            "repositories": [
+              {
+                "description": "Provides mechanisms to retrieve and persist CheeseType aggregates.",
+                "name": "CheeseTypeRepository",
+                "operations": [
+                  "findById(id)",
+                  "searchByName(namePart)",
+                  "searchByOrigin(origin)"
+                ]
+              }
+            ],
+            "valueObjects": [
+              "Name",
+              "Description",
+              "Origin",
+              "Characteristics",
+              "ImageUrl"
+            ]
+          }
+        ],
+        "description": "Manages the data and logic related to different types of cheeses from Boyaca, including their details and search capabilities.",
+        "domainServices": [
+          {
+            "description": "Orchestrates the search for CheeseTypes within the CheeseCatalog bounded context.",
+            "methods": [
+              "findCheeses(criteria): List<CheeseType>"
+            ],
+            "name": "CheeseSearchService"
+          }
+        ],
+        "modules": [
+          "Domain",
+          "Application",
+          "Infrastructure",
+          "Presentation"
+        ],
+        "name": "CheeseCatalog"
+      }
+    ],
+    "ubiquitousLanguage": {
+      "Boyaca": "The region in Colombia known for these cheeses.",
+      "Cheese": "A specific type of cheese.",
+      "CheeseType": "A variety of cheese originating from Boyaca, with specific characteristics.",
+      "Search": "The action of finding cheese types based on criteria.",
+      "User": "The end-user interacting with the application."
+    }
+  },
+  "SoftwareApplication": {
+    "goal": "The user can search in a web application what are the different types of Cheeses from Boyaca.",
+    "name": "El Suero Boyaco"
+  }
+}
