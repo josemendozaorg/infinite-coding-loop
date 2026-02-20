@@ -1,0 +1,9 @@
+{
+  "Requirement": {
+    "description": "Develop a command-line interface (CLI) tool in Rust that, when executed, prints the string \"Hello World\" to the console.",
+    "id": "REQ-001",
+    "name": "Hello World CLI Tool",
+    "priority": "High",
+    "status": "Proposed"
+  }
+}
