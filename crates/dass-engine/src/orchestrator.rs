@@ -43,8 +43,8 @@ pub struct Orchestrator<C: AiCliClient + Clone + Send + Sync + 'static> {
     pub current_iteration: Option<IterationInfo>,
     // Execution logger for full traceability
     pub logger: Option<IterationLogger>,
-    // Marker for the client generic, or we can store it if needed later
-    _client: std::marker::PhantomData<C>,
+    // The client used to interact with the AI
+    pub client: C,
 }
 
 impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
@@ -121,7 +121,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             max_iterations: 100,
             current_iteration: None,
             logger: None,
-            _client: std::marker::PhantomData,
+            client,
         })
     }
 
@@ -884,6 +884,31 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                 self.persist_artifact(&action.target, &result).await?;
 
                 self.verified_artifacts.remove(&action.target);
+
+                // Instruct AI CLI to commit the changes
+                let commit_prompt = format!(
+                    "The agent {} has successfully {} the artifact {}. Please stage all changes (`git add .`) and commit them to the git repository with a descriptive message like '{} {} {}'. Execute the git commands to commit the work.",
+                    action.agent,
+                    if action.category == RelationCategory::Creation {
+                        "created"
+                    } else {
+                        "refined"
+                    },
+                    action.target,
+                    if action.category == RelationCategory::Creation {
+                        "Create"
+                    } else {
+                        "Refine"
+                    },
+                    action.target,
+                    "artifact"
+                );
+
+                if let Err(e) = self.client.prompt(&commit_prompt).await {
+                    warn!("Failed to commit changes via AI CLI: {}", e);
+                } else {
+                    info!("Successfully committed changes to git via AI CLI.");
+                }
 
                 if action.category == RelationCategory::Refinement {
                     self.verification_feedback.remove(&action.target);
