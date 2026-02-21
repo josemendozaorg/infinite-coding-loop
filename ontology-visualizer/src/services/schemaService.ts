@@ -2,28 +2,16 @@ import type { OntologyData, Node, Edge } from '../types';
 import { MarkerType } from 'reactflow';
 import Ajv from 'ajv/dist/2020';
 
+// Import local JSON schemas statically
+import ontologySchema from '@icl/ontology-schema/meta/ontology.schema.json';
+import baseSchema from '@icl/ontology-schema/meta/base.schema.json';
+// Import the actual ontology data statically
+import ontology from '../../../ontology-software-engineering/ontology.json';
+
 const ajv = new Ajv({ useDefaults: true });
-
-// In a real app, these would be fetched from an API or read via File System API
-// For this demo, we'll try to use the raw files if possible or mock them if fetch fails
-const BASE_PATH = '/';
-
-async function loadJSON(path: string) {
-    const response = await fetch(`${BASE_PATH}${path}`);
-    if (!response.ok) {
-        throw new Error(`Failed to load ${path}: ${response.statusText}`);
-    }
-    return response.json();
-}
 
 export async function loadOntology(): Promise<OntologyData> {
     try {
-        const [ontology, ontologySchema, baseSchema] = await Promise.all([
-            loadJSON('ontology.json'),
-            loadJSON('schemas/meta/ontology.schema.json'),
-            loadJSON('schemas/meta/base.schema.json')
-        ]);
-
         // Defensive schema registration
         if (!ajv.getSchema("base.schema.json")) {
             ajv.addSchema(baseSchema, "base.schema.json");

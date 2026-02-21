@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@icl/ontology-schema": "file:../ontology-schema",
     "@monaco-editor/react": "^4.7.0",
     "ajv": "^8.17.1",
     "dagre": "^0.8.5",

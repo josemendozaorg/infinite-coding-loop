@@ -22,7 +22,7 @@ pub fn default_docs_folder() -> String {
 
 impl IclConfig {
     pub fn validate(&self) -> Result<()> {
-        let schema_json = include_str!("../ontology/schemas/meta/icl.schema.json");
+        let schema_json = include_str!("../../../ontology-schema/meta/icl.schema.json");
         let schema_val: Value = serde_json::from_str(schema_json)?;
         let compiled = JSONSchema::compile(&schema_val)
             .map_err(|e| anyhow::anyhow!("Failed to compile schema: {}", e))?;

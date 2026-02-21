@@ -143,7 +143,8 @@ impl DependencyGraph {
 
         // 0. Validate? (Optional, handled by serde type checking to some extent)
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let engine_meta_root = std::path::Path::new(manifest_dir).join("ontology/schemas/meta");
+        let engine_meta_root =
+            std::path::Path::new(manifest_dir).join("../../ontology-schema/meta");
 
         // Load Meta Schemas for validation
         let mut meta_files = Vec::new();
