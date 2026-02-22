@@ -1,0 +1,90 @@
+{
+  "microservices_architecture": {
+    "data_management_strategy": "Adhering to the 'Database per Service' pattern, each microservice will own and manage its data store, ensuring autonomy, isolating failures, and allowing independent technological choices. The 'Repository Pattern', as defined in the high-level architecture, will be consistently applied within each service to abstract data access from business logic, promoting maintainability and testability.",
+    "link_to_architecture_style_summary": "This microservices architecture enhances the 'Layered (N-tier) Architecture' by distributing concerns into independently deployable units. Each microservice essentially embodies elements of the Application and Data Access layers for a specific domain, while the Frontend Service and API Gateway align with the Presentation Layer. This approach maintains clear separation of concerns, improving scalability, maintainability, and allowing for heterogeneous technology stacks, as envisioned by the foundational layered design.",
+    "objective": "To define a microservices architecture for 'El Suero Boyaco' that allows for scalable search and management of cheese types from Boyaca, building upon the foundational Layered Architecture principles.",
+    "overall_communication_strategy": "The primary communication protocol will be RESTful HTTP with JSON payloads over HTTPS for synchronous interactions. This provides flexibility, wide tool support, and ease of debugging. For future needs involving asynchronous events or real-time updates (e.g., notifying the Search Service of new cheese entries), a message broker (e.g., Apache Kafka, RabbitMQ) can be introduced to enable event-driven communication.",
+    "services": [
+      {
+        "communication": {
+          "interactions": [
+            "Initiates requests to the API Gateway for search queries and cheese details."
+          ],
+          "type": "Synchronous, RESTful HTTP (JSON over HTTPS)"
+        },
+        "data_management": {
+          "strategy": "Stateless; manages UI state locally (e.g., in-memory, browser storage) without a persistent database."
+        },
+        "link_to_layered_architecture": "Represents the 'Presentation Layer' where user interactions are managed and data is visually presented.",
+        "name": "Frontend Service",
+        "responsibilities": [
+          "Serving all static web assets (HTML, CSS, JavaScript).",
+          "Handling user interactions and presenting the search interface.",
+          "Displaying search results and detailed information for individual cheese types."
+        ]
+      },
+      {
+        "communication": {
+          "interactions": [
+            "Receives requests from the Frontend Service.",
+            "Forwards requests to the Cheese Catalog Service and Search Service.",
+            "Receives responses from backend services and forwards them to the Frontend Service."
+          ],
+          "type": "Synchronous, RESTful HTTP (JSON over HTTPS)"
+        },
+        "data_management": {
+          "strategy": "Stateless; may use transient caching for performance (e.g., Redis) but does not have a primary persistent data store."
+        },
+        "link_to_layered_architecture": "Functions as a facade for the 'Application Layer', providing a controlled entry point and abstracting internal service structures from the client.",
+        "name": "API Gateway",
+        "responsibilities": [
+          "Acts as a single entry point for all client requests, routing them to the appropriate backend microservices.",
+          "Handles cross-cutting concerns such as authentication, authorization, rate limiting, and request logging.",
+          "Aggregates responses from multiple services if necessary before sending them to the client."
+        ]
+      },
+      {
+        "communication": {
+          "interactions": [
+            "Receives requests from the API Gateway and potentially the Search Service.",
+            "Provides cheese data in response to queries."
+          ],
+          "type": "Synchronous, RESTful HTTP (JSON over HTTPS)"
+        },
+        "data_management": {
+          "database_type": "Relational Database (e.g., PostgreSQL, MySQL)",
+          "strategy": "Owns its dedicated relational database (e.g., PostgreSQL or MySQL) to ensure data independence. Data access will strictly adhere to the 'Repository Pattern' to abstract persistence logic from business logic."
+        },
+        "link_to_layered_architecture": "Embodies a core part of the 'Application Layer' by containing critical business logic related to cheese data, and internally manages its own 'Data Access Layer' through the Repository Pattern.",
+        "name": "Cheese Catalog Service",
+        "responsibilities": [
+          "Manages the master data for all cheese types from Boyaca (CRUD operations).",
+          "Stores detailed attributes for each cheese, suchs as name, origin, milk type, description, etc.",
+          "Provides APIs for retrieving cheese information by ID, name, or other specific attributes."
+        ]
+      },
+      {
+        "communication": {
+          "interactions": [
+            "Receives search requests from the API Gateway.",
+            "Makes requests to the Cheese Catalog Service to fetch raw cheese data.",
+            "Returns processed search results to the API Gateway."
+          ],
+          "type": "Synchronous, RESTful HTTP (JSON over HTTPS)"
+        },
+        "data_management": {
+          "database_type": "Search Index (e.g., Elasticsearch, Apache Solr) - optional, based on scale requirements.",
+          "strategy": "Primarily stateless, relying on the Cheese Catalog Service for source data. If a dedicated search index is implemented, this service will manage that index as its own data store (e.g., Elasticsearch index)."
+        },
+        "link_to_layered_architecture": "A specialized component within the 'Application Layer', focused on a specific business capability (search) and interacting with other application components and their data.",
+        "name": "Search Service",
+        "responsibilities": [
+          "Receives search queries from the API Gateway.",
+          "Interacts with the Cheese Catalog Service to retrieve relevant cheese data based on query parameters.",
+          "Applies filtering, sorting, and pagination logic to the results.",
+          "Optimizes search performance, potentially by managing and querying a dedicated search index (e.g., Elasticsearch, Apache Solr) if needed for scale."
+        ]
+      }
+    ]
+  }
+}

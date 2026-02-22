@@ -388,29 +388,77 @@ async fn main() -> Result<()> {
 
     println!("{}", style("Running in LIVE MODE (calling AI CLI)").green());
 
-    // Model selection: use CLI flag or prompt user
-    let model = if let Some(ref m) = args.model {
-        m.clone()
-    } else {
-        let models = vec![
-            "gemini-3-pro-preview".to_string(),
-            "gemini-3-flash-preview".to_string(),
-            "gemini-2.5-pro".to_string(),
-            "gemini-2.5-flash".to_string(),
-            "gemini-2.5-flash-lite".to_string(),
-        ];
-        let selection = Select::with_theme(&ColorfulTheme::default())
-            .with_prompt("Select AI model")
-            .items(&models)
-            .default(0)
-            .interact()?;
-        models[selection].clone()
-    };
-    println!("{}", style(format!("Using model: {}", model)).dim());
+    // CLI defaults & category mapping Prompt
+    use dass_engine::graph::executor::ExecutionOptions;
+    use std::collections::HashMap;
 
+    let models = vec![
+        "gemini-3-pro-preview".to_string(),
+        "gemini-3-flash-preview".to_string(),
+        "gemini-2.5-pro".to_string(),
+        "gemini-2.5-flash".to_string(),
+        "gemini-2.5-flash-lite".to_string(),
+        "Custom...".to_string(),
+    ];
+
+    let mut category_defaults = HashMap::new();
+    let categories_to_map = vec!["High Reasoning", "Fast Execution", "Daily Driver"];
+
+    println!(
+        "{}",
+        style("Please map AI models to execution categories:")
+            .magenta()
+            .bold()
+    );
+
+    // Default fallback model if the user skips or uses `-m` flag.
+    let global_model = if let Some(ref m) = args.model {
+        Some(m.clone())
+    } else {
+        None
+    };
+
+    for category in categories_to_map {
+        let model_for_cat = if let Some(ref m) = global_model {
+            m.clone()
+        } else {
+            let selection = Select::with_theme(&ColorfulTheme::default())
+                .with_prompt(&format!(
+                    "Select model for category: {}",
+                    style(category).cyan()
+                ))
+                .items(&models)
+                .default(3) // Default to flash
+                .interact()?;
+
+            if models[selection] == "Custom..." {
+                Input::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Enter custom model string")
+                    .interact_text()?
+            } else {
+                models[selection].clone()
+            }
+        };
+
+        category_defaults.insert(
+            category.to_string(),
+            ExecutionOptions {
+                model_type: Some(category.to_string()),
+                model: Some(model_for_cat.clone()),
+                ai_cli: Some("gemini".to_string()), // Default to gemini for now
+            },
+        );
+        println!(
+            "{} mapped to {}",
+            style(category).cyan(),
+            style(&model_for_cat).green()
+        );
+    }
+
+    // Prepare default shell client (still used for commands not tied to a category, like git commit)
     let client = ShellCliClient::new("gemini", final_work_dir.to_string_lossy().to_string())
         .with_yolo(args.yolo)
-        .with_model(model)
+        .with_model(global_model.unwrap_or_else(|| "gemini-2.5-flash".to_string()))
         .with_debug(args.debug_ai_cli)
         .with_output_format(args.output_format.clone());
 
@@ -424,7 +472,8 @@ async fn main() -> Result<()> {
     )
     .await?
     .with_max_iterations(args.max_iterations)
-    .with_docs_folder(docs_folder);
+    .with_docs_folder(docs_folder)
+    .with_category_defaults(category_defaults);
 
     let ui = CliInteraction::new(args.clone());
 

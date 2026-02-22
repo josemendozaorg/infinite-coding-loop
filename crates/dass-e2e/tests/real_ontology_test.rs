@@ -75,7 +75,11 @@ impl MockSchemaCompliantClient {
 
 #[async_trait]
 impl AiCliClient for MockSchemaCompliantClient {
-    async fn prompt(&self, prompt_text: &str) -> Result<String> {
+    async fn prompt(
+        &self,
+        prompt_text: &str,
+        _options: dass_engine::graph::executor::ExecutionOptions,
+    ) -> Result<String> {
         // println!("MOCK PROMPT: {}", prompt_text); // Debugging
 
         // 1. Check for Verification prompt (usually asks to verify X)

@@ -11,7 +11,11 @@ use async_trait::async_trait;
 #[async_trait]
 pub trait AiCliClient: Send + Sync {
     /// Sends a prompt to the AI and returns the response.
-    async fn prompt(&self, prompt_text: &str) -> Result<String>;
+    async fn prompt(
+        &self,
+        prompt_text: &str,
+        options: crate::graph::executor::ExecutionOptions,
+    ) -> Result<String>;
 }
 
 /// A real implementation that calls a CLI command (default: gemini).
@@ -65,13 +69,17 @@ impl ShellCliClient {
 
 #[async_trait]
 impl AiCliClient for ShellCliClient {
-    async fn prompt(&self, prompt_text: &str) -> Result<String> {
+    async fn prompt(
+        &self,
+        prompt_text: &str,
+        options: crate::graph::executor::ExecutionOptions,
+    ) -> Result<String> {
         let max_retries = 3u32;
         let mut attempt = 0u32;
 
         loop {
             attempt += 1;
-            let result = self.execute_prompt(prompt_text).await;
+            let result = self.execute_prompt(prompt_text, &options).await;
 
             match result {
                 Ok(output) => return Ok(output),
@@ -102,12 +110,21 @@ impl AiCliClient for ShellCliClient {
 }
 
 impl ShellCliClient {
-    async fn execute_prompt(&self, prompt_text: &str) -> Result<String> {
+    async fn execute_prompt(
+        &self,
+        prompt_text: &str,
+        options: &crate::graph::executor::ExecutionOptions,
+    ) -> Result<String> {
         let work_dir = self.work_dir.clone();
-        let executable = self.executable.clone();
+
+        let executable = options
+            .ai_cli
+            .clone()
+            .unwrap_or_else(|| self.executable.clone());
+        let model = options.model.clone().or_else(|| self.model.clone());
+
         let prompt_text_owned = prompt_text.to_string();
         let yolo = self.yolo;
-        let model = self.model.clone();
 
         let mut cmd = Command::new(&executable);
         cmd.current_dir(&work_dir);
@@ -231,7 +248,11 @@ pub mod mocks {
 
     #[async_trait]
     impl AiCliClient for MockCliClient {
-        async fn prompt(&self, _prompt: &str) -> Result<String> {
+        async fn prompt(
+            &self,
+            _prompt: &str,
+            _options: crate::graph::executor::ExecutionOptions,
+        ) -> Result<String> {
             let mut guard = self.responses.lock().unwrap();
             if let Some(res) = guard.pop_front() {
                 Ok(res)

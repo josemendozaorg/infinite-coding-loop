@@ -1,0 +1,17 @@
+{
+  "acceptanceCriteria": [
+    "The tool compiles successfully without errors.",
+    "Executing the tool from the command line outputs 'Hello World'.",
+    "The tool terminates gracefully after printing the message."
+  ],
+  "description": "The application shall be a command-line interface tool developed in Rust. When executed, it shall print the string 'Hello World' to the standard output.",
+  "id": "REQ-001",
+  "priority": "High",
+  "sourceGoal": {
+    "SoftwareApplication": {
+      "goal": "Build a simple CLI tool that prints Hello World in Rust",
+      "name": "Test App Real"
+    }
+  },
+  "title": "Hello World CLI Tool in Rust"
+}

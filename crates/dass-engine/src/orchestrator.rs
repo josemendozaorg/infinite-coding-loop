@@ -45,6 +45,8 @@ pub struct Orchestrator<C: AiCliClient + Clone + Send + Sync + 'static> {
     pub logger: Option<IterationLogger>,
     // The client used to interact with the AI
     pub client: C,
+    // Category mapping defaults
+    pub category_defaults: HashMap<String, crate::graph::executor::ExecutionOptions>,
 }
 
 impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
@@ -122,6 +124,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
             current_iteration: None,
             logger: None,
             client,
+            category_defaults: HashMap::new(),
         })
     }
 
@@ -132,6 +135,14 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
 
     pub fn with_docs_folder(mut self, folder: String) -> Self {
         self.docs_folder = folder;
+        self
+    }
+
+    pub fn with_category_defaults(
+        mut self,
+        defaults: HashMap<String, crate::graph::executor::ExecutionOptions>,
+    ) -> Self {
+        self.category_defaults = defaults;
         self
     }
 
@@ -749,11 +760,25 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                 .await;
         }
 
+        // Map the execution options
+        let options = self
+            .executor
+            .graph
+            .node_configs
+            .get(&action.target)
+            .map(|config| crate::graph::executor::ExecutionOptions {
+                model_type: config.model_type.clone(),
+                model: config.model.clone(),
+                ai_cli: config.ai_cli.clone(),
+            })
+            .unwrap_or_default();
+
         let task = Task {
             id: format!("task_{}_{}", action.relation, action.target),
             description: format!("{} {}", action.relation, action.target),
             inputs: vec![],
             prompt: Some(enhanced_prompt),
+            options,
         };
 
         let result = match self.executor.dispatch_agent(agent_role, task).await {
@@ -904,7 +929,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                     "artifact"
                 );
 
-                if let Err(e) = self.client.prompt(&commit_prompt).await {
+                if let Err(e) = self.client.prompt(&commit_prompt, Default::default()).await {
                     warn!("Failed to commit changes via AI CLI: {}", e);
                 } else {
                     info!("Successfully committed changes to git via AI CLI.");

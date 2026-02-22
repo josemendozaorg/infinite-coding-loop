@@ -112,7 +112,7 @@ impl<C: AiCliClient + Send + Sync> Agent for GenericAgent<C> {
             prompt
         };
 
-        let response = self.client.prompt(&full_prompt).await?;
+        let response = self.client.prompt(&full_prompt, task.options).await?;
         let cleaned = self.clean_response(&response);
 
         // Try parsing as JSON first
@@ -148,7 +148,11 @@ mod tests {
     struct MockClient;
     #[async_trait]
     impl AiCliClient for MockClient {
-        async fn prompt(&self, _p: &str) -> Result<String> {
+        async fn prompt(
+            &self,
+            _p: &str,
+            _options: crate::graph::executor::ExecutionOptions,
+        ) -> Result<String> {
             Ok("".into())
         }
     }

@@ -8,12 +8,20 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 // Task definition matching Plan.tasks schema partially
+#[derive(Debug, Clone, Default)]
+pub struct ExecutionOptions {
+    pub model_type: Option<String>,
+    pub model: Option<String>,
+    pub ai_cli: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Task {
     pub id: String,
     pub description: String,
     pub inputs: Vec<String>, // IDs of input artifacts
     pub prompt: Option<String>,
+    pub options: ExecutionOptions,
 }
 
 #[async_trait]

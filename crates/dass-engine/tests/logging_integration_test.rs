@@ -34,7 +34,11 @@ struct MockCliClient;
 
 #[async_trait]
 impl AiCliClient for MockCliClient {
-    async fn prompt(&self, _prompt: &str) -> Result<String> {
+    async fn prompt(
+        &self,
+        _prompt: &str,
+        _options: dass_engine::graph::executor::ExecutionOptions,
+    ) -> Result<String> {
         Ok(r#"{"result": "mocked response", "name": "Feature"}"#.to_string())
     }
 }
