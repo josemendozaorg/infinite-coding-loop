@@ -1,0 +1,10 @@
+{
+    "$id": "https://pulpo.dev/schemas/meta/ontology.schema.json",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "Meta-Ontology",
+    "description": "Validates a DASS-compatible ontology as an array of relationships.",
+    "type": "array",
+    "items": {
+        "$ref": "base.schema.json#/$defs/MetaRelationship"
+    }
+}

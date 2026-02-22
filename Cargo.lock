@@ -424,72 +424,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dass-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "clap",
- "console 0.16.2",
- "dass-engine",
- "dialoguer",
- "indicatif",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
-name = "dass-e2e"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "dass-engine",
- "petgraph",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "dass-engine"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "console 0.16.2",
- "jsonschema",
- "petgraph",
- "serde",
- "serde_json",
- "serde_yaml",
- "sqlx",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "dass-tui"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "crossterm",
- "dass-engine",
- "ratatui",
- "serde_json",
- "tokio",
-]
-
-[[package]]
 name = "der"
 version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1461,21 +1395,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
-name = "ontology-tools"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "console 0.15.11",
- "dass-engine",
- "petgraph",
- "rio_api",
- "rio_turtle",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "oxilangtag"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1620,6 +1539,87 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "535d180e0ecab6268a3e718bb9fd44db66bbbc256257165fc699dadf70d16fe7"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "pulpo-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "clap",
+ "console 0.16.2",
+ "dialoguer",
+ "indicatif",
+ "pulpo-engine",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "pulpo-e2e"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "petgraph",
+ "pulpo-engine",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "pulpo-engine"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "console 0.16.2",
+ "jsonschema",
+ "petgraph",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "pulpo-tools"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "console 0.15.11",
+ "petgraph",
+ "pulpo-engine",
+ "rio_api",
+ "rio_turtle",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "pulpo-tui"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "crossterm",
+ "pulpo-engine",
+ "ratatui",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

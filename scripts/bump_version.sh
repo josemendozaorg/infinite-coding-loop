@@ -13,11 +13,11 @@ if [ -z "$1" ]; then
 fi
 
 BUMP_TYPE=$1
-CORE_CARGO_TOML="packages/dass-engine/Cargo.toml"
-CLI_CARGO_TOML="apps/dass-cli/Cargo.toml"
-TUI_CARGO_TOML="apps/dass-tui/Cargo.toml"
-TOOLS_CARGO_TOML="packages/ontology-tools/Cargo.toml"
-E2E_CARGO_TOML="tests/dass-e2e/Cargo.toml"
+CORE_CARGO_TOML="packages/pulpo-engine/Cargo.toml"
+CLI_CARGO_TOML="apps/pulpo-cli/Cargo.toml"
+TUI_CARGO_TOML="apps/pulpo-tui/Cargo.toml"
+TOOLS_CARGO_TOML="packages/pulpo-tools/Cargo.toml"
+E2E_CARGO_TOML="tests/pulpo-e2e/Cargo.toml"
 
 # Check if files exist
 if [ ! -f "$CORE_CARGO_TOML" ]; then
@@ -25,7 +25,7 @@ if [ ! -f "$CORE_CARGO_TOML" ]; then
     exit 1
 fi
 
-# Get current version from crates/dass-engine/Cargo.toml
+# Get current version from crates/pulpo-engine/Cargo.toml
 # Assumes 'version = "x.y.z"' is in the first few lines
 CURRENT_VERSION=$(grep '^version = ' "$CORE_CARGO_TOML" | head -n 1 | cut -d '"' -f 2)
 

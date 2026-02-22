@@ -1,0 +1,39 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://pulpo.dev/schemas/entities/change_request.schema.json",
+    "title": "ChangeRequest",
+    "description": "A formal proposal to modify any artifact (SWEBOK: Configuration Control).",
+    "allOf": [
+        {
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "$ref": "../taxonomy.schema.json#/$defs/Kind_ChangeRequest"
+                },
+                "target_entity_id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "status": {
+                    "enum": [
+                        "Proposed",
+                        "Approved",
+                        "Rejected",
+                        "Implemented"
+                    ]
+                }
+            },
+            "required": [
+                "kind",
+                "target_entity_id",
+                "status"
+            ]
+        }
+    ]
+}

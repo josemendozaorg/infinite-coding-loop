@@ -6,8 +6,8 @@ members = [
   "tests/*"
 ]
 exclude = [
-  "apps/ontology-visualizer",
-  "packages/ontology-schema"
+  "apps/pulpo-visualizer",
+  "packages/pulpo-schema"
 ]
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }

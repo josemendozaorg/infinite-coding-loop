@@ -1,0 +1,37 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://pulpo.dev/schemas/entities/user_story.schema.json",
+    "title": "UserStory",
+    "description": "A description of a feature from an end-user perspective.",
+    "allOf": [
+        {
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "role": {
+                    "type": "string",
+                    "description": "The user role (As a <role>)"
+                },
+                "feature": {
+                    "type": "string",
+                    "description": "The capability (I want <feature>)"
+                },
+                "benefit": {
+                    "type": "string",
+                    "description": "The value (So that <benefit>)"
+                },
+                "story_points": {
+                    "type": "integer",
+                    "description": "Estimation of effort"
+                }
+            },
+            "required": [
+                "role",
+                "feature",
+                "benefit"
+            ]
+        }
+    ]
+}

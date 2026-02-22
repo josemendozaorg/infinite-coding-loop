@@ -1,0 +1,26 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://pulpo.dev/schemas/entities/data_model.schema.json",
+    "title": "DataModel",
+    "allOf": [
+        {
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "$ref": "../taxonomy.schema.json#/$defs/Kind_DataModel"
+                },
+                "schema_definition": {
+                    "type": "string",
+                    "description": "SQL or JSON schema content"
+                }
+            },
+            "required": [
+                "kind",
+                "schema_definition"
+            ]
+        }
+    ]
+}

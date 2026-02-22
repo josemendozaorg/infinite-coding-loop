@@ -110,7 +110,7 @@ The schema of the ontology should support to categorize the node according to hi
 
 [][]- infinite loop- the orchestrator should be a state machine. Each node id a agent working on a primitive (use Temporal?) Each Agent Asks Questions to human with a template for each they have to generate to resolve assumptions. The git agent must be present after each agent finishes its work. Also to open a branch PR for each feature. Also for initializing a repo in a Git organisation with gh cli.
 
-[X] The visualizater should have an option button to visualize the graph in the same way it will be executed by the engine, in which sequence from first to last and on each step see what context is needed. This is how the ontology-tools display it now.
+[X] The visualizater should have an option button to visualize the graph in the same way it will be executed by the engine, in which sequence from first to last and on each step see what context is needed. This is how the pulpo-tools display it now.
 
 [X] We should be able to choose the ontology to execute for every iteration of the infinite coding loop.
 
@@ -169,21 +169,21 @@ Attempt 1 failed: You have exhausted your capacity on this model. Your quota wil
     AI CLI SUCCESS
     2026-02-10T00:11:41.065331Z  WARN Artifact validation failed for Code: Artifact validation failed for Code:
 
-[] Regardless if there is a relationship/prompt or not, the dass-engine must load the schema for the document to create if it exists any in the folder /schema.
+[] Regardless if there is a relationship/prompt or not, the pulpo-engine must load the schema for the document to create if it exists any in the folder /schema.
 
 [] We need to have a full execution log to be able to capture and report bugs in the middle of an iteration. So that we can provide the log to the AI to help fix it.
 
 [] Show the graph execution progress in the UI as we progress. Also show the context that is loaded for each of the relationships in the graph.
 
-[] Some documents like TDD, DDD, CodingStyle, CodingStandards, Microservices, ArchitectureStyle, etc, do not need to be generated every time. Perhaps they just need to be generated once and be available to be loaded by the dass-engine. We could create a library of those type of documents to be reused and loaded by the dass-engine. And then we could create a entity type like: Library Document, which would allow to select a document from the library to be loaded.
+[] Some documents like TDD, DDD, CodingStyle, CodingStandards, Microservices, ArchitectureStyle, etc, do not need to be generated every time. Perhaps they just need to be generated once and be available to be loaded by the pulpo-engine. We could create a library of those type of documents to be reused and loaded by the pulpo-engine. And then we could create a entity type like: Library Document, which would allow to select a document from the library to be loaded.
 
-[X] We need to implement a way to do loops for improvement of Code, improvement of a document that does not satisfy a quality metric or to iterate code that does not pass an Unit Test. We need to implement a way to loop in the graph execution in the dass-engine.
+[X] We need to implement a way to do loops for improvement of Code, improvement of a document that does not satisfy a quality metric or to iterate code that does not pass an Unit Test. We need to implement a way to loop in the graph execution in the pulpo-engine.
 
 [X] Make sure the cli creates a new folder if it does not exist for the application name.
 
 [X] Create/Verify/Refine these verbs must not be hardcoded either. We should rather define a new field in the MetaVerb called "verbType" that can have a defined set of values like "Creation", "Verification", "Refinement", "Context". Then when defining the ontology, one can use any verb, but then the verbType would be used to determine if it is use to create, verify, refine or provide context. This would allow us to have a more flexible ontology and also to have a more flexible execution engine.
 
-[] The ontology-tools must be re-used in the dass-engine to display the ontology graph execution prediction at the beginning when starting and also to load the ontology and the graph and the context nodes in the same way the ontology tools does it.
+[] The pulpo-tools must be re-used in the pulpo-engine to display the ontology graph execution prediction at the beginning when starting and also to load the ontology and the graph and the context nodes in the same way the ontology tools does it.
 
 [X] We need to see what the AI CLI is doing. Because we do not know when it gets stuck.
 
@@ -206,11 +206,11 @@ Attempt 1 failed: You have exhausted your capacity on this model. Your quota wil
 
 [] We should be able to run an ontology graph from the ontology visualizer and follow the execution and the see prompts of each step and what the agent did because every node should have a separate commit.
 
-[] We need now just to define a JSON that complies with the ontology.schema.json. We do not need more schemas, isn't it? And then, the dass-engine and antology-tools would just load the JSON instanc, validate it against the ontology.schema.json. The JSON instance of the ontology.schema.json would be Graph execution itself.
+[] We need now just to define a JSON that complies with the ontology.schema.json. We do not need more schemas, isn't it? And then, the pulpo-engine and antology-tools would just load the JSON instanc, validate it against the ontology.schema.json. The JSON instance of the ontology.schema.json would be Graph execution itself.
 
-[] Perhaps it could still be a taxonomy and a metamodel schemas with restrictions for Software Engineering ontology to guide the definition of the final JSON ontology instance to input to dass-engine, so that the antology-visualizar is not fully free-style definiing entities and relationships, but rather guided.
+[] Perhaps it could still be a taxonomy and a metamodel schemas with restrictions for Software Engineering ontology to guide the definition of the final JSON ontology instance to input to pulpo-engine, so that the antology-visualizar is not fully free-style definiing entities and relationships, but rather guided.
 
-[X] Validate the taxonomy and the metamodel with the base meta schemas in dass-engine. The ontology-tools crate should be able to validate the taxonomy and the metamodel with the base meta schemas in dass-engine. The dass-engine crate should validate at the beginning the taxonomy and the metamodel with the base meta schemas in dass-engine.
+[X] Validate the taxonomy and the metamodel with the base meta schemas in pulpo-engine. The pulpo-tools crate should be able to validate the taxonomy and the metamodel with the base meta schemas in pulpo-engine. The pulpo-engine crate should validate at the beginning the taxonomy and the metamodel with the base meta schemas in pulpo-engine.
 
 [] Use OpenCode SDK instead of using the "opencode --prompt" inside the AI CLI agent. 
 

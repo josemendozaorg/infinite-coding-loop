@@ -9,7 +9,7 @@ Ensure you are in the project root.
 To validate all JSON schemas (entities, metamodel, taxonomy) and ensure all agent configurations conform to the `agent_config.schema.json`, run the following command:
 
 ```bash
-cargo test -p dass-engine --test schema_validation_test
+cargo test -p pulpo-engine --test schema_validation_test
 ```
 
 ## What This Tests

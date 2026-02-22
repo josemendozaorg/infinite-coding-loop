@@ -1,0 +1,43 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://pulpo.dev/schemas/entities/source_file.schema.json",
+    "title": "SourceFile",
+    "description": "A file containing source code (Professional Grade).",
+    "allOf": [
+        {
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "$ref": "../taxonomy.schema.json#/$defs/Kind_SourceFile"
+                },
+                "language": {
+                    "type": "string",
+                    "description": "e.g., Rust, Python"
+                },
+                "language_version": {
+                    "type": "string",
+                    "description": "e.g., 2021, 3.10"
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Relative path from project root"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "checksum": {
+                    "type": "string",
+                    "description": "SHA-256 hash for integrity verification"
+                }
+            },
+            "required": [
+                "kind",
+                "language",
+                "path"
+            ]
+        }
+    ]
+}

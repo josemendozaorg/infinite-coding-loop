@@ -1,0 +1,51 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://pulpo.dev/schemas/entities/test_case.schema.json",
+    "title": "TestCase",
+    "description": "A verifiable test specification (SWEBOK: Software Testing).",
+    "allOf": [
+        {
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "$ref": "../taxonomy.schema.json#/$defs/Kind_TestCase"
+                },
+                "preconditions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "State required before running the test."
+                },
+                "test_data": {
+                    "type": "object",
+                    "description": "Input data used for the test."
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "expected_result": {
+                    "type": "string"
+                },
+                "postconditions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "State expected after the test (e.g., database cleanup)."
+                }
+            },
+            "required": [
+                "kind",
+                "steps",
+                "expected_result"
+            ]
+        }
+    ]
+}

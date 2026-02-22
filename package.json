@@ -4,6 +4,6 @@
     "workspaces": [
         "apps/*",
         "packages/*",
-        "ontologies/software-engineering"
+        "pulpo-ontologies/software-engineering"
     ]
 }

@@ -1,0 +1,22 @@
+[package]
+name = "pulpo-cli"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow.workspace = true
+clap = { workspace = true, features = ["derive"] }
+console = "0.16.2"
+pulpo-engine = { version = "0.1.0", path = "../../packages/pulpo-engine" }
+dialoguer = "0.12.0"
+indicatif = "0.18.3"
+async-trait = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+tokio = { workspace = true, features = ["full"] }
+uuid.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

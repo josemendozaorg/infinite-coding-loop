@@ -6,7 +6,7 @@ Accepted
 ## Context
 As the `infinite-coding-loop` repository grows to support multiple applications across different languages (Rust, TypeScript), the initial flat directory structure (where every project, application, and utility shared the root directory) proved difficult to scale and navigate. 
 
-We initially migrated away from a `crates/`-only structure to a Service-Oriented (flat) directory structure, bringing UI clients and engine libraries to the same top level. However, this didn't convey the intent or role of each module. For instance, `dass-engine` (a core library), `ontology-visualizer` (a deployable web application), and `ontology-schema` (NPM types) were all peers. 
+We initially migrated away from a `crates/`-only structure to a Service-Oriented (flat) directory structure, bringing UI clients and engine libraries to the same top level. However, this didn't convey the intent or role of each module. For instance, `pulpo-engine` (a core library), `pulpo-visualizer` (a deployable web application), and `pulpo-schema` (NPM types) were all peers. 
 
 ## Decision
 We have decided to adopt the **Apps vs. Packages** monorepo pattern. This is an industry-standard practice championed by build systems like Nx, Turborepo, and Lerna, and is natively supported by generic toolchains like Cargo Workspaces and NPM Workspaces.

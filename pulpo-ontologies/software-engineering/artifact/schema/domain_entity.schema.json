@@ -1,0 +1,76 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://pulpo.dev/schemas/entities/domain_entity.schema.json",
+    "title": "DomainEntity",
+    "description": "A data object in the domain model (Professional Grade).",
+    "allOf": [
+        {
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "$ref": "../taxonomy.schema.json#/$defs/Kind_DomainEntity"
+                },
+                "attributes": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string"
+                            },
+                            "type": {
+                                "type": "string"
+                            },
+                            "description": {
+                                "type": "string"
+                            },
+                            "is_primary_key": {
+                                "type": "boolean"
+                            },
+                            "required": {
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "name",
+                            "type"
+                        ]
+                    }
+                },
+                "relationships": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "target_entity": {
+                                "type": "string"
+                            },
+                            "relation_type": {
+                                "enum": [
+                                    "OneToOne",
+                                    "OneToMany",
+                                    "ManyToOne",
+                                    "ManyToMany"
+                                ]
+                            },
+                            "description": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "target_entity",
+                            "relation_type"
+                        ]
+                    }
+                }
+            },
+            "required": [
+                "kind",
+                "attributes"
+            ]
+        }
+    ]
+}
