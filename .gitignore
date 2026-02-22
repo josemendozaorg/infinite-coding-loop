@@ -1,9 +1,14 @@
 /target
 **/*.rs.bk
 Cargo.lock
-/.infinitecodingloop/
 /tmp/
 *.dass.db
 *.dass.db-shm
 *.dass.db-wal
 *.dass.db.bak
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
