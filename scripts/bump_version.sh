@@ -13,11 +13,11 @@ if [ -z "$1" ]; then
 fi
 
 BUMP_TYPE=$1
-CORE_CARGO_TOML="crates/dass-engine/Cargo.toml"
-CLI_CARGO_TOML="crates/dass-cli/Cargo.toml"
-TUI_CARGO_TOML="crates/dass-tui/Cargo.toml"
-TOOLS_CARGO_TOML="crates/ontology-tools/Cargo.toml"
-E2E_CARGO_TOML="crates/dass-e2e/Cargo.toml"
+CORE_CARGO_TOML="packages/dass-engine/Cargo.toml"
+CLI_CARGO_TOML="apps/dass-cli/Cargo.toml"
+TUI_CARGO_TOML="apps/dass-tui/Cargo.toml"
+TOOLS_CARGO_TOML="packages/ontology-tools/Cargo.toml"
+E2E_CARGO_TOML="tests/dass-e2e/Cargo.toml"
 
 # Check if files exist
 if [ ! -f "$CORE_CARGO_TOML" ]; then
