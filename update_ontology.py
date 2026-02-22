@@ -2,7 +2,7 @@
 import json
 import os
 
-ontology_path = "ontology-software-engineering/ontology.json"
+ontology_path = "ontologies/software-engineering/ontology.json"
 
 with open(ontology_path, 'r') as f:
     ontology = json.load(f)

@@ -483,6 +483,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "crossterm",
+ "dass-engine",
  "ratatui",
  "serde_json",
  "tokio",
