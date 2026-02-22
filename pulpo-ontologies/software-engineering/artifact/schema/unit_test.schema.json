@@ -1,0 +1,30 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://pulpo.dev/schemas/entities/unit_test.schema.json",
+    "title": "UnitTest",
+    "description": "Code aimed at verifying a single unit of functionality.",
+    "allOf": [
+        {
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "test_file_path": {
+                    "type": "string"
+                },
+                "coverage_target": {
+                    "type": "number",
+                    "description": "Percentage of code coverage expected"
+                },
+                "framework": {
+                    "type": "string",
+                    "description": "Testing framework (e.g. cargo test, pytest)"
+                }
+            },
+            "required": [
+                "test_file_path"
+            ]
+        }
+    ]
+}

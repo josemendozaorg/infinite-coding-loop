@@ -1,0 +1,30 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://pulpo.dev/schemas/entities/architecture_component.schema.json",
+    "title": "ArchitectureComponent",
+    "allOf": [
+        {
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "$ref": "../taxonomy.schema.json#/$defs/Kind_ArchitectureComponent"
+                },
+                "layer": {
+                    "enum": [
+                        "Frontend",
+                        "Backend",
+                        "Database",
+                        "Infrastructure"
+                    ]
+                }
+            },
+            "required": [
+                "kind",
+                "layer"
+            ]
+        }
+    ]
+}

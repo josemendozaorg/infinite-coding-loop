@@ -1,0 +1,34 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://pulpo.dev/schemas/entities/design_spec.schema.json",
+    "title": "DesignSpec",
+    "description": "Technical design description (SDD) for a feature (SWEBOK: Software Design).",
+    "allOf": [
+        {
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "$ref": "../taxonomy.schema.json#/$defs/Kind_DesignSpec"
+                },
+                "ui_spec": {
+                    "type": "string"
+                },
+                "logic_spec": {
+                    "type": "string"
+                },
+                "data_spec": {
+                    "type": "string"
+                },
+                "verification_plan": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "kind"
+            ]
+        }
+    ]
+}

@@ -1,0 +1,12 @@
+[package]
+name = "pulpo-tui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pulpo-engine = { path = "../../packages/pulpo-engine" }
+anyhow.workspace = true
+crossterm.workspace = true
+serde_json.workspace = true
+ratatui.workspace = true
+tokio = { workspace = true, features = ["full"] }

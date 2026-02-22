@@ -1,0 +1,55 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://pulpo.dev/schemas/entities/standard.schema.json",
+    "title": "Standard",
+    "description": "A rule or constraint that applies to the project.",
+    "allOf": [
+        {
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "$ref": "../taxonomy.schema.json#/$defs/Kind_Standard"
+                },
+                "category": {
+                    "enum": [
+                        "Language",
+                        "Framework",
+                        "Style",
+                        "Testing",
+                        "Deployment",
+                        "Security"
+                    ]
+                },
+                "compliance_level": {
+                    "enum": [
+                        "Mandatory",
+                        "Recommended",
+                        "Optional"
+                    ],
+                    "default": "Mandatory"
+                },
+                "rules": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "enforcement_tool": {
+                    "type": "string",
+                    "description": "Tool used to enforce this (e.g., 'clippy', 'eslint')"
+                },
+                "command_template": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "kind",
+                "category",
+                "rules"
+            ]
+        }
+    ]
+}

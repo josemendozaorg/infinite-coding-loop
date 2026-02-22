@@ -1,0 +1,44 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://pulpo.dev/schemas/entities/tool.schema.json",
+    "title": "Tool",
+    "description": "A specific software tool or service required by the environment.",
+    "allOf": [
+        {
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "$ref": "../taxonomy.schema.json#/$defs/Kind_Tool"
+                },
+                "category": {
+                    "enum": [
+                        "Compiler",
+                        "Linter",
+                        "Database",
+                        "Server",
+                        "CLI",
+                        "Editor"
+                    ]
+                },
+                "command_name": {
+                    "type": "string",
+                    "description": "The executable name (e.g., 'cargo', 'npm')."
+                },
+                "version_requirement": {
+                    "type": "string"
+                },
+                "installation_guide": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "kind",
+                "category",
+                "command_name"
+            ]
+        }
+    ]
+}

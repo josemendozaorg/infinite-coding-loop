@@ -1,0 +1,35 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://pulpo.dev/schemas/entities/acceptance_criteria.schema.json",
+    "title": "AcceptanceCriteria",
+    "description": "Conditions that a software product must satisfy to be accepted by a user.",
+    "allOf": [
+        {
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "criteria": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "List of conditions (Given/When/Then or bullet points)"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "Pending",
+                        "Passed",
+                        "Failed"
+                    ],
+                    "default": "Pending"
+                }
+            },
+            "required": [
+                "criteria"
+            ]
+        }
+    ]
+}

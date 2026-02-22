@@ -1,0 +1,56 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://pulpo.dev/schemas/entities/environment.schema.json",
+    "title": "Environment",
+    "description": "The operational context (Professional Grade).",
+    "allOf": [
+        {
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "$ref": "../taxonomy.schema.json#/$defs/Kind_Environment"
+                },
+                "type": {
+                    "enum": [
+                        "Development",
+                        "Tests",
+                        "Staging",
+                        "Production"
+                    ]
+                },
+                "os": {
+                    "type": "string"
+                },
+                "container_image": {
+                    "type": "string"
+                },
+                "tools": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "env_variables": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "secrets": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "List of secret names required (values not stored here)."
+                }
+            },
+            "required": [
+                "kind",
+                "type"
+            ]
+        }
+    ]
+}

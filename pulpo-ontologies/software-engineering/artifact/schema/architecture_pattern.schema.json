@@ -1,0 +1,42 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://pulpo.dev/schemas/entities/architecture_pattern.schema.json",
+    "title": "ArchitecturePattern",
+    "description": "A fundamental structural organization schema (e.g., MVC, Microservices).",
+    "allOf": [
+        {
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "$ref": "../taxonomy.schema.json#/$defs/Kind_ArchitecturePattern"
+                },
+                "type": {
+                    "enum": [
+                        "Monolith",
+                        "Microservices",
+                        "Event-Driven",
+                        "Layered",
+                        "Hexagonal"
+                    ]
+                },
+                "principles": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "structure_diagram": {
+                    "type": "string",
+                    "description": "Mermaid or text diagram of the pattern structure."
+                }
+            },
+            "required": [
+                "kind",
+                "type"
+            ]
+        }
+    ]
+}

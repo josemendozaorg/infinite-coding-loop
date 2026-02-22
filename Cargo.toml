@@ -1,7 +1,14 @@
 [workspace]
 resolver = "2"
-members = ["crates/dass-engine", "crates/dass-tui", "crates/dass-cli", "crates/ontology-tools", "crates/dass-e2e"]
-
+members = [
+  "apps/*",
+  "packages/*",
+  "tests/*"
+]
+exclude = [
+  "apps/pulpo-visualizer",
+  "packages/pulpo-schema"
+]
 [workspace.dependencies]
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }

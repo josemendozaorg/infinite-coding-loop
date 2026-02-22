@@ -1,0 +1,72 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://pulpo.dev/schemas/entities/project_structure.schema.json",
+    "title": "ProjectStructure",
+    "description": "The physical directory layout and logical module organization (SWEBOK: Software Construction).",
+    "allOf": [
+        {
+            "$ref": "../base.schema.json#/$defs/EntityMetadata"
+        },
+        {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "$ref": "../taxonomy.schema.json#/$defs/Kind_ProjectStructure"
+                },
+                "root_path": {
+                    "type": "string",
+                    "description": "Absolute or relative root (e.g., './crate-name')"
+                },
+                "layout": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/FileSystemNode"
+                    }
+                },
+                "conventions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Language-specific rules (e.g., 'Rust: src/main.rs is entry')"
+                }
+            },
+            "required": [
+                "kind",
+                "layout"
+            ]
+        }
+    ],
+    "$defs": {
+        "FileSystemNode": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Name of directory or file node"
+                },
+                "type": {
+                    "enum": [
+                        "Directory",
+                        "File",
+                        "Module"
+                    ]
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Purpose of this node"
+                },
+                "children": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/FileSystemNode"
+                    }
+                }
+            },
+            "required": [
+                "name",
+                "type"
+            ]
+        }
+    }
+}

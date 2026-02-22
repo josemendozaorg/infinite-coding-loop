@@ -1,0 +1,9 @@
+{
+    "name": "infinite-coding-loop-monorepo",
+    "private": true,
+    "workspaces": [
+        "apps/*",
+        "packages/*",
+        "pulpo-ontologies/software-engineering"
+    ]
+}
