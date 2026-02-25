@@ -2,13 +2,13 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use clap::Parser;
 use console::style;
+use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
 use pulpo_engine::{
     agents::cli_client::ShellCliClient,
     config::{self, IclConfig},
     interaction::UserInteraction,
     orchestrator::{IterationInfo, Orchestrator},
 };
-use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};

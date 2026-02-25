@@ -281,3 +281,33 @@ pub mod mocks {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_shell_cli_client_builder() {
+        let client = ShellCliClient::new("gemini", "/tmp".to_string())
+            .with_yolo(true)
+            .with_model("gemini-2.0-flash".to_string())
+            .with_debug(true)
+            .with_output_format("text".to_string());
+
+        assert_eq!(client.executable, "gemini");
+        assert_eq!(client.work_dir, "/tmp");
+        assert!(client.yolo);
+        assert_eq!(client.model, Some("gemini-2.0-flash".to_string()));
+        assert!(client.debug_ai_cli);
+        assert_eq!(client.output_format, Some("text".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_shell_cli_client_invalid_command() {
+        // This test is fast because it immediately fails to spawn the process
+        let client = ShellCliClient::new("non_existent_command_12345", "/tmp".to_string());
+        let options = crate::graph::executor::ExecutionOptions::default();
+        let result = client.prompt("hello", options).await;
+        assert!(result.is_err());
+    }
+}

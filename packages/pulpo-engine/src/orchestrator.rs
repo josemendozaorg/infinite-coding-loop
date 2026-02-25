@@ -56,7 +56,8 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         app_name: String,
         work_dir: PathBuf,
     ) -> Result<Self> {
-        let metamodel_json = include_str!("../../../pulpo-ontologies/software-engineering/ontology.json");
+        let metamodel_json =
+            include_str!("../../../pulpo-ontologies/software-engineering/ontology.json");
         Self::new_with_metamodel(client, app_id, app_name, work_dir, metamodel_json, None).await
     }
 
@@ -1048,5 +1049,77 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         }
 
         base
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agents::cli_client::mocks::MockCliClient;
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn test_orchestrator_initialization() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let client = MockCliClient::new();
+        let orchestrator = Orchestrator::new(
+            client,
+            "test-app".to_string(),
+            "Test App".to_string(),
+            temp_dir.path().to_path_buf(),
+        )
+        .await?;
+
+        assert_eq!(orchestrator.app_id, "test-app");
+        assert_eq!(orchestrator.app_name, "Test App");
+        assert_eq!(orchestrator.work_dir, Some(temp_dir.path().to_path_buf()));
+        assert_eq!(orchestrator.max_iterations, 100);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_orchestrator_builder_methods() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let client = MockCliClient::new();
+        let orchestrator = Orchestrator::new(
+            client,
+            "test-app".to_string(),
+            "Test App".to_string(),
+            temp_dir.path().to_path_buf(),
+        )
+        .await?
+        .with_max_iterations(50)
+        .with_docs_folder("custom_docs".to_string());
+
+        assert_eq!(orchestrator.max_iterations, 50);
+        assert_eq!(orchestrator.docs_folder, "custom_docs");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_start_iteration() -> Result<()> {
+        let temp_dir = tempdir()?;
+        let client = MockCliClient::new();
+        let mut orchestrator = Orchestrator::new(
+            client,
+            "test-app".to_string(),
+            "Test App".to_string(),
+            temp_dir.path().to_path_buf(),
+        )
+        .await?;
+
+        orchestrator.start_iteration("Feature Test").await?;
+
+        assert!(orchestrator.current_iteration.is_some());
+        let iter = orchestrator.current_iteration.as_ref().unwrap();
+        assert_eq!(iter.name, "Feature Test");
+
+        let icl_dir = temp_dir.path().join(".infinitecodingloop");
+        let iter_dir = icl_dir.join("iterations").join(&iter.id);
+        assert!(iter_dir.exists());
+        assert!(iter_dir.join("iteration.json").exists());
+        assert!(temp_dir.path().join("spec").exists()); // Default docs folder
+
+        Ok(())
     }
 }

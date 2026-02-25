@@ -211,8 +211,8 @@ impl DependencyGraph {
         }
 
         // 1. Load Schemas from artifact/schema (kept same)
-        let root =
-            base_path.unwrap_or_else(|| std::path::Path::new("pulpo-ontologies/software-engineering"));
+        let root = base_path
+            .unwrap_or_else(|| std::path::Path::new("pulpo-ontologies/software-engineering"));
 
         let schema_root = root.join("artifact/schema");
         let mut schema_files = Vec::new();
