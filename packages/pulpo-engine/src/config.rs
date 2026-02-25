@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use jsonschema::JSONSchema;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -24,12 +24,13 @@ impl IclConfig {
     pub fn validate(&self) -> Result<()> {
         let schema_json = include_str!("../../../packages/pulpo-schema/meta/icl.schema.json");
         let schema_val: Value = serde_json::from_str(schema_json)?;
-        let compiled = JSONSchema::compile(&schema_val)
+        let compiled = jsonschema::options()
+            .build(&schema_val)
             .map_err(|e| anyhow::anyhow!("Failed to compile schema: {}", e))?;
 
         let instance = serde_json::to_value(self)?;
         if let Err(errors) = compiled.validate(&instance) {
-            let error_msgs: Vec<String> = errors.map(|e| e.to_string()).collect();
+            let error_msgs: Vec<String> = vec![errors.to_string()];
             anyhow::bail!("ICL Config validation failed: {}", error_msgs.join(", "));
         }
         Ok(())
@@ -95,27 +96,24 @@ pub async fn ensure_infinite_coding_loop(
         let app_json_path = icl_dir.join("app.json");
         let config_json_path = icl_dir.join("config.json");
 
-        if app_json_path.exists() {
-            if let Ok(content) = fs::read_to_string(&app_json_path).await {
-                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some(id) = val.get("app_id").and_then(|v| v.as_str()) {
-                        final_app_id = id.to_string();
-                    }
-                    if let Some(name) = val.get("app_name").and_then(|v| v.as_str()) {
-                        final_app_name = name.to_string();
-                    }
-                }
+        if app_json_path.exists()
+            && let Ok(content) = fs::read_to_string(&app_json_path).await
+            && let Ok(val) = serde_json::from_str::<serde_json::Value>(&content)
+        {
+            if let Some(id) = val.get("app_id").and_then(|v| v.as_str()) {
+                final_app_id = id.to_string();
+            }
+            if let Some(name) = val.get("app_name").and_then(|v| v.as_str()) {
+                final_app_name = name.to_string();
             }
         }
 
-        if config_json_path.exists() {
-            if let Ok(content) = fs::read_to_string(&config_json_path).await {
-                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some(docs) = val.get("docs_folder").and_then(|v| v.as_str()) {
-                        final_docs_folder = docs.to_string();
-                    }
-                }
-            }
+        if config_json_path.exists()
+            && let Ok(content) = fs::read_to_string(&config_json_path).await
+            && let Ok(val) = serde_json::from_str::<serde_json::Value>(&content)
+            && let Some(docs) = val.get("docs_folder").and_then(|v| v.as_str())
+        {
+            final_docs_folder = docs.to_string();
         }
 
         let config = IclConfig {
@@ -166,10 +164,10 @@ pub async fn discover_projects(base_dir: &Path) -> Result<Vec<(PathBuf, IclConfi
     if let Ok(mut entries) = fs::read_dir(base_dir).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
             let path = entry.path();
-            if path.is_dir() {
-                if let Some(config) = load_icl_config(&path).await? {
-                    projects.push((path, config));
-                }
+            if path.is_dir()
+                && let Some(config) = load_icl_config(&path).await?
+            {
+                projects.push((path, config));
             }
         }
     }

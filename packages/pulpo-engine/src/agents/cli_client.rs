@@ -240,6 +240,12 @@ pub mod mocks {
         pub responses: Arc<Mutex<VecDeque<MockResponseAction>>>,
     }
 
+    impl Default for MockCliClient {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl MockCliClient {
         pub fn new() -> Self {
             Self {

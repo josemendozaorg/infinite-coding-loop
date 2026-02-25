@@ -412,18 +412,14 @@ async fn main() -> Result<()> {
     );
 
     // Default fallback model if the user skips or uses `-m` flag.
-    let global_model = if let Some(ref m) = args.model {
-        Some(m.clone())
-    } else {
-        None
-    };
+    let global_model = args.model.clone();
 
     for category in categories_to_map {
         let model_for_cat = if let Some(ref m) = global_model {
             m.clone()
         } else {
             let selection = Select::with_theme(&ColorfulTheme::default())
-                .with_prompt(&format!(
+                .with_prompt(format!(
                     "Select model for category: {}",
                     style(category).cyan()
                 ))
@@ -507,7 +503,7 @@ async fn main() -> Result<()> {
             for task in pending {
                 println!("  {} {}", style("➜").cyan(), task);
             }
-            println!("");
+            println!();
         } else {
             let name: String = Input::with_theme(&ColorfulTheme::default())
                 .with_prompt("New Iteration Name")

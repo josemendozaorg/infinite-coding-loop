@@ -171,14 +171,12 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         let mut max_seq = 0u32;
         if let Ok(mut entries) = tokio::fs::read_dir(&iterations_dir).await {
             while let Ok(Some(entry)) = entries.next_entry().await {
-                if let Some(name) = entry.file_name().to_str() {
-                    if name.starts_with(&date_prefix) {
-                        if let Some(seq_str) = name.split('_').nth(1) {
-                            if let Ok(seq) = seq_str.parse::<u32>() {
-                                max_seq = max_seq.max(seq);
-                            }
-                        }
-                    }
+                if let Some(name) = entry.file_name().to_str()
+                    && name.starts_with(&date_prefix)
+                    && let Some(seq_str) = name.split('_').nth(1)
+                    && let Ok(seq) = seq_str.parse::<u32>()
+                {
+                    max_seq = max_seq.max(seq);
                 }
             }
         }
@@ -382,25 +380,8 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         ui.log_info("Starting Generic Graph-Driven Orchestration...");
 
         // 1. Initial Input (Skip if already exists in resumed iteration)
-        if !self.artifacts.contains_key("SoftwareApplication") {
-            let initial_goal = ui
-                .ask_for_feature("What feature do you want to build?")
-                .await?;
-            if initial_goal.is_empty() {
-                return Ok(());
-            }
-
-            if self.current_iteration.is_none() {
-                self.start_iteration("Initial Goal Formulation").await?;
-            }
-
-            // Feed initial input as a "SoftwareApplication" signal to start the orchestration
-            let initial_app =
-                serde_json::json!({ "name": self.app_name.clone(), "goal": initial_goal });
-            self.artifacts
-                .insert("SoftwareApplication".to_string(), initial_app.clone());
-            self.persist_artifact("SoftwareApplication", &initial_app)
-                .await?;
+        if !self.handle_initial_input(ui).await? {
+            return Ok(());
         }
 
         // 2. Generic Execution Loop (State Machine)
@@ -441,31 +422,8 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                 }
             }
 
-            for action in next_actions {
-                ui.log_info(&format!(
-                    "Next Action: {} {} {}",
-                    action.agent, action.relation, action.target
-                ));
-
-                if !ui
-                    .confirm(&format!(
-                        "Execute: {} {} {}?",
-                        action.agent, action.relation, action.target
-                    ))
-                    .await?
-                {
-                    // Log action skipped
-                    if let Some(ref logger) = self.logger {
-                        let _ = logger
-                            .log_action_skipped(&action.agent, &action.relation, &action.target)
-                            .await;
-                    }
-                    ui.log_info("Action skipped by user. Pausing iteration.");
-                    ui.end_step("Iteration paused by user.");
-                    return Ok(());
-                }
-
-                self.execute_action(action, ui).await?;
+            if !self.process_next_actions(next_actions, ui).await? {
+                return Ok(());
             }
         }
 
@@ -481,6 +439,68 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
 
         ui.end_step("Goal achieved or max iterations reached.");
         Ok(())
+    }
+
+    #[allow(clippy::map_entry)]
+    async fn handle_initial_input(
+        &mut self,
+        ui: &impl crate::interaction::UserInteraction,
+    ) -> Result<bool> {
+        if !self.artifacts.contains_key("SoftwareApplication") {
+            let initial_goal = ui
+                .ask_for_feature("What feature do you want to build?")
+                .await?;
+            if initial_goal.is_empty() {
+                return Ok(false);
+            }
+
+            if self.current_iteration.is_none() {
+                self.start_iteration("Initial Goal Formulation").await?;
+            }
+
+            // Feed initial input as a "SoftwareApplication" signal to start the orchestration
+            let initial_app =
+                serde_json::json!({ "name": self.app_name.clone(), "goal": initial_goal });
+            self.artifacts
+                .insert("SoftwareApplication".to_string(), initial_app.clone());
+            self.persist_artifact("SoftwareApplication", &initial_app)
+                .await?;
+        }
+        Ok(true)
+    }
+
+    async fn process_next_actions(
+        &mut self,
+        next_actions: Vec<ActionPlan>,
+        ui: &impl crate::interaction::UserInteraction,
+    ) -> Result<bool> {
+        for action in next_actions {
+            ui.log_info(&format!(
+                "Next Action: {} {} {}",
+                action.agent, action.relation, action.target
+            ));
+
+            if !ui
+                .confirm(&format!(
+                    "Execute: {} {} {}?",
+                    action.agent, action.relation, action.target
+                ))
+                .await?
+            {
+                // Log action skipped
+                if let Some(ref logger) = self.logger {
+                    let _ = logger
+                        .log_action_skipped(&action.agent, &action.relation, &action.target)
+                        .await;
+                }
+                ui.log_info("Action skipped by user. Pausing iteration.");
+                ui.end_step("Iteration paused by user.");
+                return Ok(false);
+            }
+
+            self.execute_action(action, ui).await?;
+        }
+        Ok(true)
     }
 
     pub fn identify_next_actions(&self) -> Vec<ActionPlan> {
@@ -530,15 +550,15 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                         .get(&dep_edge_key)
                         .copied()
                         .unwrap_or(RelationCategory::Context);
-                    if dep_category == RelationCategory::Dependency {
-                        if !self.artifacts.contains_key(dep_kind) {
-                            debug!(
-                                "Action {} {} {} is blocked by missing dependency: {}",
-                                source_kind, relation, target_kind, dep_kind
-                            );
-                            dependencies_met = false;
-                            break;
-                        }
+                    if dep_category == RelationCategory::Dependency
+                        && !self.artifacts.contains_key(dep_kind)
+                    {
+                        debug!(
+                            "Action {} {} {} is blocked by missing dependency: {}",
+                            source_kind, relation, target_kind, dep_kind
+                        );
+                        dependencies_met = false;
+                        break;
                     }
                 }
 
@@ -629,90 +649,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
                 .await;
         }
 
-        // Find Input Context
-        let mut context_map = HashMap::new();
-        let mut reference_instructions = String::new();
-
-        // Get related artifacts from the graph
-        let mut related_artifacts: HashSet<String> = self
-            .executor
-            .graph
-            .get_related_artifacts(&action.target)
-            .into_iter()
-            .collect();
-
-        // Always include the target itself if we are refining or verifying
-        if matches!(
-            action.category,
-            RelationCategory::Refinement | RelationCategory::Verification
-        ) {
-            related_artifacts.insert(action.target.clone());
-        }
-
-        // Always include SoftwareApplication if available (as global context)
-        related_artifacts.insert("SoftwareApplication".to_string());
-
-        for (kind, val) in &self.artifacts {
-            // Only include if related
-            if !related_artifacts.contains(kind) {
-                continue;
-            }
-
-            debug!("  [Context] Retrieving: {}", kind);
-
-            // Check if this artifact is "Code" type (Reference-Based)
-            let is_code = self
-                .executor
-                .graph
-                .node_types
-                .get(kind)
-                .map(|t| t == "Code")
-                .unwrap_or(false);
-
-            if is_code {
-                // Parse as Reference Artifact (files array)
-                if let Some(files) = val.get("files").and_then(|f| f.as_array()) {
-                    let file_list: Vec<String> = files
-                        .iter()
-                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                        .collect();
-
-                    context_map.insert(kind.clone(), serde_json::json!({
-                        "summary": format!("Reference-based artifact. Contains {} files.", file_list.len()),
-                        "files": file_list
-                    }));
-
-                    reference_instructions.push_str(&format!(
-                        "\n\n[REFERENCE ARTIFACT: {}]\nThis artifact contains references to files on disk. available files:\n", 
-                        kind
-                    ));
-                    for f in &file_list {
-                        reference_instructions.push_str(&format!("- {}\n", f));
-                    }
-                    reference_instructions.push_str(&format!(
-                        "Use your `read_file` tool to inspect the content of these files as needed. Do NOT guess the content.\n"
-                    ));
-                } else {
-                    // Fallback if schema doesn't match expected reference format
-                    context_map.insert(kind.clone(), val.clone());
-                }
-            } else {
-                // Default: Value-Based Artifact
-                context_map.insert(kind.clone(), val.clone());
-            }
-        }
-
-        let mut context = serde_json::to_string_pretty(&context_map).unwrap_or_default();
-        if !reference_instructions.is_empty() {
-            context.push_str(&reference_instructions);
-        }
-
-        // If refining, inject feedback
-        if action.category == RelationCategory::Refinement {
-            if let Some(feedback) = self.verification_feedback.get(&action.target) {
-                context = format!("{}\n\n### FEEDBACK FOR REFINEMENT:\n{}", context, feedback);
-            }
-        }
+        let context = self.build_action_context(&action);
 
         let prompt_template = self
             .executor
@@ -810,167 +747,279 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         };
 
         // Semantic Result Handling
+        self.handle_action_result(&action, result).await?;
+
+        ui.render_artifact(&action.target, self.artifacts.get(&action.target).unwrap());
+
+        Ok(())
+    }
+
+    async fn handle_action_result(
+        &mut self,
+        action: &ActionPlan,
+        result: serde_json::Value,
+    ) -> Result<()> {
         match action.category {
             RelationCategory::Verification => {
-                let feedback = result
-                    .get("feedback")
-                    .and_then(|v| v.as_str())
-                    .or_else(|| result.get("test_results").and_then(|v| v.as_str()))
-                    .unwrap_or("No detailed feedback provided.");
-
-                let score = result.get("score").and_then(|v| v.as_f64()).unwrap_or(1.0);
-
-                // Look up pass_threshold from any verification LoopConfig for this target
-                let pass_threshold = self
-                    .executor
-                    .graph
-                    .loop_configs
-                    .iter()
-                    .find(|((_, _, t), _)| t == &action.target)
-                    .map(|(_, lc)| lc.pass_threshold)
-                    .unwrap_or(1.0);
-
-                // Log verification result
-                if let Some(ref logger) = self.logger {
-                    let _ = logger
-                        .log_verification(&action.target, score, pass_threshold, feedback)
-                        .await;
-                }
-
-                if score < pass_threshold {
-                    warn!(
-                        "Verification failed for {} (score: {:.2}, threshold: {:.2}): {}",
-                        action.target, score, pass_threshold, feedback
-                    );
-                    self.verification_feedback
-                        .insert(action.target.clone(), feedback.to_string());
-                    self.verified_artifacts.remove(&action.target);
-                } else {
-                    info!(
-                        "Verification passed for {} (score: {:.2} >= {:.2})",
-                        action.target, score, pass_threshold
-                    );
-                    self.verification_feedback.remove(&action.target);
-                    self.verified_artifacts.insert(action.target.clone());
-                }
-
-                // Persist verification report
-                self.persist_artifact(&format!("{}_verification", action.target), &result)
-                    .await?;
+                self.handle_verification_result(action, result).await?;
             }
             RelationCategory::Refinement | RelationCategory::Creation => {
-                let graph = self.executor.graph.clone();
-                let target = action.target.clone();
-                let result_clone = result.clone();
-
-                let validation_result = tokio::task::spawn_blocking(move || {
-                    graph.validate_artifact(&target, &result_clone)
-                })
-                .await?;
-
-                if let Err(e) = validation_result {
-                    let is_code = self
-                        .executor
-                        .graph
-                        .node_types
-                        .get(&action.target)
-                        .map(|t| t == "Code")
-                        .unwrap_or(false);
-
-                    // Log validation failure
-                    if let Some(ref logger) = self.logger {
-                        let _ = logger
-                            .log_validation(&action.target, false, Some(&format!("{}", e)))
-                            .await;
-                    }
-
-                    if is_code {
-                        warn!(
-                            "Artifact type 'Code' detected. Skipping strict schema validation for {}. Validation error was: {}",
-                            action.target, e
-                        );
-                    } else {
-                        warn!("Artifact validation failed for {}: {}", action.target, e);
-                        return Err(anyhow::anyhow!(
-                            "Artifact validation failed for {}: {}. Result: {}",
-                            action.target,
-                            e,
-                            result
-                        ));
-                    }
-                } else {
-                    // Log validation success
-                    if let Some(ref logger) = self.logger {
-                        let _ = logger.log_validation(&action.target, true, None).await;
-                    }
-                }
-
-                info!("Successfully created/refined artifact: {}", action.target);
-                self.artifacts.insert(action.target.clone(), result.clone());
-                self.persist_artifact(&action.target, &result).await?;
-
-                self.verified_artifacts.remove(&action.target);
-
-                // Instruct AI CLI to commit the changes
-                let commit_prompt = format!(
-                    "The agent {} has successfully {} the artifact {}. Please stage all changes (`git add .`) and commit them to the git repository with a descriptive message like '{} {} {}'. Execute the git commands to commit the work.",
-                    action.agent,
-                    if action.category == RelationCategory::Creation {
-                        "created"
-                    } else {
-                        "refined"
-                    },
-                    action.target,
-                    if action.category == RelationCategory::Creation {
-                        "Create"
-                    } else {
-                        "Refine"
-                    },
-                    action.target,
-                    "artifact"
-                );
-
-                if let Err(e) = self.client.prompt(&commit_prompt, Default::default()).await {
-                    warn!("Failed to commit changes via AI CLI: {}", e);
-                } else {
-                    info!("Successfully committed changes to git via AI CLI.");
-                }
-
-                if action.category == RelationCategory::Refinement {
-                    self.verification_feedback.remove(&action.target);
-                    // Track refinement attempts for loop exit
-                    let attempts = self
-                        .refinement_attempts
-                        .entry(action.target.clone())
-                        .or_insert(0);
-                    *attempts += 1;
-                    info!("Refinement attempt {} for {}", attempts, action.target);
-
-                    // Log refinement attempt
-                    if let Some(ref logger) = self.logger {
-                        let max_retries = self
-                            .executor
-                            .graph
-                            .loop_configs
-                            .iter()
-                            .find(|((_, _, t), _)| t == &action.target)
-                            .map(|(_, lc)| lc.max_retries)
-                            .unwrap_or(3);
-                        let _ = logger
-                            .log_refinement_attempt(&action.target, *attempts, max_retries)
-                            .await;
-                    }
-                }
+                self.handle_creation_or_refinement(action, result).await?;
             }
             _ => {
                 self.artifacts.insert(action.target.clone(), result.clone());
                 self.persist_artifact(&action.target, &result).await?;
             }
         }
+        Ok(())
+    }
 
-        ui.render_artifact(&action.target, self.artifacts.get(&action.target).unwrap());
+    async fn handle_verification_result(
+        &mut self,
+        action: &ActionPlan,
+        result: serde_json::Value,
+    ) -> Result<()> {
+        let feedback = result
+            .get("feedback")
+            .and_then(|v| v.as_str())
+            .or_else(|| result.get("test_results").and_then(|v| v.as_str()))
+            .unwrap_or("No detailed feedback provided.");
+
+        let score = result.get("score").and_then(|v| v.as_f64()).unwrap_or(1.0);
+
+        // Look up pass_threshold from any verification LoopConfig for this target
+        let pass_threshold = self
+            .executor
+            .graph
+            .loop_configs
+            .iter()
+            .find(|((_, _, t), _)| t == &action.target)
+            .map(|(_, lc)| lc.pass_threshold)
+            .unwrap_or(1.0);
+
+        // Log verification result
+        if let Some(ref logger) = self.logger {
+            let _ = logger
+                .log_verification(&action.target, score, pass_threshold, feedback)
+                .await;
+        }
+
+        if score < pass_threshold {
+            warn!(
+                "Verification failed for {} (score: {:.2}, threshold: {:.2}): {}",
+                action.target, score, pass_threshold, feedback
+            );
+            self.verification_feedback
+                .insert(action.target.clone(), feedback.to_string());
+            self.verified_artifacts.remove(&action.target);
+        } else {
+            info!(
+                "Verification passed for {} (score: {:.2} >= {:.2})",
+                action.target, score, pass_threshold
+            );
+            self.verification_feedback.remove(&action.target);
+            self.verified_artifacts.insert(action.target.clone());
+        }
+
+        // Persist verification report
+        self.persist_artifact(&format!("{}_verification", action.target), &result)
+            .await?;
 
         Ok(())
+    }
+
+    async fn handle_creation_or_refinement(
+        &mut self,
+        action: &ActionPlan,
+        result: serde_json::Value,
+    ) -> Result<()> {
+        let graph = self.executor.graph.clone();
+        let target = action.target.clone();
+        let result_clone = result.clone();
+
+        let validation_result =
+            tokio::task::spawn_blocking(move || graph.validate_artifact(&target, &result_clone))
+                .await?;
+
+        if let Err(e) = validation_result {
+            let is_code = self
+                .executor
+                .graph
+                .node_types
+                .get(&action.target)
+                .is_some_and(|t| t == "Code");
+
+            // Log validation failure
+            if let Some(ref logger) = self.logger {
+                let _ = logger
+                    .log_validation(&action.target, false, Some(&format!("{}", e)))
+                    .await;
+            }
+
+            if is_code {
+                warn!(
+                    "Artifact type 'Code' detected. Skipping strict schema validation for {}. Validation error was: {}",
+                    action.target, e
+                );
+            } else {
+                warn!("Artifact validation failed for {}: {}", action.target, e);
+                return Err(anyhow::anyhow!(
+                    "Artifact validation failed for {}: {}. Result: {}",
+                    action.target,
+                    e,
+                    result
+                ));
+            }
+        } else {
+            // Log validation success
+            if let Some(ref logger) = self.logger {
+                let _ = logger.log_validation(&action.target, true, None).await;
+            }
+        }
+
+        info!("Successfully created/refined artifact: {}", action.target);
+        self.artifacts.insert(action.target.clone(), result.clone());
+        self.persist_artifact(&action.target, &result).await?;
+
+        self.verified_artifacts.remove(&action.target);
+
+        // Instruct AI CLI to commit the changes
+        let commit_prompt = format!(
+            "The agent {} has successfully {} the artifact {}. Please stage all changes (`git add .`) and commit them to the git repository with a descriptive message like '{} {} {}'. Execute the git commands to commit the work.",
+            action.agent,
+            if action.category == RelationCategory::Creation {
+                "created"
+            } else {
+                "refined"
+            },
+            action.target,
+            if action.category == RelationCategory::Creation {
+                "Create"
+            } else {
+                "Refine"
+            },
+            action.target,
+            "artifact"
+        );
+
+        if let Err(e) = self.client.prompt(&commit_prompt, Default::default()).await {
+            warn!("Failed to commit changes via AI CLI: {}", e);
+        } else {
+            info!("Successfully committed changes to git via AI CLI.");
+        }
+
+        if action.category == RelationCategory::Refinement {
+            self.verification_feedback.remove(&action.target);
+            // Track refinement attempts for loop exit
+            let attempts = self
+                .refinement_attempts
+                .entry(action.target.clone())
+                .or_insert(0);
+            *attempts += 1;
+            info!("Refinement attempt {} for {}", attempts, action.target);
+
+            // Log refinement attempt
+            if let Some(ref logger) = self.logger {
+                let max_retries = self
+                    .executor
+                    .graph
+                    .loop_configs
+                    .iter()
+                    .find(|((_, _, t), _)| t == &action.target)
+                    .map(|(_, lc)| lc.max_retries)
+                    .unwrap_or(3);
+                let _ = logger
+                    .log_refinement_attempt(&action.target, *attempts, max_retries)
+                    .await;
+            }
+        }
+        Ok(())
+    }
+
+    fn build_action_context(&self, action: &ActionPlan) -> String {
+        // Find Input Context
+        let mut context_map = HashMap::new();
+        let mut reference_instructions = String::new();
+
+        // Get related artifacts from the graph
+        let mut related_artifacts: HashSet<String> = self
+            .executor
+            .graph
+            .get_related_artifacts(&action.target)
+            .into_iter()
+            .collect();
+
+        // Always include the target itself if we are refining or verifying
+        if matches!(
+            action.category,
+            RelationCategory::Refinement | RelationCategory::Verification
+        ) {
+            related_artifacts.insert(action.target.clone());
+        }
+
+        // Always include SoftwareApplication if available (as global context)
+        related_artifacts.insert("SoftwareApplication".to_string());
+
+        for (kind, val) in &self.artifacts {
+            // Only include if related
+            if !related_artifacts.contains(kind) {
+                continue;
+            }
+
+            debug!("  [Context] Retrieving: {}", kind);
+
+            // Check if this artifact is "Code" type (Reference-Based)
+            let is_code = self
+                .executor
+                .graph
+                .node_types
+                .get(kind)
+                .is_some_and(|t| t == "Code");
+
+            if is_code {
+                // Parse as Reference Artifact (files array)
+                if let Some(files) = val.get("files").and_then(|f| f.as_array()) {
+                    let file_list: Vec<String> = files
+                        .iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect();
+
+                    context_map.insert(kind.clone(), serde_json::json!({
+                        "summary": format!("Reference-based artifact. Contains {} files.", file_list.len()),
+                        "files": file_list
+                    }));
+
+                    reference_instructions.push_str(&format!(
+                        "\n\n[REFERENCE ARTIFACT: {}]\nThis artifact contains references to files on disk. available files:\n", 
+                        kind
+                    ));
+                    for f in &file_list {
+                        reference_instructions.push_str(&format!("- {}\n", f));
+                    }
+                    reference_instructions.push_str("Use your `read_file` tool to inspect the content of these files as needed. Do NOT guess the content.\n");
+                } else {
+                    // Fallback if schema doesn't match expected reference format
+                    context_map.insert(kind.clone(), val.clone());
+                }
+            } else {
+                // Default: Value-Based Artifact
+                context_map.insert(kind.clone(), val.clone());
+            }
+        }
+
+        let mut context = serde_json::to_string_pretty(&context_map).unwrap_or_default();
+        if !reference_instructions.is_empty() {
+            context.push_str(&reference_instructions);
+        }
+
+        // If refining, inject feedback
+        if action.category == RelationCategory::Refinement
+            && let Some(feedback) = self.verification_feedback.get(&action.target)
+        {
+            context = format!("{}\n\n### FEEDBACK FOR REFINEMENT:\n{}", context, feedback);
+        }
+
+        context
     }
 
     fn enhance_prompt(

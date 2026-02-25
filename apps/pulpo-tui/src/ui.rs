@@ -15,7 +15,7 @@ pub fn draw(f: &mut Frame, app: &App) {
             Constraint::Min(0),    // Main Content
             Constraint::Length(3), // Footer
         ])
-        .split(f.size());
+        .split(f.area());
 
     draw_header(f, app, chunks[0]);
     draw_dashboard(f, app, chunks[1]);

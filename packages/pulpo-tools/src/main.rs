@@ -218,7 +218,7 @@ fn validate_graph(input_path: &PathBuf) -> anyhow::Result<()> {
     // The convention is that `input_path` is usually `ontology/artifact/schema/metamodel.schema.json`.
     // The base path should be `ontology/`.
     // Let's try to infer it. If input has parent, use it.
-    let base_path = input_path.parent().and_then(|p| {
+    let base_path = input_path.parent().map(|p| {
         // If parent is "schemas" or "artifact/schema", go up?
         // Since `load_from_metamodel` expects `base_path` to be the root containing `agent/`, `relationship/` etc.
         // If input is `.../ontology-software-engineering/artifact/schema/metamodel.schema.json`
@@ -245,7 +245,7 @@ fn validate_graph(input_path: &PathBuf) -> anyhow::Result<()> {
         if current.ends_with("schemas") {
             current = current.parent().unwrap_or(current);
         }
-        Some(current)
+        current
     });
 
     println!("Using base path: {:?}", base_path);
@@ -271,7 +271,7 @@ fn simulate_path(input_path: &PathBuf) -> anyhow::Result<()> {
     let content = std::fs::read_to_string(input_path)?;
 
     // Simple base path inference as in validate_graph
-    let base_path = input_path.parent().and_then(|p| {
+    let base_path = input_path.parent().map(|p| {
         let mut current = p;
         if current.ends_with("schema") {
             current = current.parent().unwrap_or(current);
@@ -282,7 +282,7 @@ fn simulate_path(input_path: &PathBuf) -> anyhow::Result<()> {
         if current.ends_with("schemas") {
             current = current.parent().unwrap_or(current);
         }
-        Some(current)
+        current
     });
 
     let graph = DependencyGraph::load_from_metamodel(&content, base_path)?;

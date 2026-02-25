@@ -31,22 +31,22 @@ fn validate_all_schemas_and_configs() {
         let schema_json: Value = serde_json::from_str(&content)
             .unwrap_or_else(|_| panic!("Failed to parse JSON in {:?}", schema_path));
 
-        if let Err(e) = jsonschema::JSONSchema::compile(&schema_json) {
+        if let Err(e) = jsonschema::options().build(&schema_json) {
             panic!("Schema invalid {:?}: {}", schema_path, e);
         }
     }
 
     // B. Validate Cross-References (Pre-load known schemas)
-    let mut options = jsonschema::JSONSchema::options();
+    let mut options = jsonschema::options();
 
     // Load Taxonomy
     let taxonomy_path = artifact_schema_dir.join("taxonomy.schema.json");
     if taxonomy_path.exists() {
         let taxonomy_json: Value =
             serde_json::from_str(&fs::read_to_string(taxonomy_path).unwrap()).unwrap();
-        options.with_document(
-            "https://pulpo.dev/schemas/taxonomy.schema.json".to_string(),
-            taxonomy_json,
+        options.with_resource(
+            "https://pulpo.dev/schemas/taxonomy.schema.json",
+            jsonschema::Resource::from_contents(taxonomy_json).unwrap(),
         );
     }
 
@@ -55,9 +55,9 @@ fn validate_all_schemas_and_configs() {
     if meta_base_path.exists() {
         let meta_base_json: Value =
             serde_json::from_str(&fs::read_to_string(meta_base_path).unwrap()).unwrap();
-        options.with_document(
-            "https://pulpo.dev/schemas/meta/base.schema.json".to_string(),
-            meta_base_json,
+        options.with_resource(
+            "https://pulpo.dev/schemas/meta/base.schema.json",
+            jsonschema::Resource::from_contents(meta_base_json).unwrap(),
         );
     }
 
@@ -65,9 +65,9 @@ fn validate_all_schemas_and_configs() {
     if meta_ontology_path.exists() {
         let meta_ontology_json: Value =
             serde_json::from_str(&fs::read_to_string(meta_ontology_path).unwrap()).unwrap();
-        options.with_document(
-            "https://pulpo.dev/schemas/meta/ontology.schema.json".to_string(),
-            meta_ontology_json,
+        options.with_resource(
+            "https://pulpo.dev/schemas/meta/ontology.schema.json",
+            jsonschema::Resource::from_contents(meta_ontology_json).unwrap(),
         );
     }
 
@@ -75,9 +75,9 @@ fn validate_all_schemas_and_configs() {
     if meta_agent_path.exists() {
         let meta_agent_json: Value =
             serde_json::from_str(&fs::read_to_string(meta_agent_path).unwrap()).unwrap();
-        options.with_document(
-            "https://pulpo.dev/schemas/meta/agent.schema.json".to_string(),
-            meta_agent_json,
+        options.with_resource(
+            "https://pulpo.dev/schemas/meta/agent.schema.json",
+            jsonschema::Resource::from_contents(meta_agent_json).unwrap(),
         );
     }
 
@@ -85,19 +85,17 @@ fn validate_all_schemas_and_configs() {
 }
 
 fn find_files(dir: &Path, suffix: &str, results: &mut Vec<PathBuf>) {
-    if dir.is_dir() {
-        if let Ok(entries) = fs::read_dir(dir) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    if path.is_dir() {
-                        find_files(&path, suffix, results);
-                    } else if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                        if name.ends_with(suffix) {
-                            results.push(path);
-                        }
-                    }
-                }
+    if dir.is_dir()
+        && let Ok(entries) = fs::read_dir(dir)
+    {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                find_files(&path, suffix, results);
+            } else if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                && name.ends_with(suffix)
+            {
+                results.push(path);
             }
         }
     }

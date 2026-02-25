@@ -150,14 +150,14 @@ impl DependencyGraph {
         let mut meta_files = Vec::new();
         Self::find_json_files(&engine_meta_root, &mut meta_files);
         for path in meta_files {
-            if let Ok(content) = std::fs::read_to_string(&path) {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some(id) = json.get("$id").and_then(|v| v.as_str()) {
-                        dg.schemas.insert(id.to_string(), content.clone());
-                    }
-                    if let Some(title) = json.get("title").and_then(|v| v.as_str()) {
-                        dg.schemas.insert(title.to_string(), content);
-                    }
+            if let Ok(content) = std::fs::read_to_string(&path)
+                && let Ok(json) = serde_json::from_str::<serde_json::Value>(&content)
+            {
+                if let Some(id) = json.get("$id").and_then(|v| v.as_str()) {
+                    dg.schemas.insert(id.to_string(), content.clone());
+                }
+                if let Some(title) = json.get("title").and_then(|v| v.as_str()) {
+                    dg.schemas.insert(title.to_string(), content);
                 }
             }
         }
@@ -183,26 +183,26 @@ impl DependencyGraph {
             .get("https://pulpo.dev/schemas/meta/ontology.schema.json")
         {
             let schema_json: serde_json::Value = serde_json::from_str(schema_content)?;
-            let mut options = jsonschema::JSONSchema::options();
+            let mut options = jsonschema::options();
             // Add base.schema.json to options for resolution
             if let Some(base_content) = dg
                 .schemas
                 .get("https://pulpo.dev/schemas/meta/base.schema.json")
             {
                 let base_json: serde_json::Value = serde_json::from_str(base_content)?;
-                options.with_document(
-                    "https://pulpo.dev/schemas/meta/base.schema.json".to_string(),
-                    base_json,
+                options.with_resource(
+                    "https://pulpo.dev/schemas/meta/base.schema.json",
+                    jsonschema::Resource::from_contents(base_json).expect("Invalid base schema"),
                 );
             }
 
             let compiled = options
-                .compile(&schema_json)
+                .build(&schema_json)
                 .map_err(|e| anyhow::anyhow!("Failed to compile Meta-Ontology schema: {}", e))?;
 
             let instance: serde_json::Value = serde_json::from_str(json_content)?;
             if let Err(errors) = compiled.validate(&instance) {
-                let error_msg = errors.map(|e| e.to_string()).collect::<Vec<_>>().join(", ");
+                let error_msg = errors.to_string();
                 return Err(anyhow::anyhow!(
                     "Metamodel validation against Meta-Ontology failed: {}",
                     error_msg
@@ -259,13 +259,12 @@ impl DependencyGraph {
         if let Ok(entries) = std::fs::read_dir(&rel_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().and_then(|s| s.to_str()) == Some("md") {
-                    if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
-                        if let Ok(content) = std::fs::read_to_string(&path) {
-                            dg.relationship_prompts
-                                .insert(file_stem.to_string(), content);
-                        }
-                    }
+                if path.extension().and_then(|s| s.to_str()) == Some("md")
+                    && let Some(file_stem) = path.file_stem().and_then(|s| s.to_str())
+                    && let Ok(content) = std::fs::read_to_string(&path)
+                {
+                    dg.relationship_prompts
+                        .insert(file_stem.to_string(), content);
                 }
             }
         }
@@ -342,22 +341,22 @@ impl DependencyGraph {
         if let Ok(entries) = std::fs::read_dir(&agent_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().and_then(|s| s.to_str()) == Some("md") {
-                    if let Some(file_stem) = path.file_stem().and_then(|s| s.to_str()) {
-                        // file_stem is usually "Role" (e.g. "Architect") or "Role_system_prompt"
-                        // Current format seems to be just "Architect.md"?
-                        // Let's assume filename is the Role.
-                        let role = file_stem.to_string();
-                        dg.agent_roles.insert(role.clone());
-                        if let Ok(content) = std::fs::read_to_string(&path) {
-                            // Construct a JSON config compatible with GenericAgent
-                            // GenericAgent expects a JSON with "system_prompt" field.
-                            let config_wrapper = serde_json::json!({
-                                "name": role,
-                                "system_prompt": content
-                            });
-                            dg.loaded_agents.insert(role, config_wrapper.to_string());
-                        }
+                if path.extension().and_then(|s| s.to_str()) == Some("md")
+                    && let Some(file_stem) = path.file_stem().and_then(|s| s.to_str())
+                {
+                    // file_stem is usually "Role" (e.g. "Architect") or "Role_system_prompt"
+                    // Current format seems to be just "Architect.md"?
+                    // Let's assume filename is the Role.
+                    let role = file_stem.to_string();
+                    dg.agent_roles.insert(role.clone());
+                    if let Ok(content) = std::fs::read_to_string(&path) {
+                        // Construct a JSON config compatible with GenericAgent
+                        // GenericAgent expects a JSON with "system_prompt" field.
+                        let config_wrapper = serde_json::json!({
+                            "name": role,
+                            "system_prompt": content
+                        });
+                        dg.loaded_agents.insert(role, config_wrapper.to_string());
                     }
                 }
             }
@@ -368,16 +367,14 @@ impl DependencyGraph {
         if let Ok(entries) = std::fs::read_dir(&agent_dir_legacy) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                    if let Ok(content) = std::fs::read_to_string(&path) {
-                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
-                            if let Some(name) = json.get("name").and_then(|v| v.as_str()) {
-                                let role = name.to_string();
-                                dg.agent_roles.insert(role.clone());
-                                dg.loaded_agents.insert(role, content);
-                            }
-                        }
-                    }
+                if path.extension().and_then(|s| s.to_str()) == Some("json")
+                    && let Ok(content) = std::fs::read_to_string(&path)
+                    && let Ok(json) = serde_json::from_str::<serde_json::Value>(&content)
+                    && let Some(name) = json.get("name").and_then(|v| v.as_str())
+                {
+                    let role = name.to_string();
+                    dg.agent_roles.insert(role.clone());
+                    dg.loaded_agents.insert(role, content);
                 }
             }
         }
@@ -454,25 +451,27 @@ impl DependencyGraph {
                 .unwrap_or(RelationCategory::Context);
 
             // Rule: Agent -(Creation)-> Artifact
-            if self.is_agent(source) && category == RelationCategory::Creation {
-                if self.is_agent(target) {
-                    return Err(anyhow::anyhow!(
-                        "Agent '{}' cannot 'create' another Agent '{}'",
-                        source,
-                        target
-                    ));
-                }
+            if self.is_agent(source)
+                && category == RelationCategory::Creation
+                && self.is_agent(target)
+            {
+                return Err(anyhow::anyhow!(
+                    "Agent '{}' cannot 'create' another Agent '{}'",
+                    source,
+                    target
+                ));
             }
 
             // Rule: Agent -(Verification)-> Artifact
-            if self.is_agent(source) && category == RelationCategory::Verification {
-                if self.is_agent(target) {
-                    return Err(anyhow::anyhow!(
-                        "Agent '{}' cannot 'verify' another Agent '{}'",
-                        source,
-                        target
-                    ));
-                }
+            if self.is_agent(source)
+                && category == RelationCategory::Verification
+                && self.is_agent(target)
+            {
+                return Err(anyhow::anyhow!(
+                    "Agent '{}' cannot 'verify' another Agent '{}'",
+                    source,
+                    target
+                ));
             }
         }
         Ok(())
@@ -508,52 +507,52 @@ impl DependencyGraph {
         let schema_json: serde_json::Value = serde_json::from_str(schema_content)?;
 
         // Build validator with all known schemas for resolution
-        let mut options = jsonschema::JSONSchema::options();
+        let mut options = jsonschema::options();
         for (id, content) in &self.schemas {
-            if id.starts_with("http") {
-                if let Ok(sub_json) = serde_json::from_str::<serde_json::Value>(content) {
-                    options.with_document(id.to_string(), sub_json);
-                }
+            if id.starts_with("http")
+                && let Ok(sub_json) = serde_json::from_str::<serde_json::Value>(content)
+            {
+                options.with_resource(
+                    id.to_string(),
+                    jsonschema::Resource::from_contents(sub_json).expect("Invalid schema source"),
+                );
             }
         }
 
         let compiled = options
-            .compile(&schema_json)
+            .build(&schema_json)
             .map_err(|e| anyhow::anyhow!("Failed to compile JSON schema for {}: {}", kind, e))?;
 
         if let Err(errors) = compiled.validate(data) {
             // Support for Array of Artifacts:
             // If the data is an Array, and the schema failed (presumably because it expects an Object),
             // try validating each item in the array against the schema.
-            if let Some(arr) = data.as_array() {
-                if !arr.is_empty() {
-                    let mut all_valid = true;
-                    let mut array_errors = Vec::new();
+            if let Some(arr) = data.as_array()
+                && !arr.is_empty()
+            {
+                let mut all_valid = true;
+                let mut array_errors = Vec::new();
 
-                    for (i, item) in arr.iter().enumerate() {
-                        if let Err(item_errors) = compiled.validate(item) {
-                            all_valid = false;
-                            let msg = item_errors
-                                .map(|e| e.to_string())
-                                .collect::<Vec<_>>()
-                                .join(", ");
-                            array_errors.push(format!("Item {}: {}", i, msg));
-                        }
+                for (i, item) in arr.iter().enumerate() {
+                    if let Err(item_errors) = compiled.validate(item) {
+                        all_valid = false;
+                        let msg = item_errors.to_string();
+                        array_errors.push(format!("Item {}: {}", i, msg));
                     }
+                }
 
-                    if all_valid {
-                        return Ok(());
-                    } else {
-                        return Err(anyhow::anyhow!(
-                            "Artifact validation failed for Array of {}: {}",
-                            kind,
-                            array_errors.join("; ")
-                        ));
-                    }
+                if all_valid {
+                    return Ok(());
+                } else {
+                    return Err(anyhow::anyhow!(
+                        "Artifact validation failed for Array of {}: {}",
+                        kind,
+                        array_errors.join("; ")
+                    ));
                 }
             }
 
-            let error_msgs: Vec<String> = errors.map(|e| e.to_string()).collect();
+            let error_msgs: Vec<String> = vec![errors.to_string()];
             return Err(anyhow::anyhow!(
                 "Artifact validation failed for {}: {}",
                 kind,
@@ -590,15 +589,15 @@ impl DependencyGraph {
     }
 
     fn find_json_files(dir: &std::path::Path, results: &mut Vec<std::path::PathBuf>) {
-        if dir.is_dir() {
-            if let Ok(entries) = std::fs::read_dir(dir) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.is_dir() {
-                        Self::find_json_files(&path, results);
-                    } else if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                        results.push(path);
-                    }
+        if dir.is_dir()
+            && let Ok(entries) = std::fs::read_dir(dir)
+        {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    Self::find_json_files(&path, results);
+                } else if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                    results.push(path);
                 }
             }
         }
