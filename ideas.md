@@ -365,3 +365,9 @@ quality_metrics/SourceFile.json
 /software_artifacts/Requirement.json
 /software_artifacts/DesignSpec.json
 /software_artifacts/SourceFile.json
+
+[][]- as the AI CLI works best accessing CLI commands, we can create a CLI for accessing the documents of the ontology? Not sure.
+
+[][]- We can add a feature to gather context smartly between the dependencies of a node to figure out what to send to the AI CLI.
+
+[][]- Be careful with how much context is passed to the agent. Many dependencies can bloat the context and not necessarily help to accomplish the task better.

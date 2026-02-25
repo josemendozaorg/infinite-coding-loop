@@ -1,5 +1,8 @@
 {
     "name": "@pulpo/pulpo-schema",
     "version": "1.0.0",
-    "private": true
+    "private": true,
+    "exports": {
+        "./meta/*": "./meta/*"
+    }
 }

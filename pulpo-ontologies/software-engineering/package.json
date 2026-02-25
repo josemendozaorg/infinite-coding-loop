@@ -2,5 +2,8 @@
     "name": "@pulpo/pulpo-ontology-software-engineering",
     "version": "1.0.0",
     "private": true,
-    "main": "ontology.json"
+    "main": "ontology.json",
+    "exports": {
+        "./ontology.json": "./ontology.json"
+    }
 }
