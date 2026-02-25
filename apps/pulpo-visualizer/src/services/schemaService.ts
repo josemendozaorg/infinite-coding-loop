@@ -6,7 +6,6 @@ import Ajv from 'ajv/dist/2020';
 import ontologySchema from '@pulpo/pulpo-schema/meta/ontology.schema.json';
 import baseSchema from '@pulpo/pulpo-schema/meta/base.schema.json';
 // Import the actual ontology data statically
-// @ts-ignore
 import ontology from '@pulpo/pulpo-ontology-software-engineering/ontology.json';
 
 const ajv = new Ajv({ useDefaults: true });
@@ -31,8 +30,8 @@ export async function loadOntology(): Promise<OntologyData> {
             throw new Error(`Ontology validation failed: ${errorMsg}`);
         }
 
-        const processedNodes = processOntologyNodes(ontology as any[]);
-        const processedEdges = processOntologyEdges(ontology as any[]);
+        const processedNodes = processOntologyNodes(ontology as unknown[]);
+        const processedEdges = processOntologyEdges(ontology as unknown[]);
 
         return {
             nodes: processedNodes,
@@ -49,10 +48,10 @@ export async function loadOntology(): Promise<OntologyData> {
     }
 }
 
-function processOntologyNodes(ontology: any[]): Node[] {
+function processOntologyNodes(ontology: unknown[]): Node[] {
     const nodeSet = new Map<string, string>(); // Name -> Kind/Type
-
-    ontology.forEach((rel: any) => {
+    const nodesArray = ontology as Array<{ source?: { name: string; type?: string }; target?: { name: string; type?: string } }>;
+    nodesArray.forEach((rel) => {
         if (rel.source?.name) {
             // Use the type defined in the ontology instance
             // Assuming required by schema
@@ -95,10 +94,11 @@ function processOntologyNodes(ontology: any[]): Node[] {
     });
 }
 
-function processOntologyEdges(ontology: any[]): Edge[] {
+function processOntologyEdges(ontology: unknown[]): Edge[] {
     const edgeMap: Record<string, { source: string; target: string; relations: string[]; verbTypes: Set<string>; loopInfo?: string }> = {};
 
-    ontology.forEach((rel: any) => {
+    const edgesArray = ontology as Array<{ source?: { name: string }; target?: { name: string }; type?: { name: string; verbType?: string }; loop?: { maxRetries?: number; passThreshold?: number } }>;
+    edgesArray.forEach((rel) => {
         if (!rel.source?.name || !rel.target?.name || !rel.type?.name) return;
 
         const key = `${rel.source.name}->${rel.target.name}`;

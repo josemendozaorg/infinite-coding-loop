@@ -17,13 +17,14 @@ export interface RelationshipRule {
 export interface OntologyData {
     nodes: Node[];
     edges: Edge[];
-    raw?: any;
+    raw?: unknown;
 }
 
 export interface NodeData {
     label: string;
     kind: string;
     description?: string;
+    hasHidden?: boolean;
 }
 
 export interface EdgeData {

@@ -115,20 +115,38 @@ impl ShellCliClient {
         prompt_text: &str,
         options: &crate::graph::executor::ExecutionOptions,
     ) -> Result<String> {
-        let work_dir = self.work_dir.clone();
-
         let executable = options
             .ai_cli
             .clone()
             .unwrap_or_else(|| self.executable.clone());
         let model = options.model.clone().or_else(|| self.model.clone());
 
-        let prompt_text_owned = prompt_text.to_string();
-        let yolo = self.yolo;
+        let mut cmd = self.build_command(&executable, model.as_ref(), prompt_text);
+        self.log_prompt_debug(&cmd, prompt_text.len());
 
-        let mut cmd = Command::new(&executable);
-        cmd.current_dir(&work_dir);
-        if let Some(ref m) = model {
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+
+        let mut child = cmd.spawn()?;
+        let stdout = child.stdout.take().unwrap();
+        let stderr = child.stderr.take().unwrap();
+
+        let (full_stdout, full_stderr) = self.read_output_streams(stdout, stderr).await?;
+        let status = child.wait().await?;
+
+        self.handle_command_exit(status, &full_stderr)?;
+        Ok(full_stdout)
+    }
+
+    fn build_command(
+        &self,
+        executable: &str,
+        model: Option<&String>,
+        prompt_text: &str,
+    ) -> Command {
+        let mut cmd = Command::new(executable);
+        cmd.current_dir(&self.work_dir);
+        if let Some(m) = model {
             cmd.arg("-m").arg(m);
         }
         if self.debug_ai_cli {
@@ -138,31 +156,32 @@ impl ShellCliClient {
             cmd.arg("--output-format").arg(f);
         }
         cmd.arg("--approval-mode").arg("yolo");
-        cmd.arg(&prompt_text_owned);
+        cmd.arg(prompt_text);
+        cmd
+    }
 
+    fn log_prompt_debug(&self, cmd: &Command, prompt_len: usize) {
         if self.debug_ai_cli {
             eprintln!(
                 "\n{}",
                 console::style("--- AI CLI PROMPT ---").bold().yellow()
             );
-            eprintln!("WorkDir: {}", work_dir);
+            eprintln!("WorkDir: {}", self.work_dir);
             eprintln!("Command: {:?}", cmd);
-            eprintln!("Engine YOLO (Auto-Confirm): {}", yolo);
-            eprintln!("Prompt Length: {} chars", prompt_text.len());
+            eprintln!("Engine YOLO (Auto-Confirm): {}", self.yolo);
+            eprintln!("Prompt Length: {} chars", prompt_len);
             eprintln!(
                 "{}\n",
                 console::style("----------------------").bold().yellow()
             );
         }
+    }
 
-        cmd.stdout(Stdio::piped());
-        cmd.stderr(Stdio::piped());
-
-        let mut child = cmd.spawn()?;
-
-        let mut stdout = child.stdout.take().unwrap();
-        let mut stderr = child.stderr.take().unwrap();
-
+    async fn read_output_streams(
+        &self,
+        mut stdout: tokio::process::ChildStdout,
+        mut stderr: tokio::process::ChildStderr,
+    ) -> Result<(String, String)> {
         let mut full_stdout = String::new();
         let mut full_stderr = String::new();
         let show_output = self.debug_ai_cli || self.output_format.as_deref() == Some("text");
@@ -198,20 +217,17 @@ impl ShellCliClient {
                         Err(e) => return Err(e.into()),
                     }
                 }
-                _ = child.wait(), if stdout_done && stderr_done => {
-                    break;
-                }
             }
         }
+        Ok((full_stdout, full_stderr))
+    }
 
-        let status = child.wait().await?;
-
+    fn handle_command_exit(&self, status: std::process::ExitStatus, stderr: &str) -> Result<()> {
         if !status.success() {
-            // Include stderr in the error so retry logic can detect rate limiting
             let err_msg = format!(
                 "AI CLI failed with status: {}. Stderr: {}",
                 status,
-                full_stderr.chars().take(500).collect::<String>()
+                stderr.chars().take(500).collect::<String>()
             );
             eprintln!(
                 "{}: {}",
@@ -222,7 +238,7 @@ impl ShellCliClient {
         }
 
         eprintln!("{}", console::style("AI CLI SUCCESS").bold().green());
-        Ok(full_stdout)
+        Ok(())
     }
 }
 

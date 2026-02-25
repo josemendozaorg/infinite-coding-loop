@@ -12,7 +12,7 @@ fn validate_all_schemas_and_configs() {
     let workspace_root = Path::new(manifest_dir).parent().unwrap().parent().unwrap();
     let domain_ontology_dir = workspace_root.join("pulpo-ontologies/software-engineering");
     let artifact_schema_dir = domain_ontology_dir.join("artifact/schema");
-    let artifact_schema_meta_dir = artifact_schema_dir.join("meta");
+    let meta_dir = workspace_root.join("packages/pulpo-schema/meta");
 
     // 1. Identify all schemas
     let mut schema_files = Vec::new();
@@ -24,19 +24,7 @@ fn validate_all_schemas_and_configs() {
         artifact_schema_dir
     );
 
-    // A. Validate Schema Integrity
-    for schema_path in &schema_files {
-        let content = fs::read_to_string(schema_path)
-            .unwrap_or_else(|_| panic!("Failed to read {:?}", schema_path));
-        let schema_json: Value = serde_json::from_str(&content)
-            .unwrap_or_else(|_| panic!("Failed to parse JSON in {:?}", schema_path));
-
-        if let Err(e) = jsonschema::options().build(&schema_json) {
-            panic!("Schema invalid {:?}: {}", schema_path, e);
-        }
-    }
-
-    // B. Validate Cross-References (Pre-load known schemas)
+    // 2. Pre-load resources into options
     let mut options = jsonschema::options();
 
     // Load Taxonomy
@@ -51,37 +39,51 @@ fn validate_all_schemas_and_configs() {
     }
 
     // Load Meta Schemas
-    let meta_base_path = artifact_schema_meta_dir.join("base.schema.json");
-    if meta_base_path.exists() {
-        let meta_base_json: Value =
-            serde_json::from_str(&fs::read_to_string(meta_base_path).unwrap()).unwrap();
-        options.with_resource(
+    let meta_configs = [
+        (
+            "base.schema.json",
             "https://pulpo.dev/schemas/meta/base.schema.json",
-            jsonschema::Resource::from_contents(meta_base_json).unwrap(),
-        );
-    }
-
-    let meta_ontology_path = artifact_schema_meta_dir.join("ontology.schema.json");
-    if meta_ontology_path.exists() {
-        let meta_ontology_json: Value =
-            serde_json::from_str(&fs::read_to_string(meta_ontology_path).unwrap()).unwrap();
-        options.with_resource(
+        ),
+        (
+            "ontology.schema.json",
             "https://pulpo.dev/schemas/meta/ontology.schema.json",
-            jsonschema::Resource::from_contents(meta_ontology_json).unwrap(),
-        );
-    }
-
-    let meta_agent_path = artifact_schema_meta_dir.join("agent.schema.json");
-    if meta_agent_path.exists() {
-        let meta_agent_json: Value =
-            serde_json::from_str(&fs::read_to_string(meta_agent_path).unwrap()).unwrap();
-        options.with_resource(
+        ),
+        (
+            "agent.schema.json",
             "https://pulpo.dev/schemas/meta/agent.schema.json",
-            jsonschema::Resource::from_contents(meta_agent_json).unwrap(),
-        );
+        ),
+    ];
+
+    for (filename, id) in meta_configs {
+        let path = meta_dir.join(filename);
+        if path.exists() {
+            let json: Value = serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap();
+            options.with_resource(
+                id,
+                jsonschema::Resource::from_contents(json.clone()).unwrap(),
+            );
+            // ALIAS HACK: The domain ontology (e.g. Requirement.schema.json) refers to "../base.schema.json",
+            // which resolves to "https://pulpo.dev/schemas/base.schema.json".
+            if filename == "base.schema.json" {
+                options.with_resource(
+                    "https://pulpo.dev/schemas/base.schema.json",
+                    jsonschema::Resource::from_contents(json).unwrap(),
+                );
+            }
+        }
     }
 
-    // Note: Agent config validation skipped as agent configs are now Markdown definitions rather than JSON.
+    // 3. Validate Schema Integrity and Cross-References
+    for schema_path in &schema_files {
+        let content = fs::read_to_string(schema_path)
+            .unwrap_or_else(|_| panic!("Failed to read {:?}", schema_path));
+        let schema_json: Value = serde_json::from_str(&content)
+            .unwrap_or_else(|_| panic!("Failed to parse JSON in {:?}", schema_path));
+
+        if let Err(e) = options.build(&schema_json) {
+            panic!("Schema invalid {:?}: {}", schema_path, e);
+        }
+    }
 }
 
 fn find_files(dir: &Path, suffix: &str, results: &mut Vec<PathBuf>) {

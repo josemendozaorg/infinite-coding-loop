@@ -8,7 +8,8 @@ import ReactFlow, {
   addEdge,
   Panel
 } from 'reactflow';
-import type { Connection, Edge, Node } from 'reactflow';
+import type { Connection, Edge, Node, ReactFlowInstance } from 'reactflow';
+import type { NodeData } from './types';
 import 'reactflow/dist/style.css';
 import {
   Save,
@@ -28,7 +29,7 @@ import { Handle, Position } from 'reactflow';
 
 const nodeWidth = 180;
 
-const CustomNode = ({ data }: { data: any }) => {
+const CustomNode = ({ data }: { data: NodeData }) => {
   const isRoot = data.kind === 'SoftwareApplication';
   const isAgent = data.kind === 'Agent';
   const isArtifact = data.kind === 'Artifact';
@@ -99,8 +100,10 @@ const getLeftToRightLayout = (nodes: Node[], edges: Edge[], rootId = 'SoftwareAp
   }
 
   while (queue.length > 0) {
-    const sortedQueue = queue.sort((a, b) => a.level - b.level);
-    const { id, level } = sortedQueue.shift()!;
+    queue.sort((a, b) => a.level - b.level);
+    const item = queue.shift();
+    if (!item) break;
+    const { id, level } = item;
 
     if (!levels[level]) levels[level] = [];
     levels[level].push(id);
@@ -171,7 +174,7 @@ const App: React.FC = () => {
   // Exploration Mode State
   const [searchMode, setSearchMode] = useState(false);
   const [visibleNodeIds, setVisibleNodeIds] = useState<Set<string>>(new Set(['SoftwareApplication']));
-  const [rfInstance, setRfInstance] = useState<any>(null);
+  const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null);
 
   // Performance / Test Hooks
   const isTesting = typeof window !== 'undefined' && window.location.search.includes('testing=true');
@@ -311,7 +314,7 @@ const App: React.FC = () => {
       });
     }
 
-    let layouted = getLeftToRightLayout(activeNodes, activeEdges);
+    const layouted = getLeftToRightLayout(activeNodes, activeEdges);
 
     // 6. Handle Layout Modes
     if (showSimulation && simulationSteps.length > 0) {
@@ -430,7 +433,7 @@ const App: React.FC = () => {
     }
   };
 
-  const onInit = (reactFlowInstance: any) => {
+  const onInit = (reactFlowInstance: ReactFlowInstance) => {
     setRfInstance(reactFlowInstance);
     setTimeout(() => {
       reactFlowInstance.fitView({ padding: 0.2 });
