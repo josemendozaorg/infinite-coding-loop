@@ -1,13 +1,13 @@
 [package]
 name = "pulpo-cli"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 
 [dependencies]
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
 console = "0.16.2"
-pulpo-engine = { version = "0.1.0", path = "../../packages/pulpo-engine" }
+pulpo-engine = { workspace = true }
 dialoguer = "0.12.0"
 indicatif = "0.18.3"
 async-trait = { workspace = true }

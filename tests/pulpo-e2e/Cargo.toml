@@ -1,6 +1,6 @@
 [package]
 name = "pulpo-e2e"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 
 [dependencies]
@@ -8,7 +8,7 @@ edition = "2024"
 [dev-dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
-pulpo-engine = { path = "../../packages/pulpo-engine" }
+pulpo-engine = { workspace = true }
 petgraph.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -7,7 +7,7 @@
 	lint lint-rust lint-visualizer format format-check \
 	feedback \
 	run-cli run-tui dev-visualizer \
-	clean ontology
+	clean ontology release
 
 help:
 	@echo "Available commands:"
@@ -28,6 +28,7 @@ help:
 	@echo "  make dev-visualizer      - Run pulpo-visualizer in dev mode"
 	@echo "  make clean               - Clean Cargo targets and NPM node_modules"
 	@echo "  make ontology            - Generate and verify Ontology from JSON Schema"
+	@echo "  make release             - Auto-detect version bump, generate changelog, commit, and tag"
 	@echo ""
 	@echo "See Makefile for more granular build, test, and run commands."
 
@@ -112,3 +113,6 @@ ontology:
 	cargo run -p pulpo-tools -- convert
 	@echo "Verifying generated Ontology..."
 	cargo run -p pulpo-tools -- verify
+
+release:
+	./scripts/bump_version.sh release

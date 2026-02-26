@@ -28,3 +28,4 @@ petgraph = "0.6"
 tempfile = "3.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+pulpo-engine = { version = "0.1.1", path = "packages/pulpo-engine" }
