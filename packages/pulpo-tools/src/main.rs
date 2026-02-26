@@ -6,7 +6,7 @@ use serde::Deserialize;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -322,7 +322,7 @@ fn simulate_path(input_path: &PathBuf) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn infer_base_path(input_path: &PathBuf) -> Option<PathBuf> {
+fn infer_base_path(input_path: &Path) -> Option<PathBuf> {
     input_path.parent().map(|p| {
         let mut current = p;
         if current.ends_with("schema") {

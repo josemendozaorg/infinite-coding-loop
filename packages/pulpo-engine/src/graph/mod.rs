@@ -286,10 +286,34 @@ impl DependencyGraph {
             }
 
             if let Some(t) = rel.source.entity_type.clone() {
-                self.node_types.insert(source_str.clone(), t);
+                println!("DEBUG: Inserting node_type for {}: {}", source_str, t);
+                self.node_types.insert(source_str.clone(), t.clone());
+                if t == "Agent" {
+                    self.agent_roles.insert(source_str.clone());
+                    if !self.loaded_agents.contains_key(&source_str) {
+                        let config_wrapper = serde_json::json!({
+                            "name": source_str,
+                            "system_prompt": ""
+                        });
+                        self.loaded_agents
+                            .insert(source_str.clone(), config_wrapper.to_string());
+                    }
+                }
             }
             if let Some(t) = rel.target.entity_type.clone() {
-                self.node_types.insert(target_str.clone(), t);
+                println!("DEBUG: Inserting node_type for {}: {}", target_str, t);
+                self.node_types.insert(target_str.clone(), t.clone());
+                if t == "Agent" {
+                    self.agent_roles.insert(target_str.clone());
+                    if !self.loaded_agents.contains_key(&target_str) {
+                        let config_wrapper = serde_json::json!({
+                            "name": target_str,
+                            "system_prompt": ""
+                        });
+                        self.loaded_agents
+                            .insert(target_str.clone(), config_wrapper.to_string());
+                    }
+                }
             }
 
             self.node_configs
@@ -468,6 +492,10 @@ impl DependencyGraph {
             Some(content) => content,
             None => {
                 let node_type = self.node_types.get(kind).map(|s| s.as_str());
+                println!(
+                    "DEBUG: validate_artifact for {}. node_type: {:?}",
+                    kind, node_type
+                );
                 if node_type == Some("Other") || kind == "SoftwareApplication" {
                     return Ok(());
                 }

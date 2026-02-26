@@ -1,8 +1,8 @@
 ## Ideas
 
-[][]- Step back and clean the crates and the visualizer and the tests. We must know how this is evolving to make sure we have control over it with the plenty of features coming.
+[X] Step back and clean the crates and the visualizer and the tests. We must know how this is evolving to make sure we have control over it with the plenty of features coming.
 
-[][]- Create changelog document to add the features being implemented.
+[]- Create changelog document to add the features being implemented.
 
 [][] - Start rigorous versioning and releases in github.
 

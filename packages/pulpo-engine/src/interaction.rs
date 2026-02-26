@@ -31,3 +31,65 @@ pub trait UserInteraction {
     /// Log error information.
     fn log_error(&self, msg: &str);
 }
+
+// Exposed for testing
+pub mod mocks {
+    use super::*;
+    use std::collections::VecDeque;
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Default, Clone)]
+    pub struct MockUserInteraction {
+        pub feature_responses: Arc<Mutex<VecDeque<String>>>,
+        pub confirmations: Arc<Mutex<VecDeque<bool>>>,
+    }
+
+    impl MockUserInteraction {
+        pub fn new() -> Self {
+            Self::default()
+        }
+
+        pub fn add_feature_response(&self, response: String) {
+            self.feature_responses.lock().unwrap().push_back(response);
+        }
+
+        pub fn add_confirmation(&self, response: bool) {
+            self.confirmations.lock().unwrap().push_back(response);
+        }
+    }
+
+    #[async_trait]
+    impl UserInteraction for MockUserInteraction {
+        async fn ask_user(&self, _prompt: &str) -> Result<String> {
+            Ok("MOCK_USER_INPUT".to_string())
+        }
+
+        async fn ask_for_feature(&self, _prompt: &str) -> Result<String> {
+            Ok(self
+                .feature_responses
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or_default())
+        }
+
+        async fn confirm(&self, _prompt: &str) -> Result<bool> {
+            Ok(self
+                .confirmations
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or(true))
+        }
+
+        async fn select_option(&self, _prompt: &str, _options: &[String]) -> Result<usize> {
+            Ok(0)
+        }
+
+        fn start_step(&self, _name: &str) {}
+        fn end_step(&self, _name: &str) {}
+        fn render_artifact(&self, _kind: &str, _data: &Value) {}
+        fn log_info(&self, _msg: &str) {}
+        fn log_error(&self, _msg: &str) {}
+    }
+}

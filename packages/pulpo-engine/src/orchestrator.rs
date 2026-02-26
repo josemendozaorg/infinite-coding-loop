@@ -147,7 +147,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         self
     }
 
-    async fn ensure_persistence_dirs(&self) -> Result<PathBuf> {
+    pub(crate) async fn ensure_persistence_dirs(&self) -> Result<PathBuf> {
         let work_dir = self.work_dir.as_ref().context("Work directory not set")?;
         let icl_dir = work_dir.join(".infinitecodingloop");
         let iterations_dir = icl_dir.join("iterations");
@@ -317,7 +317,11 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         (done, pending)
     }
 
-    async fn persist_artifact(&self, name: &str, data: &serde_json::Value) -> Result<()> {
+    pub(crate) async fn persist_artifact(
+        &self,
+        name: &str,
+        data: &serde_json::Value,
+    ) -> Result<()> {
         let iteration = self
             .current_iteration
             .as_ref()
@@ -442,7 +446,7 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
     }
 
     #[allow(clippy::map_entry)]
-    async fn handle_initial_input(
+    pub(crate) async fn handle_initial_input(
         &mut self,
         ui: &impl crate::interaction::UserInteraction,
     ) -> Result<bool> {
@@ -822,8 +826,10 @@ impl<C: AiCliClient + Clone + Send + Sync + 'static> Orchestrator<C> {
         }
 
         // Persist verification report
-        self.persist_artifact(&format!("{}_verification", action.target), &result)
-            .await?;
+        let verification_name = format!("{}_verification", action.target);
+        self.artifacts
+            .insert(verification_name.clone(), result.clone());
+        self.persist_artifact(&verification_name, &result).await?;
 
         Ok(())
     }
@@ -1169,6 +1175,201 @@ mod tests {
         assert!(iter_dir.join("iteration.json").exists());
         assert!(temp_dir.path().join("spec").exists()); // Default docs folder
 
+        Ok(())
+    }
+    #[tokio::test]
+    async fn test_orchestrator_identify_next_actions() -> Result<()> {
+        let client = MockCliClient::new();
+        let temp_dir = tempdir()?;
+        let work_dir = temp_dir.path().to_path_buf();
+
+        let metamodel_json = r#"[
+            {"source": {"name": "SoftwareApplication", "type": "Other"}, "target": {"name": "TestArtifact", "type": "Other"}, "type": {"name": "Creation", "verbType": "Creation"}},
+            {"source": {"name": "Agent", "type": "Agent"}, "target": {"name": "TestArtifact", "type": "Other"}, "type": {"name": "Creation", "verbType": "Creation"}}
+        ]"#;
+
+        let orchestrator = Orchestrator::new_with_metamodel(
+            client,
+            "test_app".to_string(),
+            "Test App".to_string(),
+            work_dir,
+            metamodel_json,
+            None,
+        )
+        .await?;
+
+        let actions = orchestrator.identify_next_actions();
+        assert_eq!(actions.len(), 1);
+        assert_eq!(actions[0].agent, "Agent");
+        assert_eq!(actions[0].target, "TestArtifact");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_orchestrator_get_execution_status() -> Result<()> {
+        let client = MockCliClient::new();
+        let temp_dir = tempdir()?;
+        let work_dir = temp_dir.path().to_path_buf();
+
+        let metamodel_json = r#"[
+            {"source": {"name": "Agent", "type": "Agent"}, "target": {"name": "TestArtifact", "type": "Other"}, "type": {"name": "Creation", "verbType": "Creation"}}
+        ]"#;
+
+        let mut orchestrator = Orchestrator::new_with_metamodel(
+            client,
+            "test_app".to_string(),
+            "Test App".to_string(),
+            work_dir,
+            metamodel_json,
+            None,
+        )
+        .await?;
+
+        let (done, pending) = orchestrator.get_execution_status();
+        assert_eq!(done.len(), 0);
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0], "TestArtifact");
+
+        orchestrator.artifacts.insert(
+            "TestArtifact".to_string(),
+            serde_json::json!({"status": "done"}),
+        );
+
+        let (done, pending) = orchestrator.get_execution_status();
+        assert_eq!(done.len(), 1);
+        assert_eq!(done[0], "TestArtifact");
+        assert_eq!(pending.len(), 0);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_orchestrator_handle_initial_input() -> Result<()> {
+        use crate::interaction::mocks::MockUserInteraction;
+        let client = MockCliClient::new();
+        let temp_dir = tempdir()?;
+        let work_dir = temp_dir.path().to_path_buf();
+
+        let mut orchestrator = Orchestrator::new_with_metamodel(
+            client,
+            "test_app".to_string(),
+            "Test App".to_string(),
+            work_dir,
+            "[]",
+            None,
+        )
+        .await?;
+
+        let ui = MockUserInteraction::new();
+        ui.add_feature_response("Build a login page".to_string());
+
+        let result = orchestrator.handle_initial_input(&ui).await?;
+        assert!(result);
+        assert!(orchestrator.artifacts.contains_key("SoftwareApplication"));
+
+        let app_artifact = orchestrator.artifacts.get("SoftwareApplication").unwrap();
+        assert_eq!(app_artifact["goal"], "Build a login page");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_orchestrator_execute_action() -> Result<()> {
+        use crate::interaction::mocks::MockUserInteraction;
+        let client = MockCliClient::new();
+        let temp_dir = tempdir()?;
+        let work_dir = temp_dir.path().to_path_buf();
+
+        let metamodel_json = r#"[
+            {"source": {"name": "Agent", "type": "Agent"}, "target": {"name": "TestArtifact", "type": "Other"}, "type": {"name": "Creation", "verbType": "Creation"}}
+        ]"#;
+
+        let mut orchestrator = Orchestrator::new_with_metamodel(
+            client.clone(),
+            "test_app".to_string(),
+            "Test App".to_string(),
+            work_dir,
+            metamodel_json,
+            None,
+        )
+        .await?;
+
+        orchestrator.start_iteration("Execution Test").await?;
+
+        // Mock AI Response
+        client.add_response(r#"{"status": "success", "content": "Hello World"}"#.to_string());
+
+        let ui = MockUserInteraction::new();
+        let action = ActionPlan {
+            agent: "Agent".to_string(),
+            relation: "Creation".to_string(),
+            target: "TestArtifact".to_string(),
+            category: RelationCategory::Creation,
+        };
+
+        orchestrator.execute_action(action, &ui).await?;
+
+        assert!(orchestrator.artifacts.contains_key("TestArtifact"));
+        let artifact = orchestrator.artifacts.get("TestArtifact").unwrap();
+        assert_eq!(artifact["content"], "Hello World");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_orchestrator_handle_verification() -> Result<()> {
+        use crate::interaction::mocks::MockUserInteraction;
+        let client = MockCliClient::new();
+        let temp_dir = tempdir()?;
+        let work_dir = temp_dir.path().to_path_buf();
+
+        let metamodel_json = r#"[
+            {"source": {"name": "Agent", "type": "Agent"}, "target": {"name": "TestArtifact", "type": "Other"}, "type": {"name": "Verification", "verbType": "Verification"}}
+        ]"#;
+
+        let mut orchestrator = Orchestrator::new_with_metamodel(
+            client.clone(),
+            "test_app".to_string(),
+            "Test App".to_string(),
+            work_dir,
+            metamodel_json,
+            None,
+        )
+        .await?;
+
+        orchestrator.start_iteration("Verification Test").await?;
+
+        // Enure target artifact exists before verification
+        orchestrator.artifacts.insert(
+            "TestArtifact".to_string(),
+            serde_json::json!({"content": "to be verified"}),
+        );
+
+        // Mock AI Response for Verification
+        client
+            .add_response(r#"{"score": 0.9, "feedback": "Good job", "passed": true}"#.to_string());
+
+        let ui = MockUserInteraction::new();
+        let action = ActionPlan {
+            agent: "Agent".to_string(),
+            relation: "Verification".to_string(),
+            target: "TestArtifact".to_string(),
+            category: RelationCategory::Verification,
+        };
+
+        orchestrator.execute_action(action, &ui).await?;
+
+        // Verification results are stored in a special key or as a separate artifact?
+        // Actually handle_verification_result says:
+        // self.artifacts.insert(format!("{}_verification", action.target), result);
+        assert!(
+            orchestrator
+                .artifacts
+                .contains_key("TestArtifact_verification")
+        );
+        let verif = orchestrator
+            .artifacts
+            .get("TestArtifact_verification")
+            .unwrap();
+        assert_eq!(verif["score"], 0.9);
+        assert_eq!(verif["passed"], true);
         Ok(())
     }
 }
