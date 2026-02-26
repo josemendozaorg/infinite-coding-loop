@@ -6,7 +6,7 @@ use serde::Deserialize;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -128,6 +128,30 @@ fn convert(input_path: &PathBuf, output_path: &PathBuf) -> anyhow::Result<()> {
         iri: "http://www.w3.org/2000/01/rdf-schema#range",
     };
 
+    declare_triples(
+        relationships,
+        &mut formatter,
+        rdf_type,
+        owl_class,
+        owl_obj_prop,
+        rdfs_domain,
+        rdfs_range,
+    )?;
+
+    formatter.finish()?;
+    println!("Successfully wrote ontology.");
+    Ok(())
+}
+
+fn declare_triples(
+    relationships: Vec<MetaRelationship>,
+    formatter: &mut TurtleFormatter<BufWriter<File>>,
+    rdf_type: NamedNode,
+    owl_class: NamedNode,
+    owl_obj_prop: NamedNode,
+    rdfs_domain: NamedNode,
+    rdfs_range: NamedNode,
+) -> anyhow::Result<()> {
     let mut classes = HashSet::new();
     let mut properties = HashSet::new();
 
@@ -180,9 +204,6 @@ fn convert(input_path: &PathBuf, output_path: &PathBuf) -> anyhow::Result<()> {
             object: Term::NamedNode(NamedNode { iri: &t_iri }),
         })?;
     }
-
-    formatter.finish()?;
-    println!("Successfully wrote ontology.");
     Ok(())
 }
 
@@ -218,7 +239,7 @@ fn validate_graph(input_path: &PathBuf) -> anyhow::Result<()> {
     // The convention is that `input_path` is usually `ontology/artifact/schema/metamodel.schema.json`.
     // The base path should be `ontology/`.
     // Let's try to infer it. If input has parent, use it.
-    let base_path = input_path.parent().and_then(|p| {
+    let base_path = input_path.parent().map(|p| {
         // If parent is "schemas" or "artifact/schema", go up?
         // Since `load_from_metamodel` expects `base_path` to be the root containing `agent/`, `relationship/` etc.
         // If input is `.../ontology-software-engineering/artifact/schema/metamodel.schema.json`
@@ -245,7 +266,7 @@ fn validate_graph(input_path: &PathBuf) -> anyhow::Result<()> {
         if current.ends_with("schemas") {
             current = current.parent().unwrap_or(current);
         }
-        Some(current)
+        current
     });
 
     println!("Using base path: {:?}", base_path);
@@ -264,14 +285,45 @@ fn validate_graph(input_path: &PathBuf) -> anyhow::Result<()> {
 
 fn simulate_path(input_path: &PathBuf) -> anyhow::Result<()> {
     use console::style;
-    use pulpo_engine::graph::{DependencyGraph, RelationCategory};
+    use pulpo_engine::graph::DependencyGraph;
     use std::collections::HashSet;
 
     println!("Simulating execution path for {:?}", input_path);
     let content = std::fs::read_to_string(input_path)?;
 
-    // Simple base path inference as in validate_graph
-    let base_path = input_path.parent().and_then(|p| {
+    let base_path = infer_base_path(input_path);
+    let graph = DependencyGraph::load_from_metamodel(&content, base_path.as_deref())?;
+
+    let mut produced = HashSet::new();
+    produced.insert("SoftwareApplication".to_string());
+
+    let missing_creator = detect_missing_creators(&graph);
+    // Add missing creators to produced so simulation can continue
+    for node in &missing_creator {
+        produced.insert(node.clone());
+    }
+
+    let mut verified = HashSet::new();
+    println!("\n{}", style("PREDICTED EXECUTION PATH:").bold().yellow());
+    println!("{} SoftwareApplication (Initial Goal)", style("🏠").green());
+
+    let steps = run_simulation_loop(&graph, &mut produced, &mut verified);
+
+    if steps >= 100 {
+        println!(
+            "\n{}",
+            style("Reached maximum simulation steps. Possible infinite loop in ontology?")
+                .red()
+                .bold()
+        );
+    }
+
+    detect_unreachables(&graph, &produced, &missing_creator);
+    Ok(())
+}
+
+fn infer_base_path(input_path: &Path) -> Option<PathBuf> {
+    input_path.parent().map(|p| {
         let mut current = p;
         if current.ends_with("schema") {
             current = current.parent().unwrap_or(current);
@@ -282,18 +334,14 @@ fn simulate_path(input_path: &PathBuf) -> anyhow::Result<()> {
         if current.ends_with("schemas") {
             current = current.parent().unwrap_or(current);
         }
-        Some(current)
-    });
+        current.to_path_buf()
+    })
+}
 
-    let graph = DependencyGraph::load_from_metamodel(&content, base_path)?;
-
-    let mut produced = HashSet::new();
-    produced.insert("SoftwareApplication".to_string());
-
-    let mut missing_creator = Vec::new();
-
-    // Identify Gaps: Any non-Agent (except root) that isn't created by an Agent
+fn detect_missing_creators(graph: &pulpo_engine::graph::DependencyGraph) -> Vec<String> {
     use petgraph::visit::EdgeRef;
+    use pulpo_engine::graph::RelationCategory;
+    let mut missing_creator = Vec::new();
     for node_idx in graph.graph.node_indices() {
         let node_name = &graph.graph[node_idx];
         if graph.is_agent(node_name) || node_name == "SoftwareApplication" {
@@ -318,24 +366,25 @@ fn simulate_path(input_path: &PathBuf) -> anyhow::Result<()> {
                     .copied()
                     .unwrap_or(RelationCategory::Context);
 
-                // Effective creation: Agent --(Creation)--> Node
                 category == RelationCategory::Creation && graph.is_agent(source_name)
             });
 
         if !is_created_by_agent {
             missing_creator.push(node_name.clone());
-            // We still add them to produced so the simulation can show them in context
-            // but we will flag them as errors at the end.
-            produced.insert(node_name.clone());
         }
     }
+    missing_creator
+}
 
-    let mut verified = HashSet::new();
+fn run_simulation_loop(
+    graph: &pulpo_engine::graph::DependencyGraph,
+    produced: &mut HashSet<String>,
+    verified: &mut HashSet<String>,
+) -> usize {
+    use console::style;
+    use pulpo_engine::graph::RelationCategory;
     let mut steps = 0;
     let max_steps = 100;
-
-    println!("\n{}", style("PREDICTED EXECUTION PATH:").bold().yellow());
-    println!("{} SoftwareApplication (Initial Goal)", style("🏠").green());
 
     while steps < max_steps {
         let mut actions = Vec::new();
@@ -393,7 +442,6 @@ fn simulate_path(input_path: &PathBuf) -> anyhow::Result<()> {
             break;
         }
 
-        // The engine currently picks the first actionable action it finds in edge order.
         let (agent, relation, target, cat) = &actions[0];
         steps += 1;
 
@@ -412,16 +460,12 @@ fn simulate_path(input_path: &PathBuf) -> anyhow::Result<()> {
             style(target).bold().magenta()
         );
 
-        // Show Context
         let mut context = graph.get_related_artifacts(target);
         if *cat == "Verification" || *cat == "Refines" {
             context.push(target.clone());
         }
         context.push("SoftwareApplication".to_string());
-
-        // Filter to only show context that exists at this point in the simulation
         context.retain(|c| produced.contains(c));
-
         context.sort();
         context.dedup();
 
@@ -440,29 +484,24 @@ fn simulate_path(input_path: &PathBuf) -> anyhow::Result<()> {
             verified.insert(target.clone());
         }
     }
+    steps
+}
 
-    if steps >= max_steps {
-        println!(
-            "\n{}",
-            style("Reached maximum simulation steps. Possible infinite loop in ontology?")
-                .red()
-                .bold()
-        );
-    }
-
-    // Detect Unlinked Nodes
+fn detect_unreachables(
+    graph: &pulpo_engine::graph::DependencyGraph,
+    produced: &HashSet<String>,
+    missing_creator: &[String],
+) {
+    use console::style;
     let all_nodes: HashSet<String> = graph
         .graph
         .node_indices()
         .map(|i| graph.graph[i].clone())
         .collect();
-    let visited_nodes = produced; // produced contains all artifacts/entry points reached.
 
-    // Note: unlinked here means not reachable from the starting point "SoftwareApplication"
-    // via the engine's execution logic.
     let mut unlinked: Vec<&String> = all_nodes
         .iter()
-        .filter(|n| !visited_nodes.contains(*n) && !graph.is_agent(n))
+        .filter(|n| !produced.contains(*n) && !graph.is_agent(n))
         .collect();
     unlinked.sort();
 
@@ -473,7 +512,7 @@ fn simulate_path(input_path: &PathBuf) -> anyhow::Result<()> {
                 .bold()
                 .red()
         );
-        let mut sorted = missing_creator.clone();
+        let mut sorted = missing_creator.to_vec();
         sorted.sort();
         for node in sorted {
             println!("  {} {}", style("✗").red(), node);
@@ -502,6 +541,4 @@ fn simulate_path(input_path: &PathBuf) -> anyhow::Result<()> {
                 .green()
         );
     }
-
-    Ok(())
 }

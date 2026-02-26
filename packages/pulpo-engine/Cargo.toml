@@ -14,7 +14,7 @@ sqlx = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
 chrono = { workspace = true, features = ["serde"] }
-jsonschema = "0.17"
+jsonschema = "0.26"
 petgraph.workspace = true
 console = "0.16.2"
 tracing.workspace = true

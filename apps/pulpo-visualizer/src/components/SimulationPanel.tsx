@@ -33,7 +33,7 @@ const SimulationPanel: React.FC<SimulationPanelProps> = ({
     const [isPlaying, setIsPlaying] = useState(false);
 
     useEffect(() => {
-        let interval: any;
+        let interval: ReturnType<typeof setInterval> | undefined;
         if (isPlaying && steps.length > 0) {
             interval = setInterval(() => {
                 onSetStepIndex((prev: number) => {
@@ -214,7 +214,9 @@ const SimulationPanel: React.FC<SimulationPanelProps> = ({
                                 key={step.id}
                                 onClick={() => {
                                     setIsPlaying(false);
-                                    onStepClick && onStepClick(step);
+                                    if (onStepClick) {
+                                        onStepClick(step);
+                                    }
                                 }}
                                 style={{
                                     background: index === currentStepIndex ? 'rgba(56, 139, 253, 0.15)' : 'rgba(13, 17, 23, 0.5)',

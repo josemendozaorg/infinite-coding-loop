@@ -4,6 +4,48 @@
     "title": "Taxonomy",
     "description": "Taxonomy of Kinds for the Software Engineering Ontology.",
     "$defs": {
+        "EntityKind": {
+            "type": "string",
+            "enum": [
+                "AcceptanceCriteria",
+                "ArchitectureComponent",
+                "ArchitecturePattern",
+                "Artifact",
+                "ChangeRequest",
+                "Code",
+                "Command",
+                "DataModel",
+                "DesignSpec",
+                "DomainEntity",
+                "Environment",
+                "Feature",
+                "ImplementationPlan",
+                "Observation",
+                "Persona",
+                "Plan",
+                "ProjectStructure",
+                "Requirement",
+                "Risk",
+                "SoftwareApplication",
+                "SourceFile",
+                "Standard",
+                "TechnologyStack",
+                "TestCase",
+                "TestResult",
+                "Tool",
+                "UnitTest",
+                "UserStory"
+            ]
+        },
+        "ArtifactType": {
+            "type": "string",
+            "enum": [
+                "Agent",
+                "Document",
+                "Code",
+                "Other"
+            ]
+        },
         "Kind_AcceptanceCriteria": {
             "type": "string",
             "enum": [

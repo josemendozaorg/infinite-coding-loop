@@ -2,13 +2,13 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use clap::Parser;
 use console::style;
+use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
 use pulpo_engine::{
     agents::cli_client::ShellCliClient,
     config::{self, IclConfig},
     interaction::UserInteraction,
     orchestrator::{IterationInfo, Orchestrator},
 };
-use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
@@ -222,10 +222,67 @@ async fn discover_ontologies_recursive(dir: &Path, results: &mut Vec<PathBuf>) -
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    // 1. Setup Logging
     setup_logging(args.debug);
 
-    // 2. Resolve Working Directory
+    let base_work_dir = resolve_work_dir(&args).await?;
+
+    println!(
+        "\n{}",
+        style("   PULPO SOFTWARE FACTORY   ")
+            .bold()
+            .on_blue()
+            .white()
+    );
+    println!("{}", style("---------------------------").dim());
+
+    let (ontology_dir, ontology_content) = select_ontology(&args).await?;
+
+    let (final_work_dir, app_name, final_app_id, docs_folder) =
+        select_or_create_project(&base_work_dir, &args).await?;
+
+    config::ensure_infinite_coding_loop(&final_work_dir, &app_name, &final_app_id, &docs_folder)
+        .await?;
+    println!(
+        "{}",
+        style(format!("Documents folder: {}", docs_folder)).dim()
+    );
+
+    println!("{}", style("Running in LIVE MODE (calling AI CLI)").green());
+
+    let category_defaults = map_models_to_categories(&args)?;
+
+    let client = ShellCliClient::new("gemini", final_work_dir.to_string_lossy().to_string())
+        .with_yolo(args.yolo)
+        .with_model(
+            args.model
+                .clone()
+                .unwrap_or_else(|| "gemini-2.5-flash".to_string()),
+        )
+        .with_debug(args.debug_ai_cli)
+        .with_output_format(args.output_format.clone());
+
+    let mut orchestrator = Orchestrator::new_with_metamodel(
+        client,
+        final_app_id.clone(),
+        app_name.clone(),
+        final_work_dir.clone(),
+        &ontology_content,
+        Some(ontology_dir.as_path()),
+    )
+    .await?
+    .with_max_iterations(args.max_iterations)
+    .with_docs_folder(docs_folder)
+    .with_category_defaults(category_defaults);
+
+    let ui = CliInteraction::new(args.clone());
+    handle_iteration_resumption(&mut orchestrator, &ui, &final_work_dir).await?;
+
+    orchestrator.run(&ui).await?;
+
+    Ok(())
+}
+
+async fn resolve_work_dir(args: &Args) -> Result<PathBuf> {
     let work_dir_input: String = if let Some(ref wd) = args.work_dir {
         wd.clone()
     } else {
@@ -235,22 +292,13 @@ async fn main() -> Result<()> {
             .interact_text()?
     };
     let base_work_dir = PathBuf::from(work_dir_input);
-
     if !base_work_dir.exists() {
         tokio::fs::create_dir_all(&base_work_dir).await?;
     }
+    Ok(base_work_dir)
+}
 
-    // Banner
-    println!(
-        "\n{}",
-        style("   DASS SOFTWARE FACTORY   ")
-            .bold()
-            .on_blue()
-            .white()
-    );
-    println!("{}", style("---------------------------").dim());
-
-    // 3. Ontology selection (NEW: before project discovery)
+async fn select_ontology(args: &Args) -> Result<(PathBuf, String)> {
     let ontology_search_path = if let Some(ref path) = args.ontology_path {
         path.clone()
     } else {
@@ -303,92 +351,68 @@ async fn main() -> Result<()> {
     };
 
     let ontology_content = tokio::fs::read_to_string(ontology_dir.join("ontology.json")).await?;
+    Ok((ontology_dir, ontology_content))
+}
 
-    // 4. Discover existing projects or create new
+async fn select_or_create_project(
+    base_work_dir: &Path,
+    args: &Args,
+) -> Result<(PathBuf, String, String, String)> {
     let existing_projects: Vec<(PathBuf, IclConfig)> =
-        config::discover_projects(&base_work_dir).await?;
+        config::discover_projects(base_work_dir).await?;
 
-    let (final_work_dir, app_name, final_app_id, docs_folder): (PathBuf, String, String, String) =
-        if !existing_projects.is_empty() {
-            let mut options: Vec<String> = existing_projects
-                .iter()
-                .map(|(path, config)| format!("{} ({})", config.app_name, path.display()))
-                .collect();
-            options.push(style("✚ Create New Project").bold().to_string());
+    if !existing_projects.is_empty() {
+        let mut options: Vec<String> = existing_projects
+            .iter()
+            .map(|(path, config)| format!("{} ({})", config.app_name, path.display()))
+            .collect();
+        options.push(style("✚ Create New Project").bold().to_string());
 
-            let selection = Select::with_theme(&ColorfulTheme::default())
-                .with_prompt("Select a project")
-                .items(&options)
-                .default(0)
-                .interact()?;
+        let selection = Select::with_theme(&ColorfulTheme::default())
+            .with_prompt("Select a project")
+            .items(&options)
+            .default(0)
+            .interact()?;
 
-            if selection < existing_projects.len() {
-                let (project_path, config) = &existing_projects[selection];
-                println!(
-                    "{}",
-                    style(format!("Resuming: {} ({})", config.app_name, config.app_id)).yellow()
-                );
-                let docs = config.docs_folder.clone();
-                (
-                    project_path.clone(),
-                    config.app_name.clone(),
-                    config.app_id.clone(),
-                    docs,
-                )
-            } else {
-                // Create new project
-                let name: String = Input::with_theme(&ColorfulTheme::default())
-                    .with_prompt("Application Name")
-                    .default("MyNewApp".into())
-                    .interact_text()?;
-                let id = if let Some(ref id) = args.app_id {
-                    id.clone()
-                } else {
-                    uuid::Uuid::new_v4().to_string()
-                };
-                let docs: String = Input::with_theme(&ColorfulTheme::default())
-                    .with_prompt("Documents folder (relative to project root)")
-                    .default("spec".into())
-                    .interact_text()?;
-                let project_path = base_work_dir.join(&name);
-                if !project_path.exists() {
-                    tokio::fs::create_dir_all(&project_path).await?;
-                }
-                (project_path, name, id, docs)
-            }
-        } else {
-            // No existing projects found — check if this dir itself is a project or create new
-            let name: String = Input::with_theme(&ColorfulTheme::default())
-                .with_prompt("Application Name")
-                .default("MyNewApp".into())
-                .interact_text()?;
-            let id = if let Some(ref id) = args.app_id {
-                id.clone()
-            } else {
-                uuid::Uuid::new_v4().to_string()
-            };
-            let docs: String = Input::with_theme(&ColorfulTheme::default())
-                .with_prompt("Documents folder (relative to project root)")
-                .default("spec".into())
-                .interact_text()?;
-            let project_path = base_work_dir.join(&name);
-            if !project_path.exists() {
-                tokio::fs::create_dir_all(&project_path).await?;
-            }
-            (project_path, name, id, docs)
-        };
+        if selection < existing_projects.len() {
+            let (project_path, config) = &existing_projects[selection];
+            println!(
+                "{}",
+                style(format!("Resuming: {} ({})", config.app_name, config.app_id)).yellow()
+            );
+            return Ok((
+                project_path.clone(),
+                config.app_name.clone(),
+                config.app_id.clone(),
+                config.docs_folder.clone(),
+            ));
+        }
+    }
 
-    // Ensure .infinitecodingloop exists
-    config::ensure_infinite_coding_loop(&final_work_dir, &app_name, &final_app_id, &docs_folder)
-        .await?;
-    println!(
-        "{}",
-        style(format!("Documents folder: {}", docs_folder)).dim()
-    );
+    // Create new project
+    let name: String = Input::with_theme(&ColorfulTheme::default())
+        .with_prompt("Application Name")
+        .default("MyNewApp".into())
+        .interact_text()?;
+    let id = if let Some(ref id) = args.app_id {
+        id.clone()
+    } else {
+        uuid::Uuid::new_v4().to_string()
+    };
+    let docs: String = Input::with_theme(&ColorfulTheme::default())
+        .with_prompt("Documents folder (relative to project root)")
+        .default("spec".into())
+        .interact_text()?;
+    let project_path = base_work_dir.join(&name);
+    if !project_path.exists() {
+        tokio::fs::create_dir_all(&project_path).await?;
+    }
+    Ok((project_path, name, id, docs))
+}
 
-    println!("{}", style("Running in LIVE MODE (calling AI CLI)").green());
-
-    // CLI defaults & category mapping Prompt
+fn map_models_to_categories(
+    args: &Args,
+) -> Result<std::collections::HashMap<String, pulpo_engine::graph::executor::ExecutionOptions>> {
     use pulpo_engine::graph::executor::ExecutionOptions;
     use std::collections::HashMap;
 
@@ -405,25 +429,20 @@ async fn main() -> Result<()> {
     let categories_to_map = vec!["High Reasoning", "Fast Execution", "Daily Driver"];
 
     println!(
-        "{}",
+        "\n{}",
         style("Please map AI models to execution categories:")
             .magenta()
             .bold()
     );
 
-    // Default fallback model if the user skips or uses `-m` flag.
-    let global_model = if let Some(ref m) = args.model {
-        Some(m.clone())
-    } else {
-        None
-    };
+    let global_model = args.model.clone();
 
     for category in categories_to_map {
         let model_for_cat = if let Some(ref m) = global_model {
             m.clone()
         } else {
             let selection = Select::with_theme(&ColorfulTheme::default())
-                .with_prompt(&format!(
+                .with_prompt(format!(
                     "Select model for category: {}",
                     style(category).cyan()
                 ))
@@ -445,7 +464,7 @@ async fn main() -> Result<()> {
             ExecutionOptions {
                 model_type: Some(category.to_string()),
                 model: Some(model_for_cat.clone()),
-                ai_cli: Some("gemini".to_string()), // Default to gemini for now
+                ai_cli: Some("gemini".to_string()),
             },
         );
         println!(
@@ -454,31 +473,17 @@ async fn main() -> Result<()> {
             style(&model_for_cat).green()
         );
     }
+    Ok(category_defaults)
+}
 
-    // Prepare default shell client (still used for commands not tied to a category, like git commit)
-    let client = ShellCliClient::new("gemini", final_work_dir.to_string_lossy().to_string())
-        .with_yolo(args.yolo)
-        .with_model(global_model.unwrap_or_else(|| "gemini-2.5-flash".to_string()))
-        .with_debug(args.debug_ai_cli)
-        .with_output_format(args.output_format.clone());
-
-    let mut orchestrator = Orchestrator::new_with_metamodel(
-        client,
-        final_app_id.clone(),
-        app_name.clone(),
-        final_work_dir.clone(),
-        &ontology_content,
-        Some(ontology_dir.as_path()),
-    )
-    .await?
-    .with_max_iterations(args.max_iterations)
-    .with_docs_folder(docs_folder)
-    .with_category_defaults(category_defaults);
-
-    let ui = CliInteraction::new(args.clone());
-
-    // 4. Iteration Resumption
-    let iterations = list_iterations(&final_work_dir).await?;
+async fn handle_iteration_resumption<
+    C: pulpo_engine::agents::cli_client::AiCliClient + Clone + Send + Sync + 'static,
+>(
+    orchestrator: &mut Orchestrator<C>,
+    ui: &CliInteraction,
+    work_dir: &Path,
+) -> Result<()> {
+    let iterations = list_iterations(work_dir).await?;
     if !iterations.is_empty() {
         let mut options: Vec<String> = iterations
             .iter()
@@ -507,23 +512,23 @@ async fn main() -> Result<()> {
             for task in pending {
                 println!("  {} {}", style("➜").cyan(), task);
             }
-            println!("");
-        } else {
-            let name: String = Input::with_theme(&ColorfulTheme::default())
-                .with_prompt("New Iteration Name")
-                .default("Feature Development".into())
-                .interact_text()?;
-            orchestrator.start_iteration(&name).await?;
+            println!();
+            return Ok(());
         }
-    } else {
-        // First run or no iterations
-        orchestrator
-            .start_iteration("Initial Implementation")
-            .await?;
     }
 
-    orchestrator.run(&ui).await?;
-
+    let name: String = Input::with_theme(&ColorfulTheme::default())
+        .with_prompt("Iteration Name")
+        .default(
+            if iterations.is_empty() {
+                "Initial Implementation"
+            } else {
+                "Feature Development"
+            }
+            .into(),
+        )
+        .interact_text()?;
+    orchestrator.start_iteration(&name).await?;
     Ok(())
 }
 

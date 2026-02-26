@@ -126,10 +126,10 @@ impl<C: AiCliClient + Send + Sync> Agent for GenericAgent<C> {
         }
 
         // Fallback: Try to extract JSON object from the raw input
-        if let Some(extracted) = self.extract_json_object(&response) {
-            if let Ok(val) = serde_json::from_str::<Value>(&extracted) {
-                return Ok(val);
-            }
+        if let Some(extracted) = self.extract_json_object(&response)
+            && let Ok(val) = serde_json::from_str::<Value>(&extracted)
+        {
+            return Ok(val);
         }
 
         // Return error if neither (or return raw string wrapper?)

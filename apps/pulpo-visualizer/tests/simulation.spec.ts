@@ -2,7 +2,7 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Execution Simulation', () => {
-    test.beforeEach(async ({ page }) => {
+    test.beforeEach(async () => {
         // These actions are now performed within the test for better logging and timeout control.
         // await page.goto('http://localhost:4173/');
         // // Wait for graph to load
@@ -10,7 +10,7 @@ test.describe('Execution Simulation', () => {
     });
 
 
-    test('should open simulation panel and run simulation', async ({ page }) => {
+    test('should load simulation data', async ({ page }) => {
         // Use baseURL with testing=true to disable animations
         await page.goto('/?testing=true');
 

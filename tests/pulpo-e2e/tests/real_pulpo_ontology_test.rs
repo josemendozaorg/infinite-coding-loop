@@ -89,11 +89,11 @@ impl AiCliClient for MockSchemaCompliantClient {
 
         // 2. Check for Artifact Generation prompt using robust structure trigger
         // Pattern: "Please generate the [ArtifactName] artifact."
-        if let Some(rest) = prompt_text.rsplit("Please generate the ").next() {
-            if let Some(artifact_name) = rest.split(" artifact.").next() {
-                let name = artifact_name.trim();
-                return Ok(Self::generate_artifact(name));
-            }
+        if let Some(rest) = prompt_text.rsplit("Please generate the ").next()
+            && let Some(artifact_name) = rest.split(" artifact.").next()
+        {
+            let name = artifact_name.trim();
+            return Ok(Self::generate_artifact(name));
         }
 
         // 3. Fallback: Try to detect via context injection or legacy prompt phrasing

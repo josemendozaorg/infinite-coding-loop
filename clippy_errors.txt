@@ -1,0 +1,67 @@
+    Checking pulpo-engine v0.1.0 (/home/dev/repos/infinite-coding-loop/packages/pulpo-engine)
+error: this `if` statement can be collapsed
+   --> packages/pulpo-engine/src/orchestrator.rs:174:17
+    |
+174 | /                 if let Some(name) = entry.file_name().to_str() {
+175 | |                     if name.starts_with(&date_prefix) {
+176 | |                         if let Some(seq_str) = name.split('_').nth(1) {
+177 | |                             if let Ok(seq) = seq_str.parse::<u32>() {
+...   |
+182 | |                 }
+    | |_________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#collapsible_if
+    = note: `-D clippy::collapsible-if` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::collapsible_if)]`
+help: collapse nested if block
+    |
+174 ~                 if let Some(name) = entry.file_name().to_str()
+175 ~                     && name.starts_with(&date_prefix) {
+176 |                         if let Some(seq_str) = name.split('_').nth(1) {
+...
+180 |                         }
+181 ~                     }
+    |
+
+error: this `if` statement can be collapsed
+   --> packages/pulpo-engine/src/orchestrator.rs:175:21
+    |
+175 | /                     if name.starts_with(&date_prefix) {
+176 | |                         if let Some(seq_str) = name.split('_').nth(1) {
+177 | |                             if let Ok(seq) = seq_str.parse::<u32>() {
+178 | |                                 max_seq = max_seq.max(seq);
+...   |
+181 | |                     }
+    | |_____________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#collapsible_if
+help: collapse nested if block
+    |
+175 ~                     if name.starts_with(&date_prefix)
+176 ~                         && let Some(seq_str) = name.split('_').nth(1) {
+177 |                             if let Ok(seq) = seq_str.parse::<u32>() {
+178 |                                 max_seq = max_seq.max(seq);
+179 |                             }
+180 ~                         }
+    |
+
+error: this `if` statement can be collapsed
+   --> packages/pulpo-engine/src/orchestrator.rs:176:25
+    |
+176 | /                         if let Some(seq_str) = name.split('_').nth(1) {
+177 | |                             if let Ok(seq) = seq_str.parse::<u32>() {
+178 | |                                 max_seq = max_seq.max(seq);
+179 | |                             }
+180 | |                         }
+    | |_________________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.93.0/index.html#collapsible_if
+help: collapse nested if block
+    |
+176 ~                         if let Some(seq_str) = name.split('_').nth(1)
+177 ~                             && let Ok(seq) = seq_str.parse::<u32>() {
+178 |                                 max_seq = max_seq.max(seq);
+179 ~                             }
+    |
+
+error: could not compile `pulpo-engine` (lib) due to 3 previous errors
